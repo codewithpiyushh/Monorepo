@@ -1,0 +1,62 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+backend/venv/
+backend/.venv_test/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment / secrets
+.env
+*.env
+!.env.example
+backend/.env
+frontend/.env
+
+# Databases / local runtime files
+*.db
+*.sqlite
+*.sqlite3
+backend/drms.db
+
+# Uploads / generated exports
+backend/uploads/
+*.csv
+*.xlsx
+
+# Build artifacts
+build/
+dist/
+coverage/
+
+# Logs
+*.log
+
+# Keep sample evidence folder structure if needed
+!evidences/.gitkeep

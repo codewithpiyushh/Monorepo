@@ -1,0 +1,154 @@
+from datetime import datetime
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from ..models.models import Workflow, WorkflowHistory, Execution
+from ..services import audit_service
+
+
+VALID_STATUSES = {"pending", "in_progress", "under_review", "approved", "rejected"}
+
+
+def _ensure_execution_exists(db: Session, reconciliation_id: int) -> Execution:
+    execution = db.query(Execution).filter(Execution.id == reconciliation_id).first()
+    if not execution:
+        raise HTTPException(status_code=404, detail="Reconciliation execution not found")
+    return execution
+
+
+def _append_history(
+    db: Session,
+    workflow_id: int,
+    actor_id: int | None,
+    action: str,
+    from_status: str | None,
+    to_status: str | None,
+    comments: str | None = None,
+) -> None:
+    db.add(
+        WorkflowHistory(
+            workflow_id=workflow_id,
+            actor_id=actor_id,
+            action=action,
+            from_status=from_status,
+            to_status=to_status,
+            comments=comments,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+
+def assign_workflow(
+    db: Session,
+    reconciliation_id: int,
+    assigned_to: int | None,
+    comments: str | None,
+    actor_id: int | None,
+) -> Workflow:
+    _ensure_execution_exists(db, reconciliation_id)
+    workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
+    if not workflow:
+        workflow = Workflow(
+            reconciliation_id=reconciliation_id,
+            assigned_to=assigned_to,
+            status="pending",
+            comments=comments,
+        )
+        db.add(workflow)
+        db.flush()
+        _append_history(db, workflow.id, actor_id, "assign", None, "pending", comments)
+    else:
+        previous = workflow.status
+        workflow.assigned_to = assigned_to
+        workflow.comments = comments or workflow.comments
+        if workflow.status == "pending":
+            workflow.status = "in_progress"
+        workflow.updated_at = datetime.utcnow()
+        _append_history(db, workflow.id, actor_id, "assign", previous, workflow.status, comments)
+
+    db.commit()
+    db.refresh(workflow)
+    audit_service.log_action(
+        db,
+        "WORKFLOW_ASSIGNED",
+        user_id=actor_id,
+        entity_type="workflow",
+        entity_id=workflow.id,
+        metadata={"reconciliation_id": reconciliation_id, "assigned_to": assigned_to},
+    )
+    return workflow
+
+
+def submit_for_review(db: Session, reconciliation_id: int, comments: str | None, actor_id: int | None) -> Workflow:
+    workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found. Assign workflow first.")
+    previous = workflow.status
+    workflow.status = "under_review"
+    workflow.comments = comments or workflow.comments
+    workflow.updated_at = datetime.utcnow()
+    _append_history(db, workflow.id, actor_id, "submit", previous, "under_review", comments)
+    db.commit()
+    db.refresh(workflow)
+    audit_service.log_action(db, "WORKFLOW_SUBMITTED", user_id=actor_id, entity_type="workflow", entity_id=workflow.id)
+    return workflow
+
+
+def approve_workflow(db: Session, reconciliation_id: int, comments: str | None, actor_id: int | None) -> Workflow:
+    workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    previous = workflow.status
+    workflow.status = "approved"
+    workflow.comments = comments or workflow.comments
+    workflow.updated_at = datetime.utcnow()
+    _append_history(db, workflow.id, actor_id, "approve", previous, "approved", comments)
+    db.commit()
+    db.refresh(workflow)
+    audit_service.log_action(db, "WORKFLOW_APPROVED", user_id=actor_id, entity_type="workflow", entity_id=workflow.id)
+    return workflow
+
+
+def reject_workflow(db: Session, reconciliation_id: int, comments: str | None, actor_id: int | None) -> Workflow:
+    workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    previous = workflow.status
+    workflow.status = "rejected"
+    workflow.comments = comments or workflow.comments
+    workflow.updated_at = datetime.utcnow()
+    _append_history(db, workflow.id, actor_id, "reject", previous, "rejected", comments)
+    db.commit()
+    db.refresh(workflow)
+    audit_service.log_action(db, "WORKFLOW_REJECTED", user_id=actor_id, entity_type="workflow", entity_id=workflow.id)
+    return workflow
+
+
+def get_workflow(db: Session, workflow_id: int) -> Workflow:
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow
+
+
+def list_workflows(
+    db: Session,
+    reconciliation_id: int | None = None,
+    role: str | None = None,
+    user_id: int | None = None,
+) -> list[Workflow]:
+    query = db.query(Workflow)
+    if reconciliation_id is not None:
+        query = query.filter(Workflow.reconciliation_id == reconciliation_id)
+    normalized_role = (role or "").lower()
+    if normalized_role == "preparer":
+        query = query.filter(
+            (Workflow.assigned_to.is_(None)) | (Workflow.assigned_to == user_id)
+        )
+    elif normalized_role == "reviewer":
+        query = query.filter(
+            (Workflow.status == "under_review")
+            | (Workflow.assigned_to.is_(None))
+            | (Workflow.assigned_to == user_id)
+        )
+    return query.order_by(Workflow.updated_at.desc()).all()

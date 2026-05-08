@@ -1,0 +1,99 @@
+from typing import List, Optional
+from fastapi import APIRouter, Depends, BackgroundTasks, Request
+from sqlalchemy.orm import Session
+from ..database import get_db, SessionLocal
+from ..schemas.schemas import ExecutionOut, ResultsPage
+from ..services import execution_service, audit_service
+from ..rbac.dependencies import role_required
+from ..rbac.roles import ADMIN, REVIEWER, PREPARER
+from ..models.models import User
+
+router = APIRouter(prefix="/api/projects/{project_id}/executions", tags=["executions"])
+
+
+def _run_in_background(execution_id: int, project_id: int):
+    """Background task: uses its own DB session."""
+    db = SessionLocal()
+    try:
+        execution_service.run_reconciliation(execution_id, project_id, db)
+    finally:
+        db.close()
+
+
+@router.post("", response_model=ExecutionOut, status_code=202)
+def trigger_execution(
+    project_id: int,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN])),
+):
+    assigned_to = current_user.id
+    if (current_user.role or "").lower() != PREPARER:
+        preferred_preparer = (
+            db.query(User)
+            .filter(User.username == PREPARER, User.role == PREPARER, User.is_active == True)
+            .first()
+        )
+        preparer_user = preferred_preparer or (
+            db.query(User)
+            .filter(User.role == PREPARER, User.is_active == True)
+            .order_by(User.id.asc())
+            .first()
+        )
+        if preparer_user:
+            assigned_to = preparer_user.id
+    execution = execution_service.create_execution(db, project_id, assigned_to=assigned_to)
+    background_tasks.add_task(_run_in_background, execution.id, project_id)
+    audit_service.log_action(
+        db, "EXECUTION_STARTED", user_id=current_user.id,
+        entity_type="execution", entity_id=execution.id,
+        metadata={"project_id": project_id},
+        ip_address=request.client.host if request.client else None,
+    )
+    return execution
+
+
+@router.get("", response_model=List[ExecutionOut])
+def list_executions(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+):
+    return execution_service.get_executions(db, project_id)
+
+
+@router.get("/{execution_id}", response_model=ExecutionOut)
+def get_execution(
+    project_id: int,
+    execution_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+):
+    return execution_service.get_execution(db, execution_id, project_id)
+
+
+@router.get("/{execution_id}/results", response_model=ResultsPage)
+def get_results(
+    project_id: int,
+    execution_id: int,
+    match_status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 100,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+):
+    execution = execution_service.get_execution(db, execution_id, project_id)
+    units, total = execution_service.get_results_grouped(
+        db, execution_id, project_id, match_status, page, page_size
+    )
+    import json
+    stats = json.loads(execution.stats) if execution.stats else None
+    return ResultsPage(
+        results=[],
+        units=units,
+        total=total,
+        page=page,
+        page_size=page_size,
+        stats=stats,
+    )
