@@ -1,0 +1,189 @@
+/* =========================================================
+   TEMPLATES PAGE — ENTERPRISE RED & SLATE
+   ========================================================= */
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.template-card {
+  background: var(--c-surface, #ffffff);
+  border: 1px solid var(--c-border-strong, #cbd5e1);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+  transition: all var(--t-bounce, 0.35s);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+  position: relative;
+  overflow: hidden;
+}
+.template-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--c-primary, #e11d48);
+}
+.template-card:hover {
+  border-color: var(--c-primary-border, #fecdd3);
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(15, 23, 42, 0.06));
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.template-tag {
+  background: var(--c-primary-light, #ffe4e6);
+  color: var(--c-primary, #e11d48);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 6px 12px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+}
+
+.template-key-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-text-muted, #64748b);
+  background: var(--c-bg-alt, #f1f5f9);
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.template-title {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--c-text, #0f172a);
+}
+
+.template-desc {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  color: var(--c-text-muted, #64748b);
+  line-height: 1.5;
+}
+
+.template-meta {
+  display: flex;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--c-border-strong, #cbd5e1);
+}
+
+.meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.meta-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--c-text-soft, #334155);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.meta-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-primary, #e11d48);
+}
+
+/* --- MODAL STYLING --- */
+.modal-body {
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-row-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+.form-group label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--c-text-soft, #334155);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-group input,
+.form-group textarea {
+  padding: 12px 14px;
+  border: 1px solid var(--c-border-strong, #cbd5e1);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--c-text, #0f172a);
+  background: var(--c-surface, #ffffff);
+  outline: none;
+  font-family: inherit;
+  transition: all var(--t-fast, 0.15s);
+}
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: var(--c-primary, #e11d48);
+  box-shadow: var(--shadow-glow, 0 0 0 4px rgba(225, 29, 72, 0.12));
+}
+/* --- Action Buttons (Edit/Delete) --- */
+.card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: var(--c-text-muted, #64748b);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all var(--t-fast, 0.15s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.action-btn:hover {
+  opacity: 1;
+  background: var(--c-bg-alt, #f1f5f9);
+  color: var(--c-primary, #e11d48);
+}
+
+.action-btn.danger:hover {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+/* Show buttons clearly when hovering over the card */
+.template-card:hover .action-btn {
+  opacity: 0.8;
+}
+.template-card:hover .action-btn:hover {
+  opacity: 1;
+}

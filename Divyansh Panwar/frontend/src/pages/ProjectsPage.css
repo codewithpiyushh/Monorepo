@@ -1,0 +1,832 @@
+/* --- GLOBAL LAYOUT --- */
+:root {
+  /* Surfaces - Cool Slate Backgrounds */
+  --c-bg: #f8fafc;
+  --c-bg-alt: #f1f5f9;
+  --c-surface: #FFFFFF;
+  --c-surface-soft: #f8fafc;
+
+  /* Primary — Enterprise Red (Changes all primary buttons) */
+  --c-primary: #e11d48;
+  --c-primary-hover: #be123c;
+  --c-primary-light: #ffe4e6;
+  --c-primary-soft: #fff1f2;
+  --c-primary-border: #fecdd3;
+
+  /* Secondary — Crisp Blue (Replaces the old coral/pink accents) */
+  --c-coral: #3b82f6;
+  --c-coral-hover: #2563eb;
+  --c-coral-light: #eff6ff;
+  --c-coral-border: #bfdbfe;
+
+  /* Text - Dark Slates */
+  --c-text: #0f172a;
+  --c-text-soft: #334155;
+  --c-text-muted: #64748b;
+
+  /* Borders - Clean Greys */
+  --c-border: #e2e8f0;
+  --c-border-soft: #f1f5f9;
+  --c-border-strong: #cbd5e1;
+
+  /* ... keep your existing --shadow and --t variables below this! ... */
+}
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.dashboard-container {
+  padding: 24px;
+  background-color: #f1f5f9;
+  flex-grow: 1;
+}
+
+/* --- TOP NAVBAR --- */
+.top-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.btn-red {
+  background: #e11d48;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-red:hover { background: #be123c; }
+
+.search-input {
+  padding: 8px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 250px;
+}
+
+/* --- KPI GRID --- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+/* --- MASSIVE KPI NUMBERS --- */
+.kpi-value {
+  font-size: 44px; /* Increased dramatically from 28px */
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  margin: 6px 0 10px 0;
+  letter-spacing: -1px;
+}
+
+.kpi-trend { font-size: 13px; font-weight: 600; }
+.trend-up { color: #10b981; }
+
+.kpi-bar {
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 12px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+.kpi-bar-fill { height: 100%; border-radius: 2px; }
+
+
+/* --- PROJECT CARDS --- */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.project-card {
+  position: relative;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  min-height: 250px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  /* Removed overflow:hidden so the popup can float outside the card */
+}
+
+/* --- INLINE CARD DETAILS (Replaces the Hover Popup) --- */
+.card-inline-details {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inline-stat {
+  font-size: 13px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-stat strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.inline-icon {
+  font-size: 14px;
+}
+
+.inline-scenarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+  padding-left: 22px; /* Aligns pills with the text, skipping the icon */
+}
+
+.scenario-pill {
+  background: white;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+/* Adjust card metrics since scenarios moved up */
+.card-metrics {
+  display: flex; 
+  justify-content: space-between; /* Spreads the remaining info */
+  align-items: center;
+  margin-top: 16px; 
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9; 
+  font-size: 12px; 
+  color: #64748b; 
+  font-weight: 600;
+}
+
+.card-accent-line {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 5px;
+  border-radius: 12px 12px 0 0; /* Keep corners rounded */
+}
+.accent-cpg { background: #3b82f6; }
+.accent-saas { background: #10b981; }
+.accent-retail { background: #f97316; }
+
+/* --- FLOATING HOVER POP-UP WINDOW --- */
+.hover-popup-window {
+  position: absolute;
+  bottom: 100%; /* Positions it directly above the card */
+  left: 50%;
+  transform: translateX(-50%) translateY(10px) scale(0.95);
+  background: #0f172a; /* Dark sleek background */
+  color: white;
+  width: 260px;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none; /* Prevents the popup from interfering with mouse clicks */
+}
+
+/* Triggers the float effect on hover */
+.project-card:hover .hover-popup-window {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-15px) scale(1);
+}
+
+/* The little triangle arrow pointing down at the card */
+.hover-popup-window::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -8px;
+  border-width: 8px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+}
+
+.popup-header h4 {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #94a3b8;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 8px;
+}
+
+.popup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
+  color: #f1f5f9;
+}
+
+.popup-icon {
+  font-size: 16px;
+}
+
+.popup-scenarios-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.popup-pill {
+  background: #1e293b;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+}
+
+/* --- FILTER PILLS --- */
+.filter-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.filter-pill {
+  padding: 6px 16px; border: 1px solid #e2e8f0; border-radius: 20px;
+  background: white; color: #64748b; cursor: pointer; font-weight: 600;
+}
+.filter-pill.active { background: #fef2f2; color: #e11d48; border-color: #fecaca; }
+
+/* --- BADGES & CARD CONTENT --- */
+.card-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 16px; margin-top: 4px;
+}
+.card-icon-group { display: flex; gap: 12px; align-items: center; }
+.card-icon {
+  font-size: 20px; width: 40px; height: 40px; display: flex;
+  align-items: center; justify-content: center; background: #f8fafc; border-radius: 8px;
+}
+
+[class^="badge-"] { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.badge-cpg { color: #1d4ed8; }
+.badge-saas { color: #047857; }
+.badge-retail { color: #c2410c; }
+
+.card-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 8px 0; }
+.card-desc { font-size: 13px; color: #64748b; flex-grow: 1; margin: 0;}
+.card-metrics {
+  display: flex; gap: 16px; margin-top: 16px; padding-top: 16px;
+  border-top: 1px solid #f1f5f9; font-size: 12px; color: #64748b; font-weight: 600;
+}
+
+.card-delete {
+  background: white; border: 1px solid #e2e8f0; border-radius: 6px;
+  width: 28px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.card-delete:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
+
+/* --- UTILITIES --- */
+.loading-container {
+  display: flex; justify-content: center; align-items: center;
+  height: 60vh; color: #64748b; font-weight: 600;
+}
+/* =========================================
+   EXPLORER COMMAND BAR
+   ========================================= */
+.command-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.command-left, .command-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 8px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  width: 220px;
+}
+
+.search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  width: 100%;
+  margin-left: 8px;
+}
+
+.search-icon { color: #94a3b8; font-weight: bold; }
+
+.sort-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.sort-group .label { color: #64748b; font-weight: 600; }
+.sort-group select {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  outline: none;
+  font-size: 13px;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.view-toggles {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 2px;
+  border: 1px solid #e2e8f0;
+}
+
+.view-toggles button {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.view-toggles button:hover { color: #0f172a; }
+.view-toggles button.active {
+  background: white;
+  color: #e11d48;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* =========================================
+   DYNAMIC VIEWS
+   ========================================= */
+
+/* --- GRID VIEWS --- */
+.project-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.project-grid.grid-large {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.project-grid.grid-small {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.grid-small .project-card {
+  min-height: 180px;
+  padding: 16px;
+}
+.grid-small .card-icon { width: 32px; height: 32px; font-size: 16px; }
+.grid-small .card-title { font-size: 15px; margin-bottom: 12px; }
+.grid-small .card-inline-details { padding: 8px; margin-top: 0;}
+.grid-small .inline-stat { font-size: 11px; }
+
+/* --- LIST VIEW --- */
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.list-card {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.list-card:hover {
+  border-color: #cbd5e1;
+  transform: translateX(4px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+
+.list-icon {
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  background: #f8fafc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20px;
+}
+
+.list-info { flex-grow: 1; }
+.list-info h4 { margin: 0 0 4px 0; font-size: 16px; color: #0f172a; }
+.list-info p { margin: 0; font-size: 13px; color: #64748b; }
+
+.list-meta {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-right: 32px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* --- TABLE VIEW --- */
+.table-wrapper {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.project-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.project-table th {
+  background: #f8fafc;
+  padding: 16px 24px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.project-table td {
+  padding: 16px 24px;
+  font-size: 14px;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+.project-table tbody tr {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.project-table tbody tr:hover { background: #f8fafc; }
+.project-table tbody tr:last-child td { border-bottom: none; }
+
+.fw-bold { font-weight: 700; color: #0f172a !important; }
+
+/* Reusable tiny delete button for List/Table */
+.icon-btn-delete {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 8px;
+  border-radius: 4px;
+}
+.icon-btn-delete:hover { background: #fee2e2; color: #ef4444; }
+/* --- CLICKABLE TABLE HEADERS --- */
+.sortable-col {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.sortable-col:hover {
+  background-color: #f1f5f9 !important; /* Slightly darker slate on hover */
+  color: #0f172a !important;
+}
+
+.sort-active {
+  color: #e11d48; /* EY red for active sort direction */
+  font-weight: 900;
+  margin-left: 6px;
+  font-size: 14px;
+}
+
+.sort-spacer {
+  color: #cbd5e1; /* Very faint default arrows */
+  font-weight: 400;
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Show the faint arrow when hovering over an unsorted column */
+.sortable-col:hover .sort-spacer {
+  opacity: 1;
+}
+/* =========================================
+   TABLE HEADER & DROPDOWN STYLES
+   ========================================= */
+.sortable-col {
+  position: relative; 
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+
+.sortable-col:hover {
+  background-color: #f8fafc;
+}
+
+/* Highlight the header text if it's currently being sorted */
+.sortable-col.active-col .th-clickable {
+  color: #0f172a;
+}
+
+.th-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 8px; /* Breathing room on the right */
+}
+
+.th-clickable {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding-right: 12px;
+}
+
+/* The chevron trigger - ALWAYS VISIBLE NOW */
+.th-menu-trigger {
+  width: 24px;
+  height: 24px;
+  color: #cbd5e1; /* Subtle default color */
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Make it red if it's the active sort column */
+.th-menu-trigger.active-sort {
+  color: #e11d48;
+}
+
+.th-menu-trigger:hover, 
+.th-menu-trigger.active {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* Transparent full-screen overlay */
+.menu-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99;
+}
+
+/* Premium Dropdown Box Styling */
+.header-dropdown {
+  position: absolute;
+  top: calc(100% + 4px); /* Cleanly spaced below header */
+  left: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  min-width: 180px;
+  padding: 6px; /* Space around items */
+  display: flex;
+  flex-direction: column;
+  gap: 2px; /* Spacing between items */
+}
+
+.header-dropdown-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  text-transform: none; /* Keeps it normal case, unlike the TH */
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.header-dropdown-item:hover { 
+  background: #f1f5f9; 
+  color: #0f172a;
+}
+
+.header-dropdown-item.selected {
+  color: #e11d48;
+  background: #fff1f2;
+  font-weight: 700;
+}
+
+.check-space {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-right: 8px;
+  color: #e11d48;
+}
+
+/* Existing sort arrows */
+.sort-active {
+  color: #e11d48;
+  font-weight: 900;
+  margin-left: 6px;
+  font-size: 14px;
+}
+
+.sort-spacer {
+  color: #cbd5e1;
+  font-weight: 400;
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sortable-col:hover .sort-spacer { opacity: 1; }
+
+/* --- FIXED TABLE HEADER STYLES --- */
+.sortable-col {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.sortable-col:hover {
+  background: #f8fafc;
+}
+
+.th-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.th-clickable {
+  flex-grow: 1;
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+}
+
+/* The small dropdown arrow next to headers */
+.th-menu-trigger {
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.th-menu-trigger:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.th-menu-trigger.active {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: rotate(180deg);
+}
+
+.th-menu-trigger.active-sort {
+  color: #e11d48;
+}
+
+/* The Popup Dropdown Menu */
+.header-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+  min-width: 180px;
+  z-index: 100;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.header-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.header-dropdown-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* Highlighted Selection inside the dropdown */
+.header-dropdown-item.selected {
+  color: #e11d48;
+  font-weight: 700;
+  background: #fff1f2;
+}
+
+/* The checkmark slot inside the dropdown */
+.check-space {
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+/* Invisible overlay to close menu when clicking outside */
+.menu-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 99;
+  background: transparent;
+}

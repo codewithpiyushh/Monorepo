@@ -1,0 +1,53 @@
+{
+  "industry": "saas",
+  "label": "Software as a Service",
+  "description": "B2B SaaS company with subscription-based revenue, multi-tier products, and global customer base.",
+  "defaults": {
+    "base_price": 850.00,
+    "base_units_per_month": 3200,
+    "cogs_pct": 0.18,
+    "marketing_pct_revenue": 0.22,
+    "other_opex_pct_revenue": 0.35,
+    "depreciation_monthly": 95000,
+    "interest_monthly": 42000,
+    "tax_rate": 0.21,
+    "capacity_max_units": 15000,
+    "price_elasticity": -0.7,
+    "marketing_lift_factor": 0.9,
+    "sentiment_lift_factor": 0.5,
+    "fx_cogs_passthrough": 0.20,
+    "fx_price_passthrough": 0.10,
+    "inflation_cogs_passthrough": 0.45,
+    "inflation_price_passthrough": 0.20
+  },
+  "seasonality_profiles": {
+    "flat": [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],
+    "enterprise_cycles": [0.70,0.85,1.05,1.10,1.05,1.00,0.80,0.75,1.00,1.15,1.25,1.30],
+    "smb_steady": [0.90,0.92,0.98,1.02,1.05,1.00,0.95,0.88,1.05,1.10,1.08,1.07],
+    "fy_end_rush": [0.85,0.82,0.90,0.95,1.00,0.95,0.88,0.85,0.90,1.00,1.20,1.70],
+    "summer_slow": [1.05,1.05,1.08,1.10,1.05,0.95,0.78,0.75,1.00,1.10,1.12,1.07]
+  },
+  "available_dimensions": {
+    "product": ["Starter", "Professional", "Enterprise", "Add-ons & Extensions", "Professional Services"],
+    "region": ["North America", "EMEA", "APAC", "LATAM"],
+    "channel": ["Direct Sales", "Self-Serve", "Partner / Reseller", "Marketplace"],
+    "scenario": ["Base", "Optimistic", "Pessimistic", "Board Case"]
+  },
+  "available_accounts": {
+    "financial": ["units", "price", "revenue", "cogs", "gross_profit", "marketing_expense", "other_opex", "ebitda", "depreciation", "ebit", "interest", "taxes", "net_income"],
+    "statistical": ["seasonality_index", "sentiment_index", "fx_rate", "inflation_index", "promo_depth", "capacity_utilization", "stockout_flag"]
+  },
+  "fx_base_currency": "USD",
+  "regional_fx": {
+    "North America": 1.00,
+    "EMEA": 1.08,
+    "APAC": 0.74,
+    "LATAM": 0.19
+  },
+  "inflation_curve_presets": {
+    "low": 0.015,
+    "medium": 0.03,
+    "high": 0.055,
+    "hyperflation": 0.12
+  }
+}
