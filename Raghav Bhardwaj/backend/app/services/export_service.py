@@ -7,6 +7,10 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 from openpyxl.styles import Font, PatternFill
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
 
 
 DEFAULT_EXPORT_COLUMNS = [
@@ -188,6 +192,41 @@ def generate_csv_report(rows: List[Dict[str, Any]], columns: Optional[List[str]]
     output = BytesIO()
     csv_bytes = frame.to_csv(index=False).encode("utf-8")
     output.write(csv_bytes)
+    output.seek(0)
+    return output
+
+
+def generate_pdf_report(rows: List[Dict[str, Any]], summary: Optional[Dict[str, Any]] = None, title: str = "Reconciliation Report") -> BytesIO:
+    output = BytesIO()
+    c = canvas.Canvas(output, pagesize=A4)
+    width, height = A4
+    y = height - 20 * mm
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(15 * mm, y, title)
+    y -= 8 * mm
+    c.setFont("Helvetica", 9)
+    if summary:
+        c.drawString(15 * mm, y, f"Total: {summary.get('total_records', 0)} | Matched: {summary.get('matched_count', 0)} | Unmatched: {summary.get('unmatched_count', 0)} | Match%: {summary.get('match_percentage', 0)}")
+        y -= 8 * mm
+    headers = ["transaction_id", "source_amount", "target_amount", "difference", "status"]
+    c.setFillColor(colors.lightgrey)
+    c.rect(15 * mm, y - 5, width - 30 * mm, 7 * mm, fill=1, stroke=0)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 8)
+    x_positions = [16 * mm, 48 * mm, 78 * mm, 108 * mm, 138 * mm]
+    for i, h in enumerate(headers):
+        c.drawString(x_positions[i], y, h)
+    y -= 6 * mm
+    c.setFont("Helvetica", 8)
+    for row in rows[:500]:
+        if y < 20 * mm:
+            c.showPage()
+            y = height - 20 * mm
+        vals = [str(row.get(h, ""))[:24] for h in headers]
+        for i, val in enumerate(vals):
+            c.drawString(x_positions[i], y, val)
+        y -= 5 * mm
+    c.save()
     output.seek(0)
     return output
 

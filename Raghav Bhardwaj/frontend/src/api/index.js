@@ -146,6 +146,8 @@ export const enterpriseAPI = {
   loadBatch: (batchId, profileId) => api.post(`/enterprise/ingestion/${batchId}/load/${profileId}`).then((r) => r.data),
   createProfile: (data) => api.post('/enterprise/profiles', data).then((r) => r.data),
   listProfiles: () => api.get('/enterprise/profiles').then((r) => r.data),
+  updateProfile: (profileId, data) => api.patch(`/enterprise/profiles/${profileId}`, data).then((r) => r.data),
+  deleteProfile: (profileId) => api.delete(`/enterprise/profiles/${profileId}`).then((r) => r.data),
   runMatching: (data) => api.post('/enterprise/matching/run', data).then((r) => r.data),
   listExceptions: (queueType = '') =>
     api.get(`/enterprise/exceptions${queueType ? `?queue_type=${encodeURIComponent(queueType)}` : ''}`).then((r) => r.data),
@@ -165,4 +167,38 @@ export const enterpriseAPI = {
     }).then((r) => r.data)
   },
   listAttachments: (recordId) => api.get(`/enterprise/records/${recordId}/attachments`).then((r) => r.data),
+  createCloseCalendar: (data) => api.post('/enterprise/close-calendar', data).then((r) => r.data),
+  listCloseCalendar: (profileId) =>
+    api.get(`/enterprise/close-calendar${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`).then((r) => r.data),
+  lockClosePeriod: (calendar_id) => api.post('/enterprise/close-calendar/lock', { calendar_id }).then((r) => r.data),
+  unlockClosePeriod: (calendar_id) => api.post('/enterprise/close-calendar/unlock', { calendar_id }).then((r) => r.data),
+  createCertificationWorkflow: (data) => api.post('/enterprise/certification/workflows', data).then((r) => r.data),
+  listCertificationWorkflows: (profileId) =>
+    api.get(`/enterprise/certification/workflows${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`).then((r) => r.data),
+  actionCertificationWorkflow: (data) => api.post('/enterprise/certification/workflows/action', data).then((r) => r.data),
+  getCertificationWorkflowHistory: (workflowId) =>
+    api.get(`/enterprise/certification/workflows/${workflowId}/history`).then((r) => r.data),
+  listReconciliationTemplates: () => api.get('/enterprise/templates/reconciliation').then((r) => r.data),
+  createRuleDefinition: (data) => api.post('/enterprise/rule-definitions', data).then((r) => r.data),
+  listRuleDefinitions: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/rule-definitions${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
+  updateRuleDefinition: (ruleId, data) => api.patch(`/enterprise/rule-definitions/${ruleId}`, data).then((r) => r.data),
+  deleteRuleDefinition: (ruleId) => api.delete(`/enterprise/rule-definitions/${ruleId}`).then((r) => r.data),
+  executiveDashboard: () => api.get('/enterprise/dashboard/executive').then((r) => r.data),
+  reviewerDashboard: () => api.get('/enterprise/dashboard/reviewer').then((r) => r.data),
+  preparerDashboard: () => api.get('/enterprise/dashboard/preparer').then((r) => r.data),
+  generateAgingReminders: () => api.post('/enterprise/aging/reminders/generate').then((r) => r.data),
+  createFxRate: (data) => api.post('/enterprise/fx/rates', data).then((r) => r.data),
+  convertFx: (data) => api.post('/enterprise/fx/convert', data).then((r) => r.data),
+  fxReconciliation: (profileId, reportingCurrency) => api.get(`/enterprise/fx/reconciliation/${profileId}?reporting_currency=${encodeURIComponent(reportingCurrency)}`).then((r) => r.data),
+  createJournal: (data) => api.post('/enterprise/journals', data).then((r) => r.data),
+  journalAction: (adjustmentId, action, comments = '') => api.post(`/enterprise/journals/${adjustmentId}/${action}`, { adjustment_id: adjustmentId, comments }).then((r) => r.data),
+  variance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),
+  advancedSearch: (data) => api.post('/enterprise/search', data).then((r) => r.data),
+  bulkActions: (data) => api.post('/enterprise/bulk-actions', data).then((r) => r.data),
+  addComment: (data) => api.post('/enterprise/comments', data).then((r) => r.data),
+  listComments: (profileId) => api.get(`/enterprise/comments/${profileId}`).then((r) => r.data),
+  scheduleReport: (data) => api.post('/enterprise/reports/schedule', data).then((r) => r.data),
 }

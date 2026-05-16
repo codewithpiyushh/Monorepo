@@ -1,4 +1,5 @@
 import json
+import hashlib
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -14,6 +15,22 @@ def log_action(
     metadata: Optional[dict] = None,
     ip_address: Optional[str] = None,
 ) -> AuditLog:
+    previous = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    previous_hash = previous.entry_hash if previous else None
+    payload = json.dumps(
+        {
+            "user_id": user_id,
+            "action_type": action_type,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "metadata": metadata or {},
+            "ip_address": ip_address,
+            "timestamp": datetime.utcnow().isoformat(),
+            "previous_hash": previous_hash,
+        },
+        sort_keys=True,
+    )
+    entry_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     log = AuditLog(
         user_id=user_id,
         action_type=action_type,
@@ -21,6 +38,8 @@ def log_action(
         entity_id=entity_id,
         metadata_json=json.dumps(metadata) if metadata else None,
         ip_address=ip_address,
+        previous_hash=previous_hash,
+        entry_hash=entry_hash,
         timestamp=datetime.utcnow(),
     )
     db.add(log)

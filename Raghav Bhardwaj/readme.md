@@ -1,35 +1,38 @@
 # DRMS - Data Reconciliation Management System
 
-Enterprise reconciliation platform built with **FastAPI + React** for ingestion, mapping, matching, workflow approvals, evidence, and audit.
+Enterprise reconciliation platform inspired by Oracle EPM Reconciliation Compliance, built with FastAPI + React.
 
-## Tech Stack
+## Stack
 - Backend: FastAPI, SQLAlchemy, APScheduler, Pandas
-- Frontend: React, Vite, Tailwind, React Query
-- Auth/RBAC: JWT with Admin / Preparer / Reviewer roles
+- Frontend: React, Vite, Tailwind
+- Auth/RBAC: JWT (`admin`, `preparer`, `reviewer`, `approver`, `certifier`)
 
-## Project Structure
+## Repository Layout
 ```text
-drms_AI/
+Raghav Bhardwaj/
 |-- backend/
 |   |-- app/
+|   |-- migrations/
 |   |-- scripts/
-|   |-- seed.py
 |   |-- requirements.txt
 |   `-- .env.example
 |-- frontend/
 |   |-- src/
-|   |-- package.json
-|   `-- vite.config.js
+|   `-- package.json
+|-- evidences/
 |-- demo_check.ps1
-`-- README.md
+`-- readme.md
 ```
 
-## Prerequisites
-- Python 3.11+
-- Node.js 18+
-- npm
+## Run On Another Laptop (Recommended: SQLite)
 
-## Backend Setup
+### 1) Clone
+```powershell
+git clone <your-repo-url>
+cd Monorepo\Raghav Bhardwaj
+```
+
+### 2) Backend setup
 ```powershell
 cd backend
 python -m venv .venv
@@ -41,54 +44,49 @@ python scripts/apply_oracle_style_migration.py
 uvicorn app.main:app --reload --port 8000
 ```
 
-API docs: `http://localhost:8000/api/docs`
+Backend docs: `http://localhost:8000/api/docs`
 
-## Frontend Setup
+### 3) Frontend setup
+Open another terminal:
 ```powershell
-cd frontend
+cd Monorepo\Raghav Bhardwaj\frontend
 npm install
 npm run dev
 ```
 
-UI: `http://localhost:5173`
+Frontend: `http://localhost:5173`
 
-## Demo Users
-| Username | Password | Role |
-|---|---|---|
-| `admin` | `admin123` | Admin |
-| `preparer` | `preparer123` | Preparer |
-| `reviewer` | `reviewer123` | Reviewer |
-
-## Demo Flow (for presentation)
-1. Login as `admin`.
-2. Create project -> Ingestion: upload source + target files.
-3. Mapping: auto-map / confirm one key field.
-4. Rules: save matching rules.
-5. Workspace: run reconciliation, review summary and transactions.
-6. Login as `preparer`: add comments, submit workflow.
-7. Login as `reviewer`: approve/reject.
-8. Verify audit logs and export.
-
-## Automated Demo Health Check
-Run from repo root:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\demo_check.ps1
+## Optional: MySQL Instead of SQLite
+In `backend/.env`, set:
+```env
+DATABASE_URL=mysql+pymysql://<user>:<password>@localhost:3306/<database_name>
 ```
 
-Expected output:
-- `DEMO_CHECK_OK`
-- JSON with `project_id`, `execution_id`, `results_total`, `status: completed`
+Then run:
+```powershell
+python seed.py
+python scripts/apply_oracle_style_migration.py
+```
 
-## Validation Completed (May 8, 2026)
-- Frontend production build: `npm run build` -> passed.
-- Backend compile sanity: `python -m compileall app` -> passed.
-- End-to-end demo workflow script: `demo_check.ps1` -> passed (`DEMO_CHECK_OK`).
+## Demo Users
+- `admin` / `admin123`
+- `preparer` / `preparer123`
+- `reviewer` / `reviewer123`
 
-## GitHub Publishing Checklist
-1. Ensure `backend/.env` is **not committed** (keep only `backend/.env.example`).
-2. Confirm `.gitignore` excludes local DBs, uploads, venvs, and node_modules.
-3. Optionally remove large local demo artifacts before first push.
+## Key Implemented Areas
+- Project lifecycle, ingestion, mapping, rules, matching
+- Workflow actions (assign/submit/approve/reject)
+- Reconciliation profiles and rule builder APIs
+- Close calendar, certification workflow, exceptions
+- Evidence and audit package support
+- Sequence runs and scheduler APIs
+- Role-based dashboards and audit logs
 
-## Notes
-- Current repo includes local demo/runtime files (DB, uploads, CSV). `.gitignore` now prevents new ones from being committed.
-- If any sensitive values were committed before, rotate credentials before publishing.
+## GitHub Safety Checklist
+1. Do not commit `backend/.env` (only keep `.env.example`).
+2. Ensure no local DB/exports/uploads are staged.
+3. Validate with:
+```powershell
+git status
+git diff --cached
+```

@@ -12,6 +12,11 @@ from ..models.models import (
     MatchGroup,
     MatchGroupItem,
     ExceptionQueueRecord,
+    FinancialCloseCalendar,
+    CertificationWorkflow,
+    CertificationWorkflowHistory,
+    ReconciliationRuleDefinition,
+    ReminderLog,
 )
 
 
@@ -85,6 +90,10 @@ def create_profile(db: Session, payload):
         matching_rules_json=json.dumps(payload.matching_rules or {}),
         assigned_preparer=payload.assigned_preparer,
         assigned_reviewer=payload.assigned_reviewer,
+        assigned_approver=payload.assigned_approver,
+        assigned_certifier=payload.assigned_certifier,
+        risk_classification=payload.risk_classification,
+        due_days=payload.due_days,
     )
     db.add(profile)
     db.commit()
@@ -94,6 +103,137 @@ def create_profile(db: Session, payload):
 
 def list_profiles(db: Session):
     return db.query(ReconciliationProfile).order_by(ReconciliationProfile.created_at.desc()).all()
+
+
+def get_profile(db: Session, profile_id: int):
+    return db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
+
+
+def update_profile(db: Session, profile: ReconciliationProfile, payload: dict):
+    for key, value in payload.items():
+        setattr(profile, key, value)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def delete_profile(db: Session, profile: ReconciliationProfile):
+    db.delete(profile)
+    db.commit()
+
+
+def create_close_calendar(db: Session, payload):
+    row = FinancialCloseCalendar(**payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_close_calendars(db: Session, profile_id: int | None = None):
+    q = db.query(FinancialCloseCalendar)
+    if profile_id is not None:
+        q = q.filter(FinancialCloseCalendar.profile_id == profile_id)
+    return q.order_by(FinancialCloseCalendar.created_at.desc()).all()
+
+
+def get_close_calendar(db: Session, calendar_id: int):
+    return db.query(FinancialCloseCalendar).filter(FinancialCloseCalendar.id == calendar_id).first()
+
+
+def create_certification_workflow(db: Session, payload: dict):
+    row = CertificationWorkflow(**payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_certification_workflow(db: Session, workflow_id: int):
+    return db.query(CertificationWorkflow).filter(CertificationWorkflow.id == workflow_id).first()
+
+
+def list_certification_workflows(db: Session, profile_id: int | None = None):
+    q = db.query(CertificationWorkflow)
+    if profile_id is not None:
+        q = q.filter(CertificationWorkflow.profile_id == profile_id)
+    return q.order_by(CertificationWorkflow.updated_at.desc()).all()
+
+
+def add_certification_history(
+    db: Session,
+    workflow_id: int,
+    actor_id: int | None,
+    actor_role: str | None,
+    action: str,
+    from_status: str | None,
+    to_status: str | None,
+    comments: str | None,
+):
+    db.add(
+        CertificationWorkflowHistory(
+            workflow_id=workflow_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            action=action,
+            from_status=from_status,
+            to_status=to_status,
+            comments=comments,
+        )
+    )
+    db.commit()
+
+
+def create_rule_definition(db: Session, payload: dict):
+    row = ReconciliationRuleDefinition(**payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_rule_definitions(db: Session, profile_id: int | None = None, template_type: str | None = None):
+    q = db.query(ReconciliationRuleDefinition)
+    if profile_id is not None:
+        q = q.filter(
+            (ReconciliationRuleDefinition.profile_id == profile_id)
+            | (ReconciliationRuleDefinition.profile_id.is_(None))
+        )
+    if template_type:
+        q = q.filter(ReconciliationRuleDefinition.template_type == template_type)
+    return q.order_by(ReconciliationRuleDefinition.updated_at.desc()).all()
+
+
+def get_rule_definition(db: Session, rule_id: int):
+    return db.query(ReconciliationRuleDefinition).filter(ReconciliationRuleDefinition.id == rule_id).first()
+
+
+def update_rule_definition(db: Session, rule: ReconciliationRuleDefinition, payload: dict):
+    for key, value in payload.items():
+        setattr(rule, key, value)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+def delete_rule_definition(db: Session, rule: ReconciliationRuleDefinition):
+    db.delete(rule)
+    db.commit()
+
+
+def create_reminder_log(db: Session, payload: dict):
+    row = ReminderLog(**payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_reminders(db: Session, workflow_id: int | None = None):
+    q = db.query(ReminderLog)
+    if workflow_id is not None:
+        q = q.filter(ReminderLog.workflow_id == workflow_id)
+    return q.order_by(ReminderLog.sent_at.desc()).all()
 
 
 def load_reconciliation_records(db: Session, rows: list[dict]):

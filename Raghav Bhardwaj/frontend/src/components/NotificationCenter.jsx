@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, CheckCircle2, Clock3, XCircle } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
@@ -16,25 +16,9 @@ function ItemIcon({ type }) {
   return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
 }
 
-const FLOAT_KEY = 'drms_notification_float_pos'
-
 export default function NotificationCenter({ floating = false }) {
   const role = (useAuthStore((s) => s.user?.role) || 'admin').toLowerCase()
   const [open, setOpen] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  const draggedRef = useRef(false)
-  const [position, setPosition] = useState(() => {
-    if (!floating) return { x: 16 }
-    try {
-      const saved = JSON.parse(localStorage.getItem(FLOAT_KEY) || '{}')
-      if (Number.isFinite(saved?.x)) return { x: saved.x }
-    } catch {}
-    if (typeof window !== 'undefined') {
-      return { x: Math.max(16, window.innerWidth - 64) }
-    }
-    return { x: 16 }
-  })
-  const dragOffsetRef = useRef({ x: 0, y: 0 })
   const { data: exceptions = [] } = useQuery({
     queryKey: ['notifications-exceptions', role],
     queryFn: () => {
@@ -110,49 +94,15 @@ export default function NotificationCenter({ floating = false }) {
     return exceptions.length
   }, [exceptions, role])
 
-  useEffect(() => {
-    if (!floating) return
-    const onMove = (e) => {
-      if (!dragging) return
-      draggedRef.current = true
-      const nextX = Math.max(0, Math.min(window.innerWidth - 60, e.clientX - dragOffsetRef.current.x))
-      setPosition({ x: nextX })
-    }
-    const onUp = () => setDragging(false)
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [dragging, floating])
-
-  useEffect(() => {
-    if (!floating) return
-    localStorage.setItem(FLOAT_KEY, JSON.stringify(position))
-  }, [position, floating])
-
-  const startDrag = (e) => {
-    if (!floating) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    dragOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    draggedRef.current = false
-    setDragging(true)
-  }
-
   return (
     <div
       className={floating ? 'fixed z-40' : 'relative'}
-      style={floating ? { left: `${position.x}px`, bottom: '16px' } : undefined}
+      style={floating ? { right: '20px', bottom: '16px' } : undefined}
     >
       <button
-        className="relative w-9 h-9 rounded-lg border border-surface-700 bg-surface-900/80 flex items-center justify-center text-slate-300 hover:text-white cursor-move"
-        onClick={() => {
-          if (draggedRef.current) return
-          setOpen((v) => !v)
-        }}
-        onMouseDown={startDrag}
-        title={floating ? 'Drag to move notifications' : 'Notifications'}
+        className="relative w-9 h-9 rounded-lg border border-surface-700 bg-surface-900/80 flex items-center justify-center text-slate-300 hover:text-white"
+        onClick={() => setOpen((v) => !v)}
+        title="Notifications"
       >
         <Bell className="w-4 h-4" />
         <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-600 text-white text-[10px] flex items-center justify-center">

@@ -127,7 +127,7 @@ def _build_unit_export_rows(records: List[Transaction], mappings: List[Mapping])
 def export_reconciliation_report(
     id: int,
     status: str = Query("all", pattern="^(all|matched|unmatched|partial)$"),
-    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
     columns: Optional[str] = Query(None, description="Comma-separated column list"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -153,6 +153,10 @@ def export_reconciliation_report(
         file_data = export_service.generate_csv_report(normalized_rows, selected_columns)
         filename = export_service.build_filename("recon", id, "csv")
         media_type = "text/csv"
+    elif format == "pdf":
+        file_data = export_service.generate_pdf_report(normalized_rows, summary, title=f"Reconciliation Report #{id}")
+        filename = export_service.build_filename("recon", id, "pdf")
+        media_type = "application/pdf"
     else:
         file_data = export_service.generate_excel_report(
             {
@@ -178,7 +182,7 @@ def export_reconciliation_report(
 @router.get("/reconciliation/{id}/export/exceptions")
 def export_reconciliation_exceptions(
     id: int,
-    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    format: str = Query("xlsx", pattern="^(xlsx|csv|pdf)$"),
     columns: Optional[str] = Query(None, description="Comma-separated column list"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -202,6 +206,10 @@ def export_reconciliation_exceptions(
         file_data = export_service.generate_csv_report(normalized_rows, selected_columns)
         filename = export_service.build_filename("recon_exceptions", id, "csv")
         media_type = "text/csv"
+    elif format == "pdf":
+        file_data = export_service.generate_pdf_report(normalized_rows, summary, title=f"Reconciliation Exceptions #{id}")
+        filename = export_service.build_filename("recon_exceptions", id, "pdf")
+        media_type = "application/pdf"
     else:
         file_data = export_service.generate_excel_report(
             {

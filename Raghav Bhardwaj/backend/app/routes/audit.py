@@ -5,6 +5,7 @@ from ..database import get_db
 from ..schemas.schemas import AuditLogsPage
 from ..services import audit_service
 from ..core.dependencies import get_current_user
+from ..models.models import UserSession, UserActivityLog
 
 router = APIRouter(prefix="/api/audit-logs", tags=["audit"])
 
@@ -26,3 +27,21 @@ def list_audit_logs(
         entity_type=entity_type,
     )
     return AuditLogsPage(logs=logs, total=total, page=page, page_size=page_size)
+
+
+@router.get("/sessions")
+def list_sessions(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = db.query(UserSession).order_by(UserSession.login_at.desc()).limit(500).all()
+    return rows
+
+
+@router.get("/activities")
+def list_activities(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = db.query(UserActivityLog).order_by(UserActivityLog.created_at.desc()).limit(1000).all()
+    return rows

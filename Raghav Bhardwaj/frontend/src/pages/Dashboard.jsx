@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { datasetsAPI, executionsAPI, mappingsAPI, projectsAPI, rulesAPI } from '../api'
+import { datasetsAPI, enterpriseAPI, executionsAPI, mappingsAPI, projectsAPI, rulesAPI } from '../api'
 import CreateProjectModal from '../components/CreateProjectModal'
 import toast from 'react-hot-toast'
 import {
@@ -148,6 +148,12 @@ export default function Dashboard() {
     queryKey: ['projects'],
     queryFn: projectsAPI.list,
   })
+  const { data: executiveMetrics } = useQuery({
+    queryKey: ['executive-dashboard'],
+    queryFn: enterpriseAPI.executiveDashboard,
+    enabled: role === 'admin',
+    refetchInterval: 15000,
+  })
 
   useEffect(() => {
     if (!projects.length) {
@@ -262,6 +268,26 @@ export default function Dashboard() {
       </div>
 
       <div className="flex-1 overflow-auto p-8">
+        {role === 'admin' && executiveMetrics && (
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 mb-4">
+            <div className="card p-3 text-xs text-slate-300">Completion<br /><span className="text-white font-semibold">{executiveMetrics.completion_pct}%</span></div>
+            <div className="card p-3 text-xs text-slate-300">Overdue<br /><span className="text-white font-semibold">{executiveMetrics.overdue_reconciliations}</span></div>
+            <div className="card p-3 text-xs text-slate-300">High Risk<br /><span className="text-white font-semibold">{executiveMetrics.high_risk_accounts}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Pending Approvals<br /><span className="text-white font-semibold">{executiveMetrics.pending_approvals}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Auto Match<br /><span className="text-white font-semibold">{executiveMetrics.auto_match_pct}%</span></div>
+            <div className="card p-3 text-xs text-slate-300">Escalations<br /><span className="text-white font-semibold">{executiveMetrics.escalation_alerts}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Rejected<br /><span className="text-white font-semibold">{executiveMetrics.rejected_items}</span></div>
+            <button
+              className="btn-secondary text-xs"
+              onClick={async () => {
+                await enterpriseAPI.generateAgingReminders()
+                toast.success('Aging reminders generated')
+              }}
+            >
+              Generate Reminders
+            </button>
+          </div>
+        )}
         <div className="card oracle-hero p-4 mb-5">
           <p className="oracle-panel-title text-sm">Operations Console</p>
           <p className="oracle-subtle text-xs mt-1">Track ingestion readiness, mapping completeness, rules coverage, and latest execution status for each project.</p>

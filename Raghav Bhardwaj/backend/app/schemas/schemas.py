@@ -26,6 +26,7 @@ class UserOut(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str
     user: UserOut
 
@@ -33,6 +34,12 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    mfa_channel: Optional[str] = None  # email/app
+    otp_code: Optional[str] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 # ─── Project ─────────────────────────────────────────────────────────────────

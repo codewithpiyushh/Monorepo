@@ -18,6 +18,11 @@ export default function PreparerWorkbench() {
     queryFn: () => enterpriseAPI.listExceptions(queueType),
     refetchInterval: 5000,
   })
+  const { data: dashboard } = useQuery({
+    queryKey: ['preparer-dashboard'],
+    queryFn: enterpriseAPI.preparerDashboard,
+    refetchInterval: 15000,
+  })
 
   const submitMutation = useMutation({
     mutationFn: enterpriseAPI.submitException,
@@ -34,6 +39,14 @@ export default function PreparerWorkbench() {
     <div className="h-full flex flex-col">
       <div className="section-header"><h1 className="text-base font-semibold text-white">Preparer Workbench</h1></div>
       <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {dashboard && (
+          <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="card p-3 text-xs text-slate-300">Assigned Reconciliations<br /><span className="text-white font-semibold">{dashboard.assigned_tasks}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Pending Submissions<br /><span className="text-white font-semibold">{dashboard.pending_submissions}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Rejected Reconciliations<br /><span className="text-white font-semibold">{dashboard.rejected_items}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Due-Date Warnings<br /><span className="text-white font-semibold">{dashboard.overdue_reconciliations}</span></div>
+          </div>
+        )}
         <div className="card p-4 space-y-3">
           <p className="oracle-panel-title text-sm">Assigned Exception Queue</p>
           <div className="flex items-center gap-2">

@@ -9,6 +9,14 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     UPLOAD_DIR: str = "./uploads"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@drms.local"
+    SMTP_USE_TLS: bool = True
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 43200
+    MFA_OTP_EXPIRE_MINUTES: int = 10
 
     class Config:
         env_file = ".env"

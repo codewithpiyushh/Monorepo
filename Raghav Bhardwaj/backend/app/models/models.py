@@ -253,6 +253,8 @@ class AuditLog(Base):
     entity_id = Column(Integer, nullable=True)
     metadata_json = Column(Text, nullable=True)  # JSON
     ip_address = Column(String(50), nullable=True)
+    previous_hash = Column(String(128), nullable=True)
+    entry_hash = Column(String(128), nullable=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_logs")
@@ -316,6 +318,11 @@ class ReconciliationProfile(Base):
     matching_rules_json = Column(Text, nullable=True)
     assigned_preparer = Column(Integer, ForeignKey("users.id"), nullable=True)
     assigned_reviewer = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_approver = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_certifier = Column(Integer, ForeignKey("users.id"), nullable=True)
+    risk_classification = Column(String(20), default="MEDIUM")
+    due_days = Column(Integer, default=5)
+    lifecycle_state = Column(String(30), default="OPEN")
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -372,6 +379,10 @@ class ExceptionQueueRecord(Base):
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String(30), default="OPEN")
     comments = Column(Text, nullable=True)
+    classification = Column(String(40), nullable=True)  # DATA_ISSUE/PROCESS_ISSUE/POLICY_RISK/OTHER
+    resolution_notes = Column(Text, nullable=True)
+    escalated_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -387,3 +398,309 @@ class ReconciliationAttachment(Base):
     document_name = Column(String(255), nullable=False)
     document_path = Column(String(500), nullable=True)
     document_status = Column(String(30), default="ACTIVE")
+    version = Column(Integer, default=1)
+    replaced_by_id = Column(Integer, ForeignKey("reconciliation_attachments.id"), nullable=True)
+
+
+class FinancialCloseCalendar(Base):
+    __tablename__ = "financial_close_calendar"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    cycle_type = Column(String(20), nullable=False)  # MONTHLY | QUARTERLY | YEARLY
+    period_key = Column(String(30), nullable=False)  # 2026-05, 2026-Q2, 2026
+    start_date = Column(String(30), nullable=False)
+    end_date = Column(String(30), nullable=False)
+    due_date = Column(String(30), nullable=False)
+    status = Column(String(30), default="OPEN")  # OPEN | IN_PROGRESS | CLOSED
+    is_locked = Column(Boolean, default=False)
+    locked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    locked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CertificationWorkflow(Base):
+    __tablename__ = "certification_workflows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    calendar_id = Column(Integer, ForeignKey("financial_close_calendar.id"), nullable=True)
+    status = Column(String(30), default="OPEN")
+    current_stage = Column(String(30), default="PREPARER")
+    preparer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approver_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    certifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    due_date = Column(String(30), nullable=True)
+    last_comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CertificationWorkflowHistory(Base):
+    __tablename__ = "certification_workflow_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("certification_workflows.id"), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor_role = Column(String(30), nullable=True)
+    action = Column(String(30), nullable=False)
+    from_status = Column(String(30), nullable=True)
+    to_status = Column(String(30), nullable=True)
+    comments = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReconciliationRuleDefinition(Base):
+    __tablename__ = "reconciliation_rule_definitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    template_type = Column(String(40), nullable=False)  # BANK/PAYROLL/VENDOR/...
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=True)
+    is_reusable = Column(Boolean, default=True)
+    conditions_json = Column(Text, nullable=False)  # dynamic rule conditions
+    filters_json = Column(Text, nullable=True)
+    thresholds_json = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ReminderLog(Base):
+    __tablename__ = "reminder_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("certification_workflows.id"), nullable=False)
+    reminder_type = Column(String(30), nullable=False)  # DUE_SOON/OVERDUE/ESCALATION
+    severity = Column(String(20), nullable=False)  # LOW/MEDIUM/HIGH
+    message = Column(Text, nullable=False)
+    sent_to_role = Column(String(30), nullable=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+
+
+class NotificationEvent(Base):
+    __tablename__ = "notification_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(40), nullable=False)  # APPROVAL/ESCALATION/REMINDER/REJECT/CERT_COMPLETE
+    workflow_id = Column(Integer, ForeignKey("certification_workflows.id"), nullable=True)
+    recipient_email = Column(String(180), nullable=True)
+    subject = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    status = Column(String(20), default="QUEUED")  # QUEUED/SENT/FAILED
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+
+
+class ValidationRuleResult(Base):
+    __tablename__ = "validation_rule_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(String(80), index=True, nullable=False)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=True)
+    rule_name = Column(String(80), nullable=False)
+    severity = Column(String(20), default="MEDIUM")
+    passed = Column(Boolean, default=True)
+    message = Column(Text, nullable=False)
+    payload_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ExceptionComment(Base):
+    __tablename__ = "exception_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    exception_id = Column(Integer, ForeignKey("exception_queue_records.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    comment = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EvidenceVersionHistory(Base):
+    __tablename__ = "evidence_version_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    attachment_id = Column(Integer, ForeignKey("reconciliation_attachments.id"), nullable=False)
+    previous_version = Column(Integer, nullable=False)
+    new_version = Column(Integer, nullable=False)
+    changed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    change_note = Column(Text, nullable=True)
+    changed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token_id = Column(String(120), unique=True, nullable=False, index=True)
+    ip_address = Column(String(80), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    login_at = Column(DateTime, default=datetime.utcnow)
+    logout_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+
+class UserActivityLog(Base):
+    __tablename__ = "user_activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    session_id = Column(Integer, ForeignKey("user_sessions.id"), nullable=True)
+    action = Column(String(120), nullable=False)
+    entity_type = Column(String(60), nullable=True)
+    entity_id = Column(Integer, nullable=True)
+    ip_address = Column(String(80), nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditPackage(Base):
+    __tablename__ = "audit_packages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reconciliation_id = Column(Integer, ForeignKey("executions.id"), nullable=True)
+    generated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    package_path = Column(String(500), nullable=False)
+    checksum = Column(String(128), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReconciliationSnapshot(Base):
+    __tablename__ = "reconciliation_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    period_key = Column(String(40), nullable=False)
+    snapshot_name = Column(String(120), nullable=False)
+    snapshot_json = Column(Text, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_currency = Column(String(10), nullable=False, index=True)
+    to_currency = Column(String(10), nullable=False, index=True)
+    rate = Column(Float, nullable=False)
+    rate_date = Column(String(20), nullable=False, index=True)
+    source = Column(String(80), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class JournalAdjustment(Base):
+    __tablename__ = "journal_adjustments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    period_key = Column(String(30), nullable=False)
+    account = Column(String(80), nullable=False)
+    currency = Column(String(10), nullable=False)
+    amount = Column(Float, nullable=False)
+    functional_currency = Column(String(10), nullable=True)
+    reporting_currency = Column(String(10), nullable=True)
+    converted_amount = Column(Float, nullable=True)
+    reason = Column(Text, nullable=True)
+    status = Column(String(30), default="DRAFT")  # DRAFT/SUBMITTED/APPROVED/POSTED/REJECTED
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    erp_posting_reference = Column(String(120), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JournalAdjustmentHistory(Base):
+    __tablename__ = "journal_adjustment_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    adjustment_id = Column(Integer, ForeignKey("journal_adjustments.id"), nullable=False)
+    action = Column(String(40), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    comments = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ModulePermission(Base):
+    __tablename__ = "module_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role = Column(String(30), nullable=False, index=True)
+    module_name = Column(String(80), nullable=False, index=True)
+    can_view = Column(Boolean, default=True)
+    can_edit = Column(Boolean, default=False)
+    can_approve = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReconciliationOwnership(Base):
+    __tablename__ = "reconciliation_ownership"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    owner_role = Column(String(30), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MFAChallenge(Base):
+    __tablename__ = "mfa_challenges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    channel = Column(String(20), nullable=False)  # email/app
+    otp_code = Column(String(10), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ReconciliationComment(Base):
+    __tablename__ = "reconciliation_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("reconciliation_comments.id"), nullable=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    message = Column(Text, nullable=False)
+    mentions_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduledReport(Base):
+    __tablename__ = "scheduled_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_type = Column(String(40), nullable=False)  # executive/audit/reconciliation
+    cron_expression = Column(String(100), nullable=False)
+    recipients_json = Column(Text, nullable=False)
+    active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    last_run_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduledReportRun(Base):
+    __tablename__ = "scheduled_report_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("scheduled_reports.id"), nullable=False)
+    output_path = Column(String(500), nullable=True)
+    status = Column(String(20), default="RUNNING")
+    error_message = Column(Text, nullable=True)
+    executed_at = Column(DateTime, default=datetime.utcnow)

@@ -7,9 +7,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models.models import Schedule
+from ..models.models import Schedule, ScheduledReport
 from ..services import execution_service
 from ..sequence import service as sequence_service
+from ..enterprise import service as enterprise_service
 from .scheduler import scheduler
 
 logger = logging.getLogger(__name__)
@@ -83,11 +84,52 @@ def start_scheduler(db: Session) -> None:
     if not scheduler.running:
         scheduler.start()
     load_active_schedules(db)
+    _register_system_jobs()
 
 
 def shutdown_scheduler() -> None:
     if scheduler.running:
         scheduler.shutdown(wait=False)
+
+
+def _run_system_job(job_name: str):
+    db = SessionLocal()
+    try:
+        if job_name == "overdue_detection":
+            enterprise_service.process_overdue_workflows(db)
+        elif job_name == "escalation_processing":
+            enterprise_service.process_escalations(db)
+        elif job_name == "reconciliation_reminders":
+            enterprise_service.generate_aging_and_reminders(db)
+        elif job_name == "workflow_notifications":
+            enterprise_service.process_workflow_notifications(db)
+        elif job_name == "scheduled_reports_dispatch":
+            reports = db.query(ScheduledReport).filter(ScheduledReport.active == True).all()
+            for r in reports:
+                enterprise_service.run_scheduled_report(db, r.id)
+    except Exception:
+        logger.exception("System job failed: %s", job_name)
+    finally:
+        db.close()
+
+
+def _register_system_jobs():
+    system_jobs = [
+        ("system:overdue_detection", "*/15 * * * *", "overdue_detection"),
+        ("system:escalation_processing", "*/20 * * * *", "escalation_processing"),
+        ("system:reconciliation_reminders", "0 */1 * * *", "reconciliation_reminders"),
+        ("system:workflow_notifications", "*/30 * * * *", "workflow_notifications"),
+        ("system:scheduled_reports_dispatch", "*/30 * * * *", "scheduled_reports_dispatch"),
+    ]
+    for job_id, cron_expr, job_name in system_jobs:
+        scheduler.add_job(
+            _run_system_job,
+            trigger=CronTrigger.from_crontab(cron_expr),
+            args=[job_name],
+            id=job_id,
+            replace_existing=True,
+            misfire_grace_time=120,
+        )
 
 
 def create_schedule(

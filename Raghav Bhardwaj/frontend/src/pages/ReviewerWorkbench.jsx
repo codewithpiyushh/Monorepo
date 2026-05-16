@@ -13,6 +13,11 @@ export default function ReviewerWorkbench() {
     queryFn: () => enterpriseAPI.listExceptions(queueType),
     refetchInterval: 5000,
   })
+  const { data: dashboard } = useQuery({
+    queryKey: ['reviewer-dashboard'],
+    queryFn: enterpriseAPI.reviewerDashboard,
+    refetchInterval: 15000,
+  })
 
   const approveMutation = useMutation({
     mutationFn: enterpriseAPI.approveException,
@@ -29,6 +34,15 @@ export default function ReviewerWorkbench() {
     <div className="h-full flex flex-col">
       <div className="section-header"><h1 className="text-base font-semibold text-white">Reviewer / Approver Workbench</h1></div>
       <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {dashboard && (
+          <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div className="card p-3 text-xs text-slate-300">Pending Approvals<br /><span className="text-white font-semibold">{dashboard.pending_approvals}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Overdue<br /><span className="text-white font-semibold">{dashboard.overdue_reconciliations}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Rejected Items<br /><span className="text-white font-semibold">{dashboard.rejected_items}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Assigned Tasks<br /><span className="text-white font-semibold">{dashboard.assigned_tasks}</span></div>
+            <div className="card p-3 text-xs text-slate-300">Escalations<br /><span className="text-white font-semibold">{dashboard.escalation_alerts}</span></div>
+          </div>
+        )}
         <div className="card p-4 space-y-3">
           <p className="oracle-panel-title text-sm">Review Queue</p>
           <select className="input max-w-xs" value={queueType} onChange={(e) => setQueueType(e.target.value)}>

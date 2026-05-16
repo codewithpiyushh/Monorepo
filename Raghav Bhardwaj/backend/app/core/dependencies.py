@@ -8,6 +8,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
 ):
     from ..models.models import User
@@ -26,6 +27,25 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user or not user.is_active:
         raise credentials_exception
+    try:
+        from ..models.models import UserSession
+        from ..services import monitoring_service
+        jti = payload.get("jti")
+        session = None
+        if jti:
+            session = db.query(UserSession).filter(UserSession.token_id == jti).first()
+        monitoring_service.log_activity(
+            db,
+            user_id=user.id,
+            session_id=session.id if session else None,
+            action=f"API_ACCESS:{request.method}",
+            entity_type="request",
+            entity_id=None,
+            ip_address=request.client.host if request.client else None,
+            metadata={"path": request.url.path},
+        )
+    except Exception:
+        pass
     return user
 
 

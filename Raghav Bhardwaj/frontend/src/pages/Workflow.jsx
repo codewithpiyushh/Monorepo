@@ -1,106 +1,107 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { workflowAPI } from '../api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
 
 export default function WorkflowPage() {
-  const [reconciliationId, setReconciliationId] = useState('')
-  const [assignedTo, setAssignedTo] = useState('')
-  const [comments, setComments] = useState('')
+  const qc = useQueryClient()
+  const [profileId, setProfileId] = useState('')
   const [workflowId, setWorkflowId] = useState('')
+  const [action, setAction] = useState('PREPARE')
+  const [comments, setComments] = useState('')
 
-  const { data: workflow } = useQuery({
-    queryKey: ['workflow', workflowId],
-    queryFn: () => workflowAPI.get(workflowId),
+  const { data: workflows = [] } = useQuery({
+    queryKey: ['certification-workflows', profileId],
+    queryFn: () => enterpriseAPI.listCertificationWorkflows(profileId || undefined),
+  })
+
+  const { data: history = [] } = useQuery({
+    queryKey: ['certification-history', workflowId],
+    queryFn: () => enterpriseAPI.getCertificationWorkflowHistory(workflowId),
     enabled: !!workflowId,
-    refetchInterval: 5000,
   })
 
-  const assignMutation = useMutation({
-    mutationFn: workflowAPI.assign,
-    onSuccess: (data) => {
-      toast.success('Workflow assigned')
-      setWorkflowId(String(data.id))
+  const createMutation = useMutation({
+    mutationFn: enterpriseAPI.createCertificationWorkflow,
+    onSuccess: (row) => {
+      toast.success('Certification workflow created')
+      setWorkflowId(String(row.id))
+      qc.invalidateQueries({ queryKey: ['certification-workflows'] })
     },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Assign failed'),
+    onError: (e) => toast.error(e.response?.data?.detail || 'Failed to create workflow'),
   })
 
-  const submitMutation = useMutation({
-    mutationFn: workflowAPI.submit,
-    onSuccess: () => toast.success('Submitted for review'),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Submit failed'),
+  const actionMutation = useMutation({
+    mutationFn: enterpriseAPI.actionCertificationWorkflow,
+    onSuccess: () => {
+      toast.success('Workflow state updated')
+      qc.invalidateQueries({ queryKey: ['certification-workflows'] })
+      qc.invalidateQueries({ queryKey: ['certification-history'] })
+    },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Action failed'),
   })
-
-  const approveMutation = useMutation({
-    mutationFn: workflowAPI.approve,
-    onSuccess: () => toast.success('Approved'),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Approve failed'),
-  })
-
-  const rejectMutation = useMutation({
-    mutationFn: workflowAPI.reject,
-    onSuccess: () => toast.success('Rejected'),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Reject failed'),
-  })
-
-  const reconciliationNum = Number(reconciliationId)
 
   return (
     <div className="h-full flex flex-col">
       <div className="section-header">
-        <h1 className="text-base font-semibold text-white">Workflow</h1>
+        <h1 className="text-base font-semibold text-white">Certification Workflow</h1>
       </div>
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-200">Assign</h2>
-          <input className="input" placeholder="Reconciliation ID" value={reconciliationId} onChange={(e) => setReconciliationId(e.target.value)} />
-          <input className="input" placeholder="Assigned To User ID (optional)" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} />
-          <textarea className="input" placeholder="Comments" value={comments} onChange={(e) => setComments(e.target.value)} />
+          <h2 className="text-sm font-semibold text-slate-200">Create Workflow</h2>
+          <input className="input" placeholder="Profile ID" value={profileId} onChange={(e) => setProfileId(e.target.value)} />
           <button
             className="btn-primary"
-            onClick={() => {
-              if (!Number.isFinite(reconciliationNum)) return toast.error('Provide reconciliation ID')
-              assignMutation.mutate({
-                reconciliation_id: reconciliationNum,
-                assigned_to: assignedTo ? Number(assignedTo) : null,
-                comments,
-              })
-            }}
+            onClick={() => createMutation.mutate({ profile_id: Number(profileId) })}
+            disabled={!profileId}
           >
-            Assign Workflow
+            Create
           </button>
         </div>
 
-        <div className="card p-4 space-y-3 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-slate-200">Actions</h2>
-          <div className="flex gap-2 flex-wrap">
-            <button className="btn-secondary" onClick={() => submitMutation.mutate({ reconciliation_id: reconciliationNum, comments })}>Submit</button>
-            <button className="btn-secondary" onClick={() => approveMutation.mutate({ reconciliation_id: reconciliationNum, comments })}>Approve</button>
-            <button className="btn-secondary" onClick={() => rejectMutation.mutate({ reconciliation_id: reconciliationNum, comments })}>Reject</button>
-          </div>
-          <div className="pt-2">
-            <label className="label">View Workflow by ID</label>
-            <input className="input max-w-xs" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)} placeholder="Workflow ID" />
-          </div>
+        <div className="card p-4 space-y-3">
+          <h2 className="text-sm font-semibold text-slate-200">Action</h2>
+          <select className="input" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}>
+            <option value="">Select Workflow</option>
+            {workflows.map((w) => (
+              <option key={w.id} value={w.id}>
+                #{w.id} | {w.status} | {w.current_stage}
+              </option>
+            ))}
+          </select>
+          <select className="input" value={action} onChange={(e) => setAction(e.target.value)}>
+            <option value="PREPARE">PREPARE</option>
+            <option value="SUBMIT">SUBMIT</option>
+            <option value="REVIEW">REVIEW</option>
+            <option value="APPROVE">APPROVE</option>
+            <option value="CERTIFY">CERTIFY</option>
+            <option value="CLOSE">CLOSE</option>
+            <option value="REOPEN">REOPEN</option>
+            <option value="FORCE_CLOSE">FORCE_CLOSE</option>
+          </select>
+          <textarea className="input min-h-[80px]" placeholder="Comments" value={comments} onChange={(e) => setComments(e.target.value)} />
+          <button
+            className="btn-secondary"
+            onClick={() => actionMutation.mutate({ workflow_id: Number(workflowId), action, comments })}
+            disabled={!workflowId}
+          >
+            Apply Action
+          </button>
+        </div>
 
-          {workflow && (
-            <div className="mt-2 border border-surface-700 rounded-md p-3">
-              <p className="text-xs text-slate-400">Status: <span className="text-slate-200">{workflow.status}</span></p>
-              <p className="text-xs text-slate-400">Reconciliation: <span className="text-slate-200">#{workflow.reconciliation_id}</span></p>
-              <p className="text-xs text-slate-400">Assigned to: <span className="text-slate-200">{workflow.assigned_to ?? '-'}</span></p>
-              <p className="text-xs text-slate-400 mt-2 mb-1">History</p>
-              <div className="space-y-1 max-h-44 overflow-auto">
-                {workflow.history?.map((h) => (
-                  <div key={h.id} className="text-xs text-slate-300">
-                    {h.action}: {h.from_status || '-'} → {h.to_status || '-'} {h.comments ? `| ${h.comments}` : ''}
-                  </div>
-                ))}
+        <div className="card p-4">
+          <h2 className="text-sm font-semibold text-slate-200 mb-3">Audit History</h2>
+          <div className="space-y-2 max-h-[420px] overflow-auto">
+            {history.map((h) => (
+              <div key={h.id} className="border border-surface-700 rounded-md p-2 text-xs text-slate-300">
+                {h.action}: {h.from_status || '-'} to {h.to_status || '-'}
+                {h.comments ? ` | ${h.comments}` : ''}
               </div>
-            </div>
-          )}
+            ))}
+            {history.length === 0 && <p className="text-xs text-slate-500">No history found.</p>}
+          </div>
         </div>
       </div>
     </div>
   )
 }
-

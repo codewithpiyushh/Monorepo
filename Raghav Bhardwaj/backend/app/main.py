@@ -96,6 +96,26 @@ def _seed_demo_user():
                     role="preparer",
                 ),
             )
+        if not db.query(User).filter(User.username == "approver").first():
+            create_user(
+                db,
+                UserCreate(
+                    username="approver",
+                    email="approver@drms.com",
+                    password="approver123",
+                    role="approver",
+                ),
+            )
+        if not db.query(User).filter(User.username == "certifier").first():
+            create_user(
+                db,
+                UserCreate(
+                    username="certifier",
+                    email="certifier@drms.com",
+                    password="certifier123",
+                    role="certifier",
+                ),
+            )
     finally:
         db.close()
 

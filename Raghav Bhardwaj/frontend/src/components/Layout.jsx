@@ -9,8 +9,13 @@ import {
   FolderOpen,
   ScrollText,
   LogOut,
+  Repeat,
   User,
   Workflow,
+  CalendarDays,
+  BadgeCheck,
+  SlidersHorizontal,
+  Building2,
   Sun,
   Moon,
   Link,
@@ -23,7 +28,7 @@ import {
 export default function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, clearAuth } = useAuthStore()
+  const { user, clearAuth, setAuth } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('drms_sidebar_collapsed') === '1')
 
@@ -35,6 +40,11 @@ export default function Layout() {
   const navItems = [
     { to: '/', label: 'Projects', icon: FolderOpen, end: true, show: true },
     { to: '/audit', label: 'Audit Logs', icon: ScrollText, show: true },
+    { to: '/reconciliation-profiles', label: 'Reconciliation Profiles', icon: Workflow, show: role === 'admin' },
+    { to: '/close-calendar', label: 'Close Calendar', icon: CalendarDays, show: role === 'admin' },
+    { to: '/certification-workflow', label: 'Certification Workflow', icon: BadgeCheck, show: true },
+    { to: '/rule-builder', label: 'Rule Builder', icon: SlidersHorizontal, show: role === 'admin' },
+    { to: '/enterprise-center', label: 'Enterprise Center', icon: Building2, show: true },
   ].filter((item) => item.show)
 
   useEffect(() => {
@@ -48,6 +58,27 @@ export default function Layout() {
   const handleLogout = () => {
     clearAuth()
     navigate('/login')
+  }
+
+  const handleSwitchUser = async () => {
+    const switchSequence = [
+      { role: 'admin', username: 'admin', password: 'admin123' },
+      { role: 'preparer', username: 'preparer', password: 'preparer123' },
+      { role: 'reviewer', username: 'reviewer', password: 'reviewer123' },
+      { role: 'approver', username: 'approver', password: 'approver123' },
+    ]
+    const currentRole = (user?.role || 'admin').toLowerCase()
+    const currentIndex = switchSequence.findIndex((entry) => entry.role === currentRole)
+    const target = switchSequence[(currentIndex + 1 + switchSequence.length) % switchSequence.length]
+    try {
+      const { authAPI } = await import('../api')
+      const data = await authAPI.login(target.username, target.password)
+      setAuth(data.user, data.access_token)
+      navigate('/')
+    } catch {
+      clearAuth()
+      navigate('/login')
+    }
   }
 
   const workflowItems = activeProjectId
@@ -206,13 +237,22 @@ export default function Layout() {
                   <p className="text-[10px] text-slate-500 capitalize">{user?.role}</p>
                 </div>
               )}
-              <button
-                onClick={handleLogout}
-                className="text-slate-500 hover:text-red-400 transition-colors"
-                title="Sign out"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
+              <div className={clsx('flex items-center', sidebarCollapsed ? 'gap-1' : 'gap-2')}>
+                <button
+                  onClick={handleSwitchUser}
+                  className="text-slate-500 hover:text-blue-300 transition-colors"
+                  title="Switch user"
+                >
+                  <Repeat className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="text-slate-500 hover:text-red-400 transition-colors"
+                  title="Sign out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </aside>
