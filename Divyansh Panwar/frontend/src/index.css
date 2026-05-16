@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+body {
+  margin: 0;
+  /* Forces the crisp, professional font globally */
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+/* --- THE GLOBAL SHELL --- */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* --- THE SIDEBAR --- */
+.sidebar {
+  width: 260px;
+  background-color: #111827; /* Restores the Dark Enterprise Black */
+  color: #9ca3af;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  border-right: 1px solid #1f2937;
+  user-select: none; /* Stops the text cursor from appearing when clicking */
+}
+
+.sidebar-header {
+  padding: 24px;
+  border-bottom: 1px solid #1f2937;
+}
+
+.sidebar-title {
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.5px;
+}
+
+.sidebar-subtitle {
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-menu {
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: #ffffff; /* Changed to pure white */
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.menu-category {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af; /* Brightened slightly so it doesn't get lost */
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 16px 0 8px 8px;
+}
+
+.menu-item:hover {
+  background-color: #1f2937;
+  color: #ffffff;
+}
+
+.menu-item.active {
+  background-color: #e11d48; /* EY Red Accent */
+  color: #ffffff;
+}
+
+.menu-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.menu-badge.dark {
+  background: #374151;
+  color: #ffffff;
+}
+
+/* --- THE MAIN CANVAS --- */
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  background-color: #f1f5f9;
+}
+

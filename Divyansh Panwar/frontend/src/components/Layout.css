@@ -1,0 +1,152 @@
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #ffffff;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* --- Top Navbar --- */
+.header {
+  height: 60px;
+  background-color: #efeeeb;
+  border-bottom: 1px solid #e7e5e4;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.logoSection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoText {
+  font-size: 22px;
+  font-weight: 900;
+  color: #e11d48;
+  letter-spacing: -0.5px;
+}
+
+.versionBadge {
+  padding: 4px 8px;
+  background: #f5f5f4;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #78716c;
+  letter-spacing: 0.5px;
+}
+
+.userSection {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.workspaceName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #57534e;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 13px;
+  box-shadow: 0 2px 4px rgba(225, 29, 72, 0.3);
+}
+
+/* --- Body Layout --- */
+.bodyContainer {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 220px;
+  background-color: #ffffff;
+  border-right: 1px solid #e7e5e4;
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.menuLabel {
+  font-size: 11px;
+  font-weight: 800;
+  color: #a8a29e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+/* --- Navigation Buttons --- */
+.navButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all 0.2s;
+  background-color: transparent;
+  color: #57534e;
+  text-align: left;
+}
+
+.navButton:hover {
+  background-color: #f5f5f4;
+}
+
+.navButtonActive {
+  background-color: #fff1f2;
+  color: #e11d48;
+}
+
+.navButtonActive:hover {
+  background-color: #fff1f2; /* Keep active color on hover */
+}
+
+.icon {
+  font-size: 18px;
+  filter: grayscale(100%) opacity(70%);
+}
+
+.iconActive {
+  filter: none;
+}
+
+/* --- Content Area --- */
+.mainContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  position: relative;
+}
+
+.contentWrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+}

@@ -1,0 +1,313 @@
+/* ===== Base ===== */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+/* ===== Layout ===== */
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+  background: #f6f8fa;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 16px;
+  position: sticky;
+  top: 16px;
+  max-height: 95vh;
+  overflow-y: auto;
+}
+
+.sidebar h2 {
+  margin: 0;
+  font-size: 16px;
+  color: #24292f;
+}
+
+.file-heading {
+  margin-top: 16px;
+  color: #24292f;
+}
+
+/* ===== Upload ===== */
+.upload-button {
+  display: inline-block;
+  background: #f6f8fa;
+  color: #24292f;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.upload-button:hover {
+  background: #f3f4f6;
+}
+
+/* ===== File List ===== */
+.file-item {
+  border-top: 1px solid #d8dee4;
+  padding: 10px 0;
+}
+
+.file-item summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #0969da;
+}
+
+.file-meta {
+  font-size: 12px;
+  color: #57606a;
+}
+
+/* ===== Main Panel ===== */
+.main-panel header {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* ===== Panels ===== */
+.panel {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+  color: #24292f;
+}
+
+.panel h3 {
+  margin-top: 0;
+  color: #24292f;
+}
+
+
+/* ===== Tabs ===== */
+.tab-btn {
+background: #f6f8fa;
+  color: #24292f;
+  border: 1px solid #d0d7de;
+  padding: 8px 16px;   /* Increased from 6px 12px for a better click area */
+  border-radius: 6px;
+  cursor: pointer;     /* Ensures a pointer hand appears on hover */
+  font-weight: 500;
+}
+.tab-row {
+  display: flex;       /* Ensures buttons align in a row */
+  gap: 12px;           /* Increases the space between the buttons */
+  margin-bottom: 20px; /* Adds space between the tabs and the content below */
+}
+.tab-btn.active {
+  background: #0969da;
+  color: white;
+  border-color: #0969da;
+}
+
+/* ===== Form ===== */
+label {
+  color: #24292f;
+  font-weight: 600;
+}
+
+select {
+  padding: 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #24292f;
+}
+
+/* Update the grid to add more space between form rows */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* Keeps two columns if space allows */
+  gap: 24px;                      /* Adds significant space between the two dropdowns */
+  margin-top: 16px;
+  margin-bottom: 20px;
+}
+
+/* Force labels and selects to stack vertically so they don't overlap */
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;            /* Space between the text "Training dataset" and the dropdown */
+  font-size: 14px;
+  color: #24292f;
+}
+
+/* Ensure dropdowns take up the full width of their grid cell */
+.form-grid select {
+  width: 100%;
+  padding: 10px;       /* Bigger padding for a modern look */
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+}
+
+/* Add space specifically above the "Run" button */
+.tab-panel button {
+  margin-top: 10px;
+}
+
+
+/* Create a horizontal layout for the cards with spacing between them */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Responsive columns */
+  gap: 16px;       /* Adds space between the cards */
+  margin-top: 12px;
+}
+
+/* Improve internal spacing of the cards */
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 16px;   /* Increased padding inside the card */
+  display: flex;
+  justify-content: space-between; /* Pushes label to left and number to right */
+  align-items: center;
+}
+
+/* Ensure the label and value don't touch */
+.metric-card span {
+  font-size: 14px;
+  color: #57606a; /* Muted color for the label */
+}
+
+.metric-card strong {
+  font-size: 18px;
+  color: #24292f;
+  margin-left: 10px; /* Backup margin */
+}
+
+button {
+  background: #2da44e;
+  color: white;
+  border: 1px solid #2da44e;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #2c974b;
+}
+
+/* ===== Metrics ===== */
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.metric-card strong {
+  color: #24292f;
+}
+
+/* ===== Table ===== */
+.table-wrap {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #24292f;
+}
+
+th,
+td {
+  padding: 8px;
+  border-bottom: 1px solid #d8dee4;
+}
+
+th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+/* ===== Bars ===== */
+.bar-shell {
+  background: #eaeef2;
+}
+
+.bar-fill {
+  background: #0969da;
+}
+
+/* ===== Alerts ===== */
+.alert.error {
+  background: #ffebe9;
+  border: 1px solid #ff818266;
+  color: #cf222e;
+}
+
+.alert.warning {
+  background: #fff8c5;
+  border: 1px solid #d4a72c;
+  color: #9a6700;
+}
+
+/* ===== Charts ===== */
+.chart-shell {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+/* ===== Text ===== */
+.muted {
+  color: #57606a;
+}
+
+/* ===== Remove problematic styles ===== */
+* {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+.sidebar-preview-container {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #d0d7de;
+  max-width: 100%; /* Prevents horizontal overflow */
+}
+
+.sidebar-preview-container h3 {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+/* Force the preview table to be tiny and scrollable */
+.sidebar .table-wrap {
+  max-height: 200px;
+  overflow: auto;
+  font-size: 10px;
+  border: 1px solid #eee;
+  background: #fafafa;
+}
+
+.sidebar table td {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
