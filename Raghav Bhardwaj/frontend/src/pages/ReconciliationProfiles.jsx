@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState } from '../components/ui/PageState'
 
 const lifecycleStates = ['OPEN', 'PREPARED', 'SUBMITTED', 'REVIEWED', 'APPROVED', 'CERTIFIED', 'CLOSED', 'REOPENED', 'FORCE_CLOSED']
 
@@ -133,7 +135,11 @@ export default function ReconciliationProfiles() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header"><h1 className="text-base font-semibold text-white">Reconciliation Profile Management</h1></div>
+      <PageHeader
+        title="Reconciliation Profile Management"
+        subtitle="Manage lifecycle profiles, close calendars, and certification workflow transitions."
+        badge={`${profiles.length} profiles`}
+      />
       <div className="p-6 grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="card p-4 space-y-2">
           <input className="input" placeholder="Profile Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -180,7 +186,12 @@ export default function ReconciliationProfiles() {
                 </div>
               </div>
             ))}
-            {profiles.length === 0 && <p className="text-xs text-slate-500">No profiles created yet.</p>}
+            {profiles.length === 0 && (
+              <EmptyState
+                title="No profiles created yet"
+                description="Create a profile to define lifecycle controls, risk class, and ownership."
+              />
+            )}
           </div>
         </div>
 

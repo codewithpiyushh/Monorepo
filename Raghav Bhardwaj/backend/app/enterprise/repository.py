@@ -18,6 +18,7 @@ from ..models.models import (
     ReconciliationRuleDefinition,
     ReminderLog,
 )
+from sqlalchemy import or_
 
 
 def create_batch(db: Session, batch_id: str, source_system: str, metadata: dict, user_id: int | None):
@@ -101,8 +102,23 @@ def create_profile(db: Session, payload):
     return profile
 
 
-def list_profiles(db: Session):
-    return db.query(ReconciliationProfile).order_by(ReconciliationProfile.created_at.desc()).all()
+def list_profiles(db: Session, role: str | None = None, user_id: int | None = None):
+    query = db.query(ReconciliationProfile)
+    normalized_role = (role or "").lower()
+    if normalized_role == "approver":
+        normalized_role = "reviewer"
+    if normalized_role == "preparer":
+        query = query.filter(ReconciliationProfile.assigned_preparer == user_id)
+    elif normalized_role == "reviewer":
+        query = query.filter(
+            or_(
+                ReconciliationProfile.assigned_reviewer == user_id,
+                ReconciliationProfile.assigned_approver == user_id,
+            )
+        )
+    elif normalized_role == "certifier":
+        query = query.filter(ReconciliationProfile.assigned_certifier == user_id)
+    return query.order_by(ReconciliationProfile.created_at.desc()).all()
 
 
 def get_profile(db: Session, profile_id: int):

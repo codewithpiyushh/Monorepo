@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const FILTERS = ['all', 'matched', 'unmatched', 'partial']
 
@@ -10,11 +10,32 @@ export default function TransactionTable({
   onFilterChange,
   selectedTransactionId,
   onSelectTransaction,
+  showAdvancedFilters = false,
 }) {
   const [search, setSearch] = useState('')
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [page, setPage] = useState(1)
-  const statusChip = (status) => status === 'matched' ? 'badge-matched' : status === 'partial' ? 'badge-partial' : 'badge-unmatched'
+  const [showColumnsPanel, setShowColumnsPanel] = useState(false)
+  const [viewName, setViewName] = useState('')
+  const [savedViews, setSavedViews] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('drms_tx_views') || '[]')
+    } catch {
+      return []
+    }
+  })
+  const [visibleColumns, setVisibleColumns] = useState([])
+  const statusChip = (status) => status === 'matched' ? 'badge-matched badge-subtle' : status === 'partial' ? 'badge-partial badge-subtle' : 'badge-unmatched badge-subtle'
+  const columns = mappedColumns.length ? mappedColumns : [{ source_column: 'mapped_fields', target_column: 'mapped_fields' }]
+
+  useEffect(() => {
+    setVisibleColumns((prev) => {
+      if (!prev.length) return columns.slice(0, 6).map((c) => c.source_column)
+      const available = new Set(columns.map((c) => c.source_column))
+      const kept = prev.filter((c) => available.has(c))
+      return kept.length ? kept : columns.map((c) => c.source_column)
+    })
+  }, [mappedColumns])
 
   const parseJson = (value) => {
     if (!value) return {}
@@ -47,6 +68,32 @@ export default function TransactionTable({
   const safePage = Math.min(page, totalPages)
   const start = (safePage - 1) * rowsPerPage
   const pagedTransactions = filteredTransactions.slice(start, start + rowsPerPage)
+  const activeColumns = columns.filter((c) => visibleColumns.includes(c.source_column))
+
+  const saveView = () => {
+    const trimmed = viewName.trim()
+    if (!trimmed) return
+    const next = savedViews.filter((v) => v.name !== trimmed).concat({
+      name: trimmed,
+      filter,
+      rowsPerPage,
+      visibleColumns,
+      search,
+    })
+    setSavedViews(next)
+    localStorage.setItem('drms_tx_views', JSON.stringify(next))
+    setViewName('')
+  }
+
+  const applyView = (name) => {
+    const selected = savedViews.find((v) => v.name === name)
+    if (!selected) return
+    onFilterChange(selected.filter || 'all')
+    setRowsPerPage(selected.rowsPerPage || 10)
+    setVisibleColumns(selected.visibleColumns || columns.map((c) => c.source_column))
+    setSearch(selected.search || '')
+    setPage(1)
+  }
 
   return (
     <div className="surface-panel p-4 space-y-3">
@@ -76,14 +123,56 @@ export default function TransactionTable({
         </div>
       </div>
 
+      <div className="flex items-center gap-2 flex-wrap opacity-90">
+        {showAdvancedFilters && (
+          <>
+            <button className="btn-secondary h-8 py-1 text-xs" onClick={() => setShowColumnsPanel((v) => !v)}>
+              {showColumnsPanel ? 'Hide Columns' : 'Choose Columns'}
+            </button>
+            <select className="input h-8 py-1 w-44 text-xs" defaultValue="" onChange={(e) => applyView(e.target.value)}>
+              <option value="" disabled>Apply saved view</option>
+              {savedViews.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}
+            </select>
+            <input className="input h-8 py-1 w-44 text-xs" value={viewName} onChange={(e) => setViewName(e.target.value)} placeholder="Save current view as..." />
+            <button className="btn-secondary h-8 py-1 text-xs" onClick={saveView}>Save View</button>
+          </>
+        )}
+      </div>
+
+      {showColumnsPanel && (
+        <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-3">
+          <p className="text-xs text-slate-400 mb-2">Visible columns</p>
+          <div className="flex flex-wrap gap-3">
+            {columns.map((c) => {
+              const checked = visibleColumns.includes(c.source_column)
+              return (
+                <label key={c.source_column} className="text-xs text-slate-300 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setVisibleColumns((prev) => {
+                        if (checked) return prev.filter((x) => x !== c.source_column)
+                        return [...prev, c.source_column]
+                      })
+                    }}
+                  />
+                  {c.source_column}
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-auto border border-surface-700 rounded-lg">
         <div className="min-w-max">
           <div
-            className="grid gap-3 px-3 py-3 border-b border-surface-700/70 bg-surface-700/30"
-            style={{ gridTemplateColumns: `130px ${'minmax(140px,1fr) '.repeat(Math.max(mappedColumns.length, 1))}120px 90px` }}
+            className="sticky top-0 z-10 grid gap-3 px-3 py-3 border-b border-surface-700/70 bg-surface-700/95 backdrop-blur"
+            style={{ gridTemplateColumns: `130px ${'minmax(140px,1fr) '.repeat(Math.max(activeColumns.length, 1))}120px 90px` }}
           >
             <span className="text-[11px] uppercase tracking-wide text-slate-400">Transaction</span>
-            {(mappedColumns.length ? mappedColumns : [{ source_column: 'mapped_fields', target_column: 'mapped_fields' }]).map((mapping, idx) => (
+            {activeColumns.map((mapping, idx) => (
               <span key={`${mapping.source_column}-${mapping.target_column}-${idx}`} className="text-[11px] uppercase tracking-wide text-slate-400 truncate">
                 {mapping.source_column}
               </span>
@@ -106,26 +195,27 @@ export default function TransactionTable({
                   key={tx.id}
                   onClick={() => onSelectTransaction(tx)}
                   className={clsx(
-                    'w-full grid gap-3 px-3 py-2.5 text-left items-center result-grid-row',
+                    'w-full grid gap-3 px-3 text-left items-center result-grid-row transition-colors',
+                    'py-2.5',
                     idx % 2 === 1 && 'result-grid-row-alt',
                     isSelected && 'bg-brand-900/20'
                   )}
-                  style={{ gridTemplateColumns: `130px ${'minmax(140px,1fr) '.repeat(Math.max(mappedColumns.length, 1))}120px 90px` }}
+                  style={{ gridTemplateColumns: `130px ${'minmax(140px,1fr) '.repeat(Math.max(activeColumns.length, 1))}120px 90px` }}
                 >
                   <span className="text-xs text-slate-300">Tx #{tx.id}</span>
-                  {(mappedColumns.length ? mappedColumns : [{ source_column: 'mapped_fields', target_column: 'mapped_fields' }]).map((mapping, idx) => {
+                  {activeColumns.map((mapping, idx) => {
                     const sourceValue = sourceData[mapping.source_column]
                     const targetValue = targetData[mapping.target_column]
                     return (
-                      <span key={`${tx.id}-${idx}`} className="text-xs text-slate-300 truncate">
-                        <span className="text-slate-500">{sourceValue ?? '(null)'}</span>
+                      <span key={`${tx.id}-${idx}`} className="text-xs text-slate-100 truncate">
+                        <span>{sourceValue ?? '(null)'}</span>
                         <span className="text-slate-500"> | </span>
-                        <span>{targetValue ?? '(null)'}</span>
+                        <span className="font-medium">{targetValue ?? '(null)'}</span>
                       </span>
                     )
                   })}
                   <span><span className={statusChip(tx.match_status)}>{tx.match_status}</span></span>
-                  <span className="text-xs text-slate-400 text-right">{((tx.match_score || 0) * 100).toFixed(0)}%</span>
+                  <span className="text-[11px] text-slate-500 text-right">{((tx.match_score || 0) * 100).toFixed(0)}%</span>
                 </button>
               )
             })}

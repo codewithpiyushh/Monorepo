@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState, LoadingState } from '../components/ui/PageState'
 
 export default function Schedules() {
   const qc = useQueryClient()
@@ -39,9 +41,11 @@ export default function Schedules() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header">
-        <h1 className="text-base font-semibold text-white">Financial Period Close Calendar</h1>
-      </div>
+      <PageHeader
+        title="Financial Period Close Calendar"
+        subtitle="Plan close cycles, lock/unlock periods, and monitor close readiness."
+        badge={`${rows.length} periods`}
+      />
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4 space-y-3">
           <h2 className="text-sm font-semibold text-slate-200">Create Close Cycle</h2>
@@ -65,7 +69,7 @@ export default function Schedules() {
         </div>
         <div className="card p-4 lg:col-span-2">
           <h2 className="text-sm font-semibold text-slate-200 mb-3">Close Calendar Periods</h2>
-          {isLoading ? <p className="text-xs text-slate-500">Loading...</p> : (
+          {isLoading ? <LoadingState label="Loading close periods..." /> : (
             <div className="space-y-2 max-h-[500px] overflow-auto">
               {rows.map((r) => (
                 <div key={r.id} className="border border-surface-700 rounded-md p-3 text-xs text-slate-300">
@@ -77,7 +81,12 @@ export default function Schedules() {
                   </div>
                 </div>
               ))}
-              {rows.length === 0 && <p className="text-xs text-slate-500">No close periods yet.</p>}
+              {rows.length === 0 && (
+                <EmptyState
+                  title="No close periods yet"
+                  description="Create your first period cycle from the form to start close operations."
+                />
+              )}
             </div>
           )}
         </div>

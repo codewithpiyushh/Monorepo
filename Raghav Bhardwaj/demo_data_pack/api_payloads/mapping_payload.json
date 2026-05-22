@@ -1,0 +1,10 @@
+﻿{
+  "mappings": [
+    { "source_column": "reference", "target_column": "reference", "is_key_field": true },
+    { "source_column": "account", "target_column": "account", "is_key_field": true },
+    { "source_column": "amount", "target_column": "amount", "is_key_field": false },
+    { "source_column": "date", "target_column": "date", "is_key_field": false },
+    { "source_column": "currency", "target_column": "currency", "is_key_field": false },
+    { "source_column": "description", "target_column": "description", "is_key_field": false }
+  ]
+}

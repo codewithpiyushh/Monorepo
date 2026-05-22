@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime
 from typing import List
 
@@ -22,6 +23,7 @@ def _job_id(schedule_id: int) -> str:
 
 def _run_scheduled(schedule_id: int):
     db = SessionLocal()
+    started = time.perf_counter()
     try:
         schedule = db.query(Schedule).filter(Schedule.id == schedule_id).first()
         if not schedule or not schedule.active:
@@ -33,8 +35,22 @@ def _run_scheduled(schedule_id: int):
             execution_service.run_reconciliation(execution.id, schedule.reference_id, db)
         elif schedule.type == "sequence":
             sequence_service.run_sequence(db, schedule.reference_id, triggered_by=schedule.created_by)
+        enterprise_service.record_job_metric(
+            db,
+            f"schedule:{schedule.type}",
+            "COMPLETED",
+            int((time.perf_counter() - started) * 1000),
+            f"reference_id={schedule.reference_id}",
+        )
     except Exception:
         logger.exception("Scheduled run failed: schedule_id=%s", schedule_id)
+        enterprise_service.record_job_metric(
+            db,
+            "schedule:unknown",
+            "FAILED",
+            int((time.perf_counter() - started) * 1000),
+            f"schedule_id={schedule_id}",
+        )
     finally:
         db.close()
 
@@ -94,6 +110,7 @@ def shutdown_scheduler() -> None:
 
 def _run_system_job(job_name: str):
     db = SessionLocal()
+    started = time.perf_counter()
     try:
         if job_name == "overdue_detection":
             enterprise_service.process_overdue_workflows(db)
@@ -107,8 +124,24 @@ def _run_system_job(job_name: str):
             reports = db.query(ScheduledReport).filter(ScheduledReport.active == True).all()
             for r in reports:
                 enterprise_service.run_scheduled_report(db, r.id)
+        elif job_name == "retention_cycle":
+            enterprise_service.run_retention_cycle(db)
+        elif job_name == "backup_cycle":
+            enterprise_service.create_backup(db, actor_id=None, backup_type="full")
+        enterprise_service.record_job_metric(
+            db,
+            f"system:{job_name}",
+            "COMPLETED",
+            int((time.perf_counter() - started) * 1000),
+        )
     except Exception:
         logger.exception("System job failed: %s", job_name)
+        enterprise_service.record_job_metric(
+            db,
+            f"system:{job_name}",
+            "FAILED",
+            int((time.perf_counter() - started) * 1000),
+        )
     finally:
         db.close()
 
@@ -120,6 +153,8 @@ def _register_system_jobs():
         ("system:reconciliation_reminders", "0 */1 * * *", "reconciliation_reminders"),
         ("system:workflow_notifications", "*/30 * * * *", "workflow_notifications"),
         ("system:scheduled_reports_dispatch", "*/30 * * * *", "scheduled_reports_dispatch"),
+        ("system:retention_cycle", "0 2 * * *", "retention_cycle"),
+        ("system:backup_cycle", "0 3 * * *", "backup_cycle"),
     ]
     for job_id, cron_expr, job_name in system_jobs:
         scheduler.add_job(

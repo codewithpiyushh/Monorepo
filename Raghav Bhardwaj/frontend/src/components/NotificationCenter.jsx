@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, CheckCircle2, Clock3, XCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { useAuthStore } from '../store/authStore'
 import { enterpriseAPI } from '../api'
+import { normalizeRole } from '../utils/roles'
 
 const fallbackTemplates = {
   admin: [{ id: 'a1', type: 'info', text: 'No active workflow notifications.' }],
@@ -17,91 +20,79 @@ function ItemIcon({ type }) {
 }
 
 export default function NotificationCenter({ floating = false }) {
-  const role = (useAuthStore((s) => s.user?.role) || 'admin').toLowerCase()
+  const navigate = useNavigate()
+  const role = normalizeRole(useAuthStore((s) => s.user?.role) || 'admin')
   const [open, setOpen] = useState(false)
-  const { data: exceptions = [] } = useQuery({
-    queryKey: ['notifications-exceptions', role],
-    queryFn: () => {
-      if (role === 'preparer') return enterpriseAPI.listExceptions('actionable_preparer')
-      if (role === 'reviewer') return enterpriseAPI.listExceptions('actionable_reviewer')
-      return enterpriseAPI.listExceptions('')
-    },
+  const [isPositioned, setIsPositioned] = useState(false)
+  const [panelStyle, setPanelStyle] = useState({})
+  const buttonRef = useRef(null)
+  const panelRef = useRef(null)
+  const { data: notificationPayload } = useQuery({
+    queryKey: ['notifications', role],
+    queryFn: () => enterpriseAPI.listNotifications(12),
     refetchInterval: 5000,
   })
+  const itemsFromApi = notificationPayload?.items
+  const notificationCount = notificationPayload?.count
 
   const items = useMemo(() => {
-    if (!Array.isArray(exceptions)) return fallbackTemplates[role] || fallbackTemplates.admin
-    const byQueue = exceptions.reduce((acc, row) => {
-      const key = row?.queue_type || 'unknown'
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
-    const byStatus = exceptions.reduce((acc, row) => {
-      const key = row?.status || 'unknown'
-      acc[key] = (acc[key] || 0) + 1
-      return acc
-    }, {})
+    if (Array.isArray(itemsFromApi) && itemsFromApi.length > 0) return itemsFromApi
+    return fallbackTemplates[role] || fallbackTemplates.admin
+  }, [itemsFromApi, role])
 
-    if (role === 'preparer') {
-      return [
-        {
-          id: 'prep-action',
-          type: 'pending',
-          text: `${exceptions.length} transactions need preparer action (unresolved/assigned).`,
-        },
-        {
-          id: 'prep-submit',
-          type: 'info',
-          text: `${byStatus.UNDER_REVIEW || 0} submitted cases are under reviewer check.`,
-        },
-      ]
-    }
-    if (role === 'reviewer') {
-      return [
-        {
-          id: 'rev-review',
-          type: 'pending',
-          text: `${(byQueue.exception || 0) + (byQueue.escalated || 0)} items are waiting for review/escalation.`,
-        },
-        {
-          id: 'rev-reject',
-          type: 'reject',
-          text: `${byStatus.REJECTED || 0} items are rejected and may need rework communication.`,
-        },
-      ]
-    }
-    return [
-      {
-        id: 'adm-open',
-        type: 'pending',
-        text: `${exceptions.length} total open workflow exceptions across queues.`,
-      },
-      {
-        id: 'adm-progress',
-        type: 'info',
-        text: `${byStatus.UNDER_REVIEW || 0} in review, ${byStatus.APPROVED || 0} approved, ${byStatus.REJECTED || 0} rejected.`,
-      },
-    ]
-  }, [exceptions, role])
   const badgeCount = useMemo(() => {
-    if (!Array.isArray(exceptions)) return 0
-    if (role === 'preparer') {
-      return exceptions.filter((row) => ['unresolved', 'assigned'].includes(row?.queue_type)).length
+    if (typeof notificationCount === 'number') return notificationCount
+    return items.length
+  }, [notificationCount, items.length])
+
+  useLayoutEffect(() => {
+    if (!open) return
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return
+      const rect = buttonRef.current.getBoundingClientRect()
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const panelHeight = panelRef.current?.offsetHeight || 340
+      const desiredWidth = Math.min(320, Math.max(260, viewportWidth - 24))
+      const left = Math.max(12, Math.min(rect.left - desiredWidth - 8, viewportWidth - desiredWidth - 12))
+      const top = Math.max(12, Math.min(rect.top, viewportHeight - panelHeight - 12))
+      setPanelStyle({ top: `${top}px`, left: `${left}px`, width: `${desiredWidth}px` })
+      setIsPositioned(true)
     }
-    if (role === 'reviewer') {
-      return exceptions.filter((row) => ['exception', 'escalated'].includes(row?.queue_type) || row?.status === 'UNDER_REVIEW').length
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
     }
-    return exceptions.length
-  }, [exceptions, role])
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onDocPointerDown = (event) => {
+      const target = event.target
+      if (panelRef.current?.contains(target) || buttonRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointerDown)
+    return () => document.removeEventListener('mousedown', onDocPointerDown)
+  }, [open])
 
   return (
     <div
-      className={floating ? 'fixed z-40' : 'relative'}
+      className={floating ? 'fixed z-[9998]' : 'relative z-[9998]'}
       style={floating ? { right: '20px', bottom: '16px' } : undefined}
     >
       <button
-        className="relative w-9 h-9 rounded-lg border border-surface-700 bg-surface-900/80 flex items-center justify-center text-slate-300 hover:text-white"
-        onClick={() => setOpen((v) => !v)}
+        ref={buttonRef}
+        className="relative z-10 w-9 h-9 rounded-lg border border-surface-700 bg-surface-900/80 flex items-center justify-center text-slate-300 hover:text-white"
+        onClick={() => {
+          setIsPositioned(false)
+          setOpen((v) => !v)
+        }}
         title="Notifications"
       >
         <Bell className="w-4 h-4" />
@@ -109,21 +100,43 @@ export default function NotificationCenter({ floating = false }) {
           {badgeCount}
         </span>
       </button>
-      {open && (
-        <div className={`absolute right-0 w-80 max-w-[85vw] rounded-xl border border-surface-700 bg-surface-900 shadow-2xl z-30 ${floating ? 'bottom-full mb-2' : 'mt-2'}`}>
-          <div className="px-3 py-2 border-b border-surface-700 text-xs text-slate-300 font-semibold">
-            Notifications ({badgeCount})
-          </div>
-          <div className="max-h-72 overflow-auto p-2 space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="flex items-start gap-2 rounded-lg border border-surface-700/80 p-2">
-                <ItemIcon type={item.type} />
-                <p className="text-xs text-slate-300">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            className="fixed rounded-xl border border-surface-700 bg-surface-900 shadow-2xl z-[9999] overflow-hidden"
+            style={{
+              ...panelStyle,
+              visibility: isPositioned ? 'visible' : 'hidden',
+            }}
+          >
+            <div className="px-3 py-2 border-b border-surface-700 text-xs text-slate-300 font-semibold">
+              Notifications ({badgeCount})
+            </div>
+            <div className="max-h-72 overflow-auto p-2 space-y-2">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-start gap-2 rounded-lg border border-surface-700/80 p-2">
+                  <ItemIcon type={item.type} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-slate-300">{item.text}</p>
+                    <button
+                      className="mt-1 text-[11px] text-brand-300 hover:text-brand-200"
+                      onClick={() => {
+                        if (role === 'preparer') navigate('/work-queue')
+                        else if (role === 'reviewer') navigate('/work-queue')
+                        else navigate('/admin')
+                        setOpen(false)
+                      }}
+                    >
+                      Open queue
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

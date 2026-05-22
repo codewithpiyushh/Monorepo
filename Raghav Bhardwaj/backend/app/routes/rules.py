@@ -36,6 +36,23 @@ def list_rules(
     return rule_service.get_rules(db, project_id)
 
 
+@router.post("/predefined", response_model=List[RuleOut], status_code=201)
+def seed_predefined_rules(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rules = rule_service.seed_predefined_rules_if_missing(db, project_id)
+    audit_service.log_action(
+        db, "RULES_PREDEFINED_SEEDED", user_id=current_user.id,
+        entity_type="project", entity_id=project_id,
+        metadata={"seeded_count": len(rules)},
+        ip_address=request.client.host if request.client else None,
+    )
+    return rules
+
+
 @router.patch("/{rule_id}", response_model=RuleOut)
 def update_rule(
     project_id: int,

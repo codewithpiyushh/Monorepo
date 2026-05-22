@@ -6,13 +6,11 @@ import CreateProjectModal from '../components/CreateProjectModal'
 import toast from 'react-hot-toast'
 import {
   Plus,
-  FolderOpen,
   Calendar,
   Clock,
   Trash2,
   ChevronRight,
   Database,
-  Scale,
   FileUp,
   Link,
   ShieldCheck,
@@ -20,6 +18,9 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../store/authStore'
+import PageHeader from '../components/ui/PageHeader'
+import { LoadingState, EmptyState } from '../components/ui/PageState'
+import { normalizeRole } from '../utils/roles'
 
 const STATUS_COLORS = {
   active: 'bg-emerald-900/40 text-emerald-400 border-emerald-800',
@@ -140,7 +141,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
   const qc = useQueryClient()
-  const role = (useAuthStore((s) => s.user?.role) || '').toLowerCase()
+  const role = normalizeRole(useAuthStore((s) => s.user?.role))
   const [createOpen, setCreateOpen] = useState(false)
   const [projectDetails, setProjectDetails] = useState({})
 
@@ -253,19 +254,17 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header">
-        <div className="flex items-center gap-3">
-          <Scale className="w-5 h-5 text-slate-300" />
-          <h1 className="text-base font-semibold text-white">Reconciliation Projects</h1>
-          <span className="chip-neutral">
-            {projects.length} project{projects.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <button className="btn-primary" onClick={() => setCreateOpen(true)}>
-          <Plus className="w-4 h-4" />
-          New Project
-        </button>
-      </div>
+      <PageHeader
+        title="Reconciliation Projects"
+        subtitle="Track ingestion readiness, mapping coverage, and latest execution status."
+        badge={`${projects.length} project${projects.length !== 1 ? 's' : ''}`}
+        actions={(
+          <button className="btn-primary" onClick={() => setCreateOpen(true)}>
+            <Plus className="w-4 h-4" />
+            New Project
+          </button>
+        )}
+      />
 
       <div className="flex-1 overflow-auto p-8">
         {role === 'admin' && executiveMetrics && (
@@ -293,23 +292,18 @@ export default function Dashboard() {
           <p className="oracle-subtle text-xs mt-1">Track ingestion readiness, mapping completeness, rules coverage, and latest execution status for each project.</p>
         </div>
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-500 border-t-transparent" />
-          </div>
+          <LoadingState label="Loading projects..." />
         ) : projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-800 border-2 border-dashed border-surface-600 flex items-center justify-center mb-4">
-              <FolderOpen className="w-7 h-7 text-slate-600" />
-            </div>
-            <h2 className="text-base font-semibold text-slate-300 mb-1">No projects yet</h2>
-            <p className="text-sm text-slate-500 mb-6 max-w-xs">
-              Create your first reconciliation project to start matching source and target data.
-            </p>
-            <button className="btn-primary" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4" />
-              Create First Project
-            </button>
-          </div>
+          <EmptyState
+            title="No projects yet"
+            description="Create your first reconciliation project to start matching source and target data."
+            action={(
+              <button className="btn-primary" onClick={() => setCreateOpen(true)}>
+                <Plus className="w-4 h-4" />
+                Create First Project
+              </button>
+            )}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {projects.map((p) => (

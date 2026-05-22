@@ -3,11 +3,12 @@ import { useAuthStore } from '../store/authStore'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
+import { normalizeRole } from '../utils/roles'
 
 export default function ExceptionWorkbench() {
   const qc = useQueryClient()
   const user = useAuthStore((s) => s.user)
-  const role = (user?.role || '').toLowerCase()
+  const role = normalizeRole(user?.role)
   const [queueType, setQueueType] = useState('')
   const [exceptionId, setExceptionId] = useState('')
   const [assignedTo, setAssignedTo] = useState('')

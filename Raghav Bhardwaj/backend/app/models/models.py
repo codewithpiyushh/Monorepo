@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey
+    Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, Index
 )
 from sqlalchemy.orm import relationship
 from ..database import Base
@@ -322,6 +322,8 @@ class ReconciliationProfile(Base):
     assigned_certifier = Column(Integer, ForeignKey("users.id"), nullable=True)
     risk_classification = Column(String(20), default="MEDIUM")
     due_days = Column(Integer, default=5)
+    auto_approve_threshold = Column(Float, default=1.0)
+    materiality_limit = Column(Float, default=0.0)
     lifecycle_state = Column(String(30), default="OPEN")
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -346,6 +348,11 @@ class ReconciliationRecord(Base):
     status = Column(String(30), default="VALIDATED")
     payload_json = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_reconciliation_records_profile_status", "profile_id", "status"),
+        Index("ix_reconciliation_records_profile_period", "profile_id", "period"),
+        Index("ix_reconciliation_records_entity_account", "entity", "account"),
+    )
 
 
 class MatchGroup(Base):
@@ -360,6 +367,9 @@ class MatchGroup(Base):
     reconciled = Column(Boolean, default=False)
     finalized = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_match_groups_profile_classification", "profile_id", "classification"),
+    )
 
 
 class MatchGroupItem(Base):
@@ -368,6 +378,9 @@ class MatchGroupItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     match_group_id = Column(Integer, ForeignKey("match_groups.id"), nullable=False)
     reconciliation_record_id = Column(Integer, ForeignKey("reconciliation_records.id"), nullable=False)
+    __table_args__ = (
+        Index("ix_mgi_group_record", "match_group_id", "reconciliation_record_id"),
+    )
 
 
 class ExceptionQueueRecord(Base):
@@ -385,6 +398,10 @@ class ExceptionQueueRecord(Base):
     resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_exception_queue_status", "status"),
+        Index("ix_exception_queue_assigned", "assigned_to"),
+    )
 
 
 class ReconciliationAttachment(Base):
@@ -704,3 +721,127 @@ class ScheduledReportRun(Base):
     status = Column(String(20), default="RUNNING")
     error_message = Column(Text, nullable=True)
     executed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EnterpriseSetting(Base):
+    __tablename__ = "enterprise_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category = Column(String(50), nullable=False, index=True)
+    key = Column(String(120), nullable=False, index=True)
+    value_json = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_enterprise_settings_category_key", "category", "key", unique=True),
+    )
+
+
+class ReconciliationRetentionPolicy(Base):
+    __tablename__ = "reconciliation_retention_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False, unique=True)
+    retention_days = Column(Integer, nullable=False, default=365)
+    purge_after_days = Column(Integer, nullable=False, default=730)
+    preserve_for_compliance = Column(Boolean, default=True)
+    active = Column(Boolean, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ReconciliationDependency(Base):
+    __tablename__ = "reconciliation_dependencies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    parent_profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    child_profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    dependency_type = Column(String(30), default="close_process")
+    is_blocking = Column(Boolean, default=True)
+    status = Column(String(30), default="OPEN")
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_reconciliation_dependencies_pair", "parent_profile_id", "child_profile_id", unique=True),
+    )
+
+
+class ReconciliationArchive(Base):
+    __tablename__ = "reconciliation_archives"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    period_key = Column(String(40), nullable=False, index=True)
+    archive_payload_json = Column(Text, nullable=False)
+    archived_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    archived_at = Column(DateTime, default=datetime.utcnow)
+    restored_at = Column(DateTime, nullable=True)
+    restore_count = Column(Integer, default=0)
+
+
+class BackupRecord(Base):
+    __tablename__ = "backup_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    backup_type = Column(String(40), nullable=False)
+    target_path = Column(String(500), nullable=False)
+    checksum = Column(String(128), nullable=True)
+    status = Column(String(20), default="COMPLETED")
+    error_message = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class JobMetric(Base):
+    __tablename__ = "job_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_name = Column(String(100), nullable=False, index=True)
+    status = Column(String(20), nullable=False)
+    duration_ms = Column(Integer, nullable=True)
+    message = Column(Text, nullable=True)
+    executed_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class UINotification(Base):
+    __tablename__ = "ui_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    notification_type = Column(String(40), nullable=False)  # exception/workflow/system/alert
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    icon_type = Column(String(20), default="info")  # info/warning/error/success
+    is_read = Column(Boolean, default=False, index=True)
+    action_url = Column(String(500), nullable=True)
+    action_label = Column(String(100), nullable=True)
+    metadata_json = Column(Text, nullable=True)  # JSON for additional data
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    read_at = Column(DateTime, nullable=True)
+    __table_args__ = (
+        Index("ix_ui_notifications_user_unread", "user_id", "is_read"),
+        Index("ix_ui_notifications_created", "created_at"),
+    )
+
+
+class APIErrorLog(Base):
+    __tablename__ = "api_error_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    endpoint = Column(String(255), nullable=False)
+    method = Column(String(10), nullable=False)  # GET, POST, etc.
+    status_code = Column(Integer, nullable=False)
+    error_message = Column(Text, nullable=False)
+    error_stack = Column(Text, nullable=True)
+    request_params_json = Column(Text, nullable=True)
+    ip_address = Column(String(80), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    __table_args__ = (
+        Index("ix_api_error_logs_endpoint_status", "endpoint", "status_code"),
+        Index("ix_api_error_logs_created", "created_at"),
+    )

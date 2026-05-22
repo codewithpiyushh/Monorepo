@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 
 export default function SummaryTable({ units, selectedKey, onSelect, getUnitKey, loading }) {
-  const statusChip = (status) => status === 'matched' ? 'badge-matched' : status === 'partial' ? 'badge-partial' : 'badge-unmatched'
+  const statusChip = (status) => status === 'matched' ? 'badge-matched badge-subtle' : status === 'partial' ? 'badge-partial badge-subtle' : 'badge-unmatched badge-subtle'
 
   return (
     <div className="surface-panel p-4 space-y-3">
@@ -33,9 +33,9 @@ export default function SummaryTable({ units, selectedKey, onSelect, getUnitKey,
                 <span><span className={statusChip(unit.status)}>{unit.status}</span></span>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded bg-surface-700/30 px-2 py-1"><span className="text-slate-500">Total</span><p className="text-slate-300">{unit.total_transactions}</p></div>
-                <div className="rounded bg-surface-700/30 px-2 py-1"><span className="text-slate-500">Matched</span><p className="text-emerald-300">{unit.matched_count}</p></div>
-                <div className="rounded bg-surface-700/30 px-2 py-1"><span className="text-slate-500">Unmatched</span><p className="text-red-300">{unit.unmatched_count}</p></div>
+                <div className="rounded bg-surface-700/20 px-2 py-1"><span className="text-slate-500">Total</span><p className="text-slate-200 font-medium">{unit.total_transactions}</p></div>
+                <div className="rounded bg-surface-700/20 px-2 py-1"><span className="text-slate-500">Matched</span><p className="text-slate-200 font-medium">{unit.matched_count}</p></div>
+                <div className="rounded bg-surface-700/20 px-2 py-1"><span className="text-slate-500">Unmatched</span><p className="text-slate-200 font-medium">{unit.unmatched_count}</p></div>
               </div>
             </button>
           )

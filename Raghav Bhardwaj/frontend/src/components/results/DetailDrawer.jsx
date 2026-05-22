@@ -1,4 +1,5 @@
 import { X } from 'lucide-react'
+import { useState } from 'react'
 
 const parseJson = (value) => {
   if (!value) return {}
@@ -11,33 +12,37 @@ const parseJson = (value) => {
 }
 
 export default function DetailDrawer({ transaction, open, onClose }) {
+  const [activeTab, setActiveTab] = useState('adjustment')
   if (!open || !transaction) return null
 
   const sourceData = parseJson(transaction.source_data)
   const targetData = parseJson(transaction.target_data)
+  const sourceEntries = Object.entries(sourceData)
+  const targetEntries = Object.entries(targetData)
   const discrepancies = Array.isArray(parseJson(transaction.discrepancies))
     ? parseJson(transaction.discrepancies)
     : []
 
   return (
-    <div className="fixed inset-0 z-50 pointer-events-none">
-      <div className="absolute inset-0 bg-black/40 pointer-events-auto" onClick={onClose} />
-      <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-surface-800 border-l border-surface-700 shadow-2xl pointer-events-auto flex flex-col">
-        <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-100">Transaction #{transaction.id}</h3>
-            <p className="text-xs text-slate-400">Status: {transaction.match_status} | Score: {((transaction.match_score || 0) * 100).toFixed(0)}%</p>
-          </div>
-          <button onClick={onClose} className="btn-ghost p-1.5"><X className="w-4 h-4" /></button>
+    <section className="card p-0 overflow-hidden">
+      <div className="px-4 py-3 border-b border-surface-700 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-100">Match Review - Transaction #{transaction.id}</h3>
+          <p className="text-xs text-slate-400">Status: {transaction.match_status} | Confidence: {((transaction.match_score || 0) * 100).toFixed(0)}%</p>
         </div>
+        <button onClick={onClose} className="btn-ghost p-1.5" title="Close review panel">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="p-4 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4">
+        <div className="space-y-4 min-w-0">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="surface-panel p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Full Source Data</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Source Record</p>
               <div className="space-y-1">
-                {Object.keys(sourceData).length === 0 && <div className="text-xs text-slate-500">No source row</div>}
-                {Object.entries(sourceData).map(([key, value]) => (
+                {sourceEntries.length === 0 && <div className="text-xs text-slate-500">No source row</div>}
+                {sourceEntries.map(([key, value]) => (
                   <div key={key} className="text-xs flex gap-2">
                     <span className="text-slate-500 w-28 truncate">{key}</span>
                     <span className="text-slate-300 truncate">{value ?? '(null)'}</span>
@@ -47,10 +52,10 @@ export default function DetailDrawer({ transaction, open, onClose }) {
             </div>
 
             <div className="surface-panel p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Full Target Data</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Target Record</p>
               <div className="space-y-1">
-                {Object.keys(targetData).length === 0 && <div className="text-xs text-slate-500">No target row</div>}
-                {Object.entries(targetData).map(([key, value]) => (
+                {targetEntries.length === 0 && <div className="text-xs text-slate-500">No target row</div>}
+                {targetEntries.map(([key, value]) => (
                   <div key={key} className="text-xs flex gap-2">
                     <span className="text-slate-500 w-28 truncate">{key}</span>
                     <span className="text-slate-300 truncate">{value ?? '(null)'}</span>
@@ -75,8 +80,45 @@ export default function DetailDrawer({ transaction, open, onClose }) {
             )}
           </div>
         </div>
-      </aside>
-    </div>
+
+        <aside className="surface-panel p-3 space-y-3">
+          <div className="flex items-center gap-1 rounded-md border border-surface-700 p-1">
+            <button className={`px-2 py-1 text-xs rounded ${activeTab === 'adjustment' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setActiveTab('adjustment')}>Adjustment</button>
+            <button className={`px-2 py-1 text-xs rounded ${activeTab === 'evidence' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setActiveTab('evidence')}>Evidence</button>
+            <button className={`px-2 py-1 text-xs rounded ${activeTab === 'comments' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setActiveTab('comments')}>Comments</button>
+          </div>
+          {activeTab === 'adjustment' && (
+            <>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Adjustment</p>
+              <div className="text-xs text-slate-300 space-y-2">
+                <label className="flex items-center gap-2"><input type="radio" name={`action-${transaction.id}`} defaultChecked /> Confirm Match</label>
+                <label className="flex items-center gap-2"><input type="radio" name={`action-${transaction.id}`} /> Discard Match</label>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wide text-slate-500">Comment</label>
+                <textarea className="input mt-1 min-h-20 text-xs" placeholder="Add review note..." />
+              </div>
+            </>
+          )}
+          {activeTab === 'evidence' && (
+            <div className="text-xs text-slate-400">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Evidence</p>
+              Link attachment from record-level evidence manager for this transaction group.
+            </div>
+          )}
+          {activeTab === 'comments' && (
+            <div className="text-xs text-slate-400">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Comments</p>
+              Reviewer and preparer collaboration notes will appear here.
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button className="btn-secondary h-8 py-1 text-xs">Previous</button>
+            <button className="btn-primary h-8 py-1 text-xs">Next</button>
+          </div>
+        </aside>
+      </div>
+    </section>
   )
 }
 

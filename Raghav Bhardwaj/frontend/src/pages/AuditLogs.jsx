@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { auditAPI } from '../api'
 import { ScrollText, Filter, ChevronLeft, ChevronRight, User, Clock } from 'lucide-react'
 import clsx from 'clsx'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState, LoadingState } from '../components/ui/PageState'
 
 const ACTION_COLORS = {
   USER_LOGIN: 'bg-surface-700 text-slate-300 border-surface-600',
@@ -82,13 +84,11 @@ export default function AuditLogs() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header">
-        <div className="flex items-center gap-3">
-          <ScrollText className="w-5 h-5 text-slate-300" />
-          <h1 className="text-base font-semibold text-white">Audit Logs</h1>
-          <span className="chip-neutral">{total.toLocaleString()} events</span>
-        </div>
-      </div>
+      <PageHeader
+        title="Audit Logs"
+        subtitle="Search and monitor user, workflow, and control actions across the platform."
+        badge={`${total.toLocaleString()} events`}
+      />
 
       <div className="px-8 py-3 border-b border-surface-700/50 bg-surface-800/30 flex items-center gap-3 flex-shrink-0">
         <Filter className="w-3.5 h-3.5 text-slate-500" />
@@ -114,9 +114,17 @@ export default function AuditLogs() {
       </div>
 
       <div className="flex-1 overflow-auto px-8 py-4">
+        {isLoading ? <LoadingState label="Loading audit logs..." /> : null}
+        {!isLoading && logs.length === 0 ? (
+          <EmptyState
+            title="No audit events found"
+            description="Try clearing filters or expanding date/activity scope to see more logs."
+          />
+        ) : null}
+        {!isLoading && logs.length > 0 ? (
         <div className="surface-panel overflow-hidden">
           <table className="w-full text-sm oracle-grid-table">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-surface-700">
                 <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium w-36">Timestamp</th>
                 <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium w-28">User</th>
@@ -128,20 +136,7 @@ export default function AuditLogs() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-brand-500 border-t-transparent mx-auto" />
-                  </td>
-                </tr>
-              ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 text-sm">
-                    No audit log entries found.
-                  </td>
-                </tr>
-              ) : (
-                logs.map((log) => (
+              {logs.map((log) => (
                   <tr key={log.id} className="border-b border-surface-700/40 hover:bg-surface-700/20 transition-colors">
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -170,13 +165,13 @@ export default function AuditLogs() {
                     </td>
                     <td className="px-4 py-2.5 text-xs text-slate-500 font-mono">{log.ip_address || '-'}</td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
+        ) : null}
 
-        {totalPages > 1 && (
+        {logs.length > 0 && totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
             <span>
               Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()} events

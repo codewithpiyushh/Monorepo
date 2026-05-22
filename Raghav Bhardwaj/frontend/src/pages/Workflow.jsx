@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
+import PageHeader from '../components/ui/PageHeader'
 
 export default function WorkflowPage() {
   const qc = useQueryClient()
@@ -43,9 +44,10 @@ export default function WorkflowPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header">
-        <h1 className="text-base font-semibold text-white">Certification Workflow</h1>
-      </div>
+      <PageHeader
+        title="Certification Workflow"
+        subtitle="Create workflow instances, apply lifecycle actions, and review full audit history."
+      />
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4 space-y-3">
           <h2 className="text-sm font-semibold text-slate-200">Create Workflow</h2>

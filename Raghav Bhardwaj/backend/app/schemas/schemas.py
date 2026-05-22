@@ -185,6 +185,67 @@ class ResultOut(BaseModel):
         from_attributes = True
 
 
+# ─── Notifications ───────────────────────────────────────────────────────────
+
+class UINotificationCreate(BaseModel):
+    user_id: int
+    notification_type: str
+    title: str
+    message: str
+    icon_type: str = "info"
+    action_url: Optional[str] = None
+    action_label: Optional[str] = None
+    metadata_json: Optional[str] = None
+
+
+class UINotificationOut(BaseModel):
+    id: int
+    user_id: int
+    notification_type: str
+    title: str
+    message: str
+    icon_type: str
+    is_read: bool
+    action_url: Optional[str]
+    action_label: Optional[str]
+    created_at: datetime
+    read_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class UINotificationsPage(BaseModel):
+    notifications: List[UINotificationOut]
+    total: int
+    unread_count: int
+    read_count: int
+
+
+class MarkNotificationRequest(BaseModel):
+    notification_id: int
+    is_read: bool
+
+
+class MarkAllNotificationsRequest(BaseModel):
+    is_read: bool
+
+
+# ─── Error Tracking ──────────────────────────────────────────────────────────
+
+class APIErrorLogOut(BaseModel):
+    id: int
+    user_id: Optional[int]
+    endpoint: str
+    method: str
+    status_code: int
+    error_message: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class TransactionPreviewOut(BaseModel):
     id: int
     source_row_index: Optional[int]

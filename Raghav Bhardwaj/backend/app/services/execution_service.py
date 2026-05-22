@@ -4,7 +4,8 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from rapidfuzz import fuzz
-from ..models.models import Dataset, DataRow, Mapping, Rule, Execution, Result, Workflow
+from ..models.models import Dataset, DataRow, Mapping, Rule, Execution, Result, Workflow, WorkflowHistory
+from . import rule_service
 
 
 # ─── Rule Evaluation ─────────────────────────────────────────────────────────
@@ -108,6 +109,8 @@ def run_reconciliation(execution_id: int, project_id: int, db: Session) -> None:
 
         # Load mappings & rules
         mappings = db.query(Mapping).filter(Mapping.project_id == project_id).all()
+        # Auto-provision baseline rules when none are configured.
+        rule_service.seed_predefined_rules_if_missing(db, project_id)
         rules_raw = (
             db.query(Rule)
             .filter(Rule.project_id == project_id, Rule.is_active == True)
@@ -248,7 +251,35 @@ def run_reconciliation(execution_id: int, project_id: int, db: Session) -> None:
             "match_rate": round(
                 matched_count / max(len(source_rows), 1) * 100, 2
             ),
+            "auto_reconciled": unmatched_count == 0 and partial_count == 0,
+            "requires_preparer_justification": unmatched_count > 0 or partial_count > 0,
         })
+
+        workflow = db.query(Workflow).filter(Workflow.reconciliation_id == execution_id).first()
+        if workflow:
+            previous = workflow.status
+            if unmatched_count == 0 and partial_count == 0:
+                workflow.status = "approved"
+                workflow.comments = (workflow.comments or "") + (
+                    "\n[AUTO] Fully matched execution auto-reconciled."
+                )
+                db.add(
+                    WorkflowHistory(
+                        workflow_id=workflow.id,
+                        actor_id=None,
+                        action="auto_reconcile",
+                        from_status=previous,
+                        to_status="approved",
+                        comments="All records matched; auto-reconciled by system.",
+                    )
+                )
+            else:
+                if workflow.status == "pending":
+                    workflow.status = "in_progress"
+                workflow.comments = (workflow.comments or "") + (
+                    "\n[ACTION REQUIRED] Partial/unmatched records require preparer justification and proof."
+                )
+            workflow.updated_at = datetime.utcnow()
         db.commit()
 
     except Exception as exc:

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 43200
     MFA_OTP_EXPIRE_MINUTES: int = 10
+    ALLOWED_DB_IMPORT_HOSTS: str = "localhost,127.0.0.1"
+    ALLOWED_API_IMPORT_HOSTS: str = "localhost,127.0.0.1"
 
     class Config:
         env_file = ".env"

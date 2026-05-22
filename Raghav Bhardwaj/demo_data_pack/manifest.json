@@ -1,0 +1,19 @@
+﻿{
+  "pack_name": "DRMS Demo Data Pack",
+  "version": "2026.05.21",
+  "datasets": {
+    "source": "datasets/source_dataset_demo.csv",
+    "target": "datasets/target_dataset_demo.csv"
+  },
+  "payloads": {
+    "mappings": "api_payloads/mapping_payload.json",
+    "rules": [
+      "api_payloads/rule_exact_payload.json",
+      "api_payloads/rule_tolerance_payload.json"
+    ]
+  },
+  "evidences": [
+    "evidences/Invoice_Evidence_INV-1003.pdf",
+    "evidences/Invoice_Evidence_ADJ-3001.pdf"
+  ]
+}

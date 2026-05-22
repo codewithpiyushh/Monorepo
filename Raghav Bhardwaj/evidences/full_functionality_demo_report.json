@@ -1,0 +1,105 @@
+{
+  "run_date": "2026-05-21",
+  "steps": [
+    {
+      "step": "auth",
+      "status": "pass",
+      "details": {
+        "users": [
+          "admin",
+          "preparer",
+          "reviewer",
+          "approver",
+          "certifier"
+        ]
+      }
+    },
+    {
+      "step": "data_upload",
+      "status": "pass",
+      "details": {
+        "project_id": 1
+      }
+    },
+    {
+      "step": "mapping",
+      "status": "pass",
+      "details": {
+        "mappings_saved": 3
+      }
+    },
+    {
+      "step": "rules_create",
+      "status": "pass",
+      "details": {
+        "rule_ids": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "step": "execution",
+      "status": "pass",
+      "details": {
+        "execution_id": 1,
+        "stats": {
+          "matched": 2,
+          "unmatched": 2,
+          "partial": 0,
+          "total_source": 3,
+          "total_target": 3,
+          "match_rate": 66.67,
+          "auto_reconciled": false,
+          "requires_preparer_justification": true
+        },
+        "transaction_status_counts": {
+          "matched": 2,
+          "unmatched": 2
+        }
+      }
+    },
+    {
+      "step": "workflow_assign_submit_reviewer_approve",
+      "status": "pass",
+      "details": {
+        "workflow_status": "approved"
+      }
+    },
+    {
+      "step": "approver_functionality_demo",
+      "status": "pass",
+      "details": {
+        "certification_workflow_id": 1,
+        "statuses": [
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ],
+  "artifacts": {
+    "project_id": 1,
+    "execution_id": 1,
+    "results_stats": {
+      "matched": 2,
+      "unmatched": 2,
+      "partial": 0,
+      "total_source": 3,
+      "total_target": 3,
+      "match_rate": 66.67,
+      "auto_reconciled": false,
+      "requires_preparer_justification": true
+    },
+    "transaction_status_counts": {
+      "matched": 2,
+      "unmatched": 2
+    },
+    "audit_total": 15
+  },
+  "evidence_files_used": [
+    "Invoice_Evidence_14.pdf"
+  ]
+}

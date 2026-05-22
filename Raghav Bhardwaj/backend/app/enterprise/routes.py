@@ -39,6 +39,10 @@ from .schemas import (
     AdvancedSearchRequest,
     CommentCreateRequest,
     ScheduleReportRequest,
+    RetentionPolicyRequest,
+    EnterpriseSettingRequest,
+    DependencyRequest,
+    ArchiveRequest,
 )
 from . import service, repository
 
@@ -90,7 +94,15 @@ def create_profile(payload: ProfileCreate, db: Session = Depends(get_db), curren
 
 @router.get("/profiles")
 def list_profiles(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    return repository.list_profiles(db)
+    return repository.list_profiles(db, role=current_user.role, user_id=current_user.id)
+
+
+@router.get("/profiles/{profile_id}/transactions")
+def list_profile_transactions(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    try:
+        return service.profile_transactions_analytics(db, profile_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.patch("/profiles/{profile_id}")
@@ -122,6 +134,39 @@ def run_matching(payload: MatchRequest, db: Session = Depends(get_db), current_u
 @router.get("/exceptions")
 def list_exceptions(queue_type: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
     return service.list_exceptions(db, queue_type, current_user.role, current_user.id)
+
+
+@router.get("/notifications")
+def list_notifications(limit: int = 12, unread_only: bool = False, offset: int = 0, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    """Get paginated list of notifications for current user"""
+    return service.list_notifications(db, current_user.id, unread_only, limit, offset)
+
+
+@router.put("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Mark single notification as read"""
+    try:
+        return service.mark_notification_read(db, notification_id, current_user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/notifications/mark-all-read")
+def mark_all_read(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Mark all notifications as read for current user"""
+    try:
+        return service.mark_all_notifications_read(db, current_user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.delete("/notifications/{notification_id}")
+def delete_notification(notification_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Delete a single notification"""
+    try:
+        return service.delete_notification(db, notification_id, current_user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/exceptions/assign")
@@ -303,6 +348,15 @@ def preparer_dashboard(db: Session = Depends(get_db), current_user=Depends(role_
     return service.get_dashboard_metrics(db, "preparer", current_user.id)
 
 
+@router.get("/analytics/explorer")
+def analytics_explorer(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    try:
+        return service.reconciliation_analytics_explorer(db, current_user.role, current_user.id)
+    except Exception:
+        # Keep analytics UI functional on partially-migrated environments.
+        return {"profiles": [], "transactions": [], "exceptions": []}
+
+
 @router.post("/aging/reminders/generate")
 def generate_reminders(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
     return service.generate_aging_and_reminders(db)
@@ -353,6 +407,11 @@ def add_exception_comment(payload: ExceptionCommentRequest, db: Session = Depend
         return service.add_exception_comment(db, payload.exception_id, payload.comment, current_user.id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/exceptions/{exception_id}/comments")
+def list_exception_comments(exception_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    return service.list_exception_comments(db, exception_id)
 
 
 @router.post("/exceptions/resolve")
@@ -514,3 +573,103 @@ def schedule_report(payload: ScheduleReportRequest, db: Session = Depends(get_db
 @router.get("/reports/schedule")
 def list_report_schedules(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
     return service.list_scheduled_reports(db)
+
+
+@router.post("/retention/policies")
+def create_retention_policy(payload: RetentionPolicyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    return service.create_retention_policy(db, raw, current_user.id)
+
+
+@router.get("/retention/policies")
+def list_retention_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    return service.list_retention_policies(db)
+
+
+@router.post("/retention/run")
+def run_retention_cycle(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    return service.run_retention_cycle(db)
+
+
+@router.post("/settings")
+def upsert_setting(payload: EnterpriseSettingRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    return service.upsert_enterprise_setting(db, raw, current_user.id)
+
+
+@router.get("/settings")
+def list_settings(category: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    return service.list_enterprise_settings(db, category)
+
+
+@router.post("/dependencies")
+def create_dependency(payload: DependencyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    return service.create_dependency(db, raw, current_user.id)
+
+
+@router.get("/dependencies")
+def list_dependencies(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    return service.list_dependencies(db, profile_id)
+
+
+@router.post("/archive")
+def archive_period(payload: ArchiveRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    return service.archive_period(db, payload.profile_id, payload.period_key, current_user.id)
+
+
+@router.post("/archive/{archive_id}/restore")
+def restore_archive(archive_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    return service.restore_archive(db, archive_id, current_user.id)
+
+
+@router.post("/backup")
+def create_backup(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    return service.create_backup(db, current_user.id, "full")
+
+
+@router.get("/metrics/jobs")
+def job_metrics(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    return service.get_job_metrics(db, 100)
+
+
+# --- Analytics & Risk endpoints (scaffold) ---
+@router.get("/analytics/summary")
+def analytics_summary(period: str | None = None, entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    """Executive summary KPIs for analytics explorer"""
+    return service.analytics_dashboard_summary(db, period=period, entity=entity, user_id=current_user.id)
+
+
+@router.get("/analytics/drilldown")
+def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: int = 50, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    """Drilldown data for a specific level (entity/account/recon/exception)"""
+    return service.analytics_drilldown(db, level=level, key=key, limit=limit, user_id=current_user.id)
+
+
+@router.post("/risk/calculate")
+def calculate_risk(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    """Trigger risk scoring batch run (async/cron in prod)"""
+    return service.calculate_risk_scores(db, actor_id=current_user.id)
+
+
+@router.get("/risk/heatmap")
+def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    """Return a heatmap summary for risk dashboard"""
+    return service.list_risk_heatmap(db, entity)
+
+
+@router.get("/governance/policies")
+def get_governance_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    return service.get_governance_policies(db)
+
+
+@router.post("/governance/policies")
+def upsert_governance_policy(payload: dict, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+    raw = payload
+    return service.upsert_governance_policy(db, raw, actor_id=current_user.id)
+
+
+@router.post("/governance/enforce-approval")
+def enforce_approval_policy(action: dict, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+    """Enforce approval policy for high/critical risk items"""
+    return service.enforce_approval_policy(db, action, actor_id=current_user.id)

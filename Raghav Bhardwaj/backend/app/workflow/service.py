@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -83,6 +84,29 @@ def submit_for_review(db: Session, reconciliation_id: int, comments: str | None,
     workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found. Assign workflow first.")
+    execution = _ensure_execution_exists(db, reconciliation_id)
+    stats = {}
+    try:
+        stats = json.loads(execution.stats or "{}")
+    except Exception:
+        stats = {}
+
+    unmatched = int(stats.get("unmatched", 0) or 0)
+    partial = int(stats.get("partial", 0) or 0)
+    auto_reconciled = bool(stats.get("auto_reconciled", False))
+    if auto_reconciled:
+        raise HTTPException(status_code=400, detail="Execution is already auto-reconciled; submit is not required.")
+
+    needs_justification = unmatched > 0 or partial > 0
+    if needs_justification:
+        if not comments or not comments.strip():
+            raise HTTPException(status_code=400, detail="Justification is required for partial/unmatched records.")
+        lowered = comments.lower()
+        if "proof:" not in lowered and "evidence:" not in lowered:
+            raise HTTPException(
+                status_code=400,
+                detail="Please include proof reference in comments (e.g., 'proof: <ticket/link/doc-id>').",
+            )
     previous = workflow.status
     workflow.status = "under_review"
     workflow.comments = comments or workflow.comments
@@ -98,6 +122,17 @@ def approve_workflow(db: Session, reconciliation_id: int, comments: str | None, 
     workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    submitted_by_actor = (
+        db.query(WorkflowHistory)
+        .filter(
+            WorkflowHistory.workflow_id == workflow.id,
+            WorkflowHistory.action == "submit",
+            WorkflowHistory.actor_id == actor_id,
+        )
+        .first()
+    )
+    if submitted_by_actor:
+        raise HTTPException(status_code=400, detail="Segregation of duties violation: submitter cannot approve same workflow")
     previous = workflow.status
     workflow.status = "approved"
     workflow.comments = comments or workflow.comments
@@ -113,6 +148,17 @@ def reject_workflow(db: Session, reconciliation_id: int, comments: str | None, a
     workflow = db.query(Workflow).filter(Workflow.reconciliation_id == reconciliation_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    submitted_by_actor = (
+        db.query(WorkflowHistory)
+        .filter(
+            WorkflowHistory.workflow_id == workflow.id,
+            WorkflowHistory.action == "submit",
+            WorkflowHistory.actor_id == actor_id,
+        )
+        .first()
+    )
+    if submitted_by_actor:
+        raise HTTPException(status_code=400, detail="Segregation of duties violation: submitter cannot reject same workflow")
     previous = workflow.status
     workflow.status = "rejected"
     workflow.comments = comments or workflow.comments
@@ -141,6 +187,8 @@ def list_workflows(
     if reconciliation_id is not None:
         query = query.filter(Workflow.reconciliation_id == reconciliation_id)
     normalized_role = (role or "").lower()
+    if normalized_role == "approver":
+        normalized_role = "reviewer"
     if normalized_role == "preparer":
         query = query.filter(
             (Workflow.assigned_to.is_(None)) | (Workflow.assigned_to == user_id)
@@ -152,3 +200,22 @@ def list_workflows(
             | (Workflow.assigned_to == user_id)
         )
     return query.order_by(Workflow.updated_at.desc()).all()
+
+
+def delete_reconciliation_workflow(db: Session, reconciliation_id: int, actor_id: int | None) -> dict:
+    execution = db.query(Execution).filter(Execution.id == reconciliation_id).first()
+    if not execution:
+        raise HTTPException(status_code=404, detail="Reconciliation execution not found")
+    if (execution.status or "").lower() == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete a running reconciliation")
+
+    db.delete(execution)
+    db.commit()
+    audit_service.log_action(
+        db,
+        "RECONCILIATION_DELETED",
+        user_id=actor_id,
+        entity_type="execution",
+        entity_id=reconciliation_id,
+    )
+    return {"deleted": True, "reconciliation_id": reconciliation_id}

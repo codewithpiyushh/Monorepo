@@ -4,7 +4,7 @@ const THEME_KEY = 'drms_theme'
 
 const getStoredTheme = () => {
   const saved = localStorage.getItem(THEME_KEY)
-  return saved === 'light' ? 'light' : 'dark'
+  return saved === 'dark' ? 'dark' : 'light'
 }
 
 export const useThemeStore = create((set, get) => ({

@@ -27,14 +27,14 @@ function RootApp() {
                   background: '#ffffff',
                   color: '#1f252d',
                   border: '1px solid #d2d9e2',
-                  borderRadius: '10px',
+                  borderRadius: '0px',
                   fontSize: '13px',
                 }
               : {
                   background: '#22262b',
                   color: '#f4f6f8',
                   border: '1px solid #424a54',
-                  borderRadius: '10px',
+                  borderRadius: '0px',
                   fontSize: '13px',
                 },
         }}

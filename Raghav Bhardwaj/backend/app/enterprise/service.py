@@ -8,6 +8,7 @@ import hashlib
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import urlparse
 from datetime import datetime, date
 from sqlalchemy import create_engine, text
 from rapidfuzz import fuzz
@@ -42,7 +43,17 @@ from ..models.models import (
     ReconciliationComment,
     ScheduledReport,
     ScheduledReportRun,
+    EnterpriseSetting,
+    ReconciliationRetentionPolicy,
+    ReconciliationDependency,
+    ReconciliationArchive,
+    BackupRecord,
+    JobMetric,
+    AuditLog,
+    NotificationEvent,
+    ReminderLog,
 )
+from ..core.config import settings
 from ..services import audit_service, notification_service, dataset_service
 from . import repository
 
@@ -266,7 +277,11 @@ def run_matching(db: Session, profile_id: int, strategy: str, auto_match_thresho
         if score <= 0:
             return False
         all_ids = [r.id for r in group_a + group_b]
-        classification = "FULL_MATCH" if score >= auto_match_threshold else "PARTIAL_MATCH"
+        threshold = float(profile.auto_approve_threshold or auto_match_threshold or 1.0)
+        materiality_limit = abs(float(profile.materiality_limit or 0.0))
+        classification = "FULL_MATCH" if score >= threshold else "PARTIAL_MATCH"
+        if materiality_limit and abs(variance) > materiality_limit:
+            classification = "VARIANCE_FLAGGED"
         mg = repository.create_match_group(
             db,
             profile_id=profile_id,
@@ -351,6 +366,19 @@ def _parse_date_safe(raw: str | None):
         return date.fromisoformat(str(raw)[:10])
     except Exception:
         return None
+
+
+def _host_allowlist(raw: str) -> set[str]:
+    return {item.strip().lower() for item in (raw or "").split(",") if item.strip()}
+
+
+def _enforce_allowed_host(url: str, allowed_hosts: set[str], label: str):
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError(f"{label} host missing")
+    if host not in allowed_hosts:
+        raise ValueError(f"{label} host '{host}' is not allowed")
 
 
 def _aging_bucket(days_overdue: int):
@@ -509,6 +537,8 @@ def generate_aging_and_reminders(db: Session):
 def list_exceptions(db: Session, queue_type: str | None = None, role: str | None = None, user_id: int | None = None):
     q = db.query(ExceptionQueueRecord)
     normalized_role = (role or "").lower()
+    if normalized_role == "approver":
+        normalized_role = "reviewer"
 
     if queue_type == "actionable_preparer":
         q = q.filter(
@@ -536,6 +566,121 @@ def list_exceptions(db: Session, queue_type: str | None = None, role: str | None
         )
 
     return q.order_by(ExceptionQueueRecord.updated_at.desc()).all()
+
+
+def list_notifications(db: Session, user_id: int, unread_only: bool = False, limit: int = 12, offset: int = 0):
+    """Get paginated UINotifications for user with filtering support"""
+    from ..models.models import UINotification
+    
+    query = db.query(UINotification).filter(UINotification.user_id == user_id)
+    
+    if unread_only:
+        query = query.filter(UINotification.is_read == False)
+    
+    total_count = query.count()
+    unread_count = db.query(UINotification).filter(
+        UINotification.user_id == user_id,
+        UINotification.is_read == False
+    ).count()
+    
+    notifications = query.order_by(UINotification.created_at.desc()).offset(offset).limit(limit).all()
+    
+    items = [{
+        "id": n.id,
+        "user_id": n.user_id,
+        "notification_type": n.notification_type,
+        "title": n.title,
+        "message": n.message,
+        "is_read": n.is_read,
+        "read_at": n.read_at.isoformat() if n.read_at else None,
+        "action_url": n.action_url,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    } for n in notifications]
+    
+    return {
+        "total": total_count,
+        "unread_count": unread_count,
+        "read_count": total_count - unread_count,
+        "limit": limit,
+        "offset": offset,
+        "items": items
+    }
+
+
+
+def mark_notification_read(db: Session, notification_id: int, user_id: int):
+    """Mark single UINotification as read"""
+    from ..models.models import UINotification
+    from datetime import datetime
+    
+    notification = db.query(UINotification).filter(
+        UINotification.id == notification_id,
+        UINotification.user_id == user_id
+    ).first()
+    
+    if not notification:
+        raise Exception("Notification not found or access denied")
+    
+    notification.is_read = True
+    notification.read_at = datetime.utcnow()
+    db.commit()
+    db.refresh(notification)
+    
+    return {
+        "id": notification.id,
+        "is_read": notification.is_read,
+        "read_at": notification.read_at.isoformat() if notification.read_at else None
+    }
+
+
+def mark_all_notifications_read(db: Session, user_id: int):
+    """Mark all UINotifications as read for user"""
+    from ..models.models import UINotification
+    from datetime import datetime
+    
+    db.query(UINotification).filter(
+        UINotification.user_id == user_id,
+        UINotification.is_read == False
+    ).update({
+        UINotification.is_read: True,
+        UINotification.read_at: datetime.utcnow()
+    }, synchronize_session=False)
+    
+    db.commit()
+    
+    # Get updated count
+    unread_count = db.query(UINotification).filter(
+        UINotification.user_id == user_id,
+        UINotification.is_read == False
+    ).count()
+    
+    total_count = db.query(UINotification).filter(
+        UINotification.user_id == user_id
+    ).count()
+    
+    return {
+        "message": "All notifications marked as read",
+        "total": total_count,
+        "unread_count": unread_count
+    }
+
+
+def delete_notification(db: Session, notification_id: int, user_id: int):
+    """Delete a single notification"""
+    from ..models.models import UINotification
+    
+    notification = db.query(UINotification).filter(
+        UINotification.id == notification_id,
+        UINotification.user_id == user_id
+    ).first()
+    
+    if not notification:
+        raise Exception("Notification not found or access denied")
+    
+    db.delete(notification)
+    db.commit()
+    
+    return {"message": "Notification deleted successfully"}
 
 
 def get_ingestion_summary(db: Session):
@@ -587,6 +732,8 @@ def submit_exception(db: Session, exception_id: int, comments: str | None, actor
     )
     if not has_evidence:
         raise ValueError("At least one evidence attachment is required before submit")
+    # Release ownership so reviewer queue filters can pick up the item immediately.
+    ex.assigned_to = None
     ex.queue_type = "exception"
     ex.status = STATUS["UNDER_REVIEW"]
     ex.comments = comments or ex.comments
@@ -600,6 +747,19 @@ def review_exception(db: Session, exception_id: int, approved: bool, comments: s
     ex = db.query(ExceptionQueueRecord).filter(ExceptionQueueRecord.id == exception_id).first()
     if not ex:
         raise ValueError("Exception not found")
+    if approved and actor_id is not None:
+        submitted_log = (
+            db.query(AuditLog)
+            .filter(
+                AuditLog.action_type == "EXCEPTION_SUBMITTED",
+                AuditLog.entity_type == "exception",
+                AuditLog.entity_id == ex.id,
+            )
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        if submitted_log and submitted_log.user_id == actor_id:
+            raise ValueError("Segregation of duties violation: submitter cannot approve the same exception")
     if approved:
         ex.status = STATUS["APPROVED"]
         ex.queue_type = "resolved"
@@ -801,12 +961,14 @@ def action_certification_workflow(
     current = wf.status
     normalized_action = action.upper().strip()
     normalized_role = (actor_role or "").lower()
+    if normalized_role == "approver":
+        normalized_role = "reviewer"
 
     transitions = {
         "PREPARE": ("preparer", STATUS["PREPARED"], "REVIEWER"),
         "SUBMIT": ("preparer", STATUS["SUBMITTED"], "REVIEWER"),
         "REVIEW": ("reviewer", STATUS["REVIEWED"], "APPROVER"),
-        "APPROVE": ("approver", STATUS["APPROVED"], "CERTIFIER"),
+        "APPROVE": ("reviewer", STATUS["APPROVED"], "CERTIFIER"),
         "CERTIFY": ("certifier", STATUS["CERTIFIED"], "ADMIN"),
         "CLOSE": ("admin", STATUS["CLOSED"], "DONE"),
         "REOPEN": ("admin", STATUS["REOPENED"], "PREPARER"),
@@ -817,6 +979,15 @@ def action_certification_workflow(
     required_role, target_status, stage = transitions[normalized_action]
     if normalized_role != required_role and normalized_role != "admin":
         raise ValueError(f"{required_role} role required")
+    if normalized_action in {"REVIEW", "APPROVE", "CERTIFY"} and actor_id is not None:
+        prior = (
+            db.query(CertificationWorkflowHistory)
+            .filter(CertificationWorkflowHistory.workflow_id == wf.id)
+            .order_by(CertificationWorkflowHistory.id.desc())
+            .first()
+        )
+        if prior and prior.actor_id == actor_id:
+            raise ValueError("Segregation of duties violation: consecutive approval stages require different users")
 
     wf.status = target_status
     wf.current_stage = stage
@@ -846,6 +1017,261 @@ def get_certification_history(db: Session, workflow_id: int):
         .order_by(CertificationWorkflowHistory.created_at.desc())
         .all()
     )
+
+
+def analytics_dashboard_summary(db: Session, period: str | None = None, entity: str | None = None, user_id: int | None = None):
+    """Return business KPIs for the executive dashboard."""
+    explorer = reconciliation_analytics_explorer(db, user_id=user_id)
+    transactions = explorer.get("transactions") or []
+    workflows = repository.list_certification_workflows(db)
+
+    if period:
+        transactions = [t for t in transactions if (t.get("period") or "") == period]
+        workflows = [wf for wf in workflows if (wf.period_key or "") == period]
+    if entity:
+        transactions = [t for t in transactions if (t.get("entity") or "") == entity]
+
+    total_transactions = len(transactions)
+    matched_transactions = len([t for t in transactions if (t.get("status") or "").upper() in {"MATCHED", "RECONCILED", "FINALIZED", "APPROVED"}])
+    open_exceptions = [t for t in transactions if t.get("exception_id") and (t.get("exception_status") or "OPEN").upper() not in {"RESOLVED", "APPROVED", "CLOSED"}]
+    pending_approvals = len([wf for wf in workflows if (wf.status or "").upper() in {"SUBMITTED", "REVIEWED", "APPROVED"}])
+    certified = len([wf for wf in workflows if (wf.status or "").upper() in {"CERTIFIED", "CLOSED", "FORCE_CLOSED"}])
+    variance_amount = sum(abs(float(t.get("match_variance") or 0)) for t in transactions)
+
+    account_risk = {}
+    for row in transactions:
+        account = row.get("account") or "Unassigned"
+        risk = account_risk.setdefault(account, {"account": account, "exception_count": 0, "variance_amount": 0.0, "days_open": 0, "account_type": account, "historical_issues": 0})
+        if row.get("exception_id"):
+            risk["exception_count"] += 1
+            risk["historical_issues"] += 1
+        risk["variance_amount"] += abs(float(row.get("match_variance") or 0))
+        tx_date = _parse_date_safe(row.get("tx_date"))
+        if tx_date:
+            risk["days_open"] = max(risk["days_open"], (date.today() - tx_date).days)
+
+    scored_accounts = []
+    for payload in account_risk.values():
+        score = _risk_score_from_payload(payload)
+        scored_accounts.append(
+            {
+                "account": payload["account"],
+                "risk_score": score,
+                "risk_level": _risk_level_from_score(score),
+                "exception_count": payload["exception_count"],
+                "variance_amount": round(payload["variance_amount"], 2),
+            }
+        )
+    scored_accounts.sort(key=lambda item: (-item["risk_score"], -item["variance_amount"], item["account"]))
+
+    return {
+        "match_rate": round((matched_transactions / total_transactions) * 100, 2) if total_transactions else 0.0,
+        "open_exceptions": len(open_exceptions),
+        "pending_approvals": pending_approvals,
+        "certification_pct": round((certified / len(workflows)) * 100, 2) if workflows else 0.0,
+        "variance_amount": round(variance_amount, 2),
+        "high_risk_accounts": scored_accounts[:6],
+        "total_reconciliations": len(explorer.get("profiles") or []),
+    }
+
+
+def analytics_drilldown(db: Session, level: str = "entity", key: str | None = None, limit: int = 50, user_id: int | None = None):
+    """Return drilldown data based on the explorer transaction grain."""
+    explorer = reconciliation_analytics_explorer(db, user_id=user_id)
+    transactions = explorer.get("transactions") or []
+    normalized = (level or "entity").lower()
+
+    if normalized == "entity":
+        grouped = {}
+        for row in transactions:
+            entity_key = row.get("entity") or "Unassigned"
+            item = grouped.setdefault(entity_key, {"entity": entity_key, "total_transactions": 0, "matched_transactions": 0, "exceptions": 0, "variance_amount": 0.0})
+            item["total_transactions"] += 1
+            if (row.get("status") or "").upper() in {"MATCHED", "RECONCILED", "FINALIZED", "APPROVED"}:
+                item["matched_transactions"] += 1
+            if row.get("exception_id"):
+                item["exceptions"] += 1
+            item["variance_amount"] += abs(float(row.get("match_variance") or 0))
+        items = []
+        for item in grouped.values():
+            item["match_rate"] = round((item["matched_transactions"] / item["total_transactions"]) * 100, 2) if item["total_transactions"] else 0.0
+            items.append(item)
+        items.sort(key=lambda item: (-item["exceptions"], -item["variance_amount"], item["entity"]))
+        return {"items": items[:limit], "total": len(items)}
+
+    if normalized == "account":
+        scoped = [row for row in transactions if not key or (row.get("entity") or "") == key]
+        grouped = {}
+        for row in scoped:
+            account_key = row.get("account") or "Unassigned"
+            item = grouped.setdefault(account_key, {"account": account_key, "entity": row.get("entity") or "Unassigned", "total_transactions": 0, "matched_transactions": 0, "exceptions": 0, "variance_amount": 0.0})
+            item["total_transactions"] += 1
+            if (row.get("status") or "").upper() in {"MATCHED", "RECONCILED", "FINALIZED", "APPROVED"}:
+                item["matched_transactions"] += 1
+            if row.get("exception_id"):
+                item["exceptions"] += 1
+            item["variance_amount"] += abs(float(row.get("match_variance") or 0))
+        items = []
+        for item in grouped.values():
+            item["match_rate"] = round((item["matched_transactions"] / item["total_transactions"]) * 100, 2) if item["total_transactions"] else 0.0
+            items.append(item)
+        items.sort(key=lambda item: (-item["exceptions"], -item["variance_amount"], item["account"]))
+        return {"items": items[:limit], "total": len(items)}
+
+    if normalized == "reconciliation":
+        scoped = [row for row in transactions if not key or (row.get("account") or "") == key or str(row.get("profile_id")) == str(key)]
+        grouped = {}
+        for row in scoped:
+            recon_key = row.get("profile_id")
+            item = grouped.setdefault(recon_key, {"profile_id": recon_key, "entity": row.get("entity"), "account": row.get("account"), "status": row.get("profile", {}).get("lifecycle_state") or row.get("status"), "total_transactions": 0, "matched_transactions": 0, "exceptions": 0, "variance_amount": 0.0})
+            item["total_transactions"] += 1
+            if (row.get("status") or "").upper() in {"MATCHED", "RECONCILED", "FINALIZED", "APPROVED"}:
+                item["matched_transactions"] += 1
+            if row.get("exception_id"):
+                item["exceptions"] += 1
+            item["variance_amount"] += abs(float(row.get("match_variance") or 0))
+        items = []
+        for item in grouped.values():
+            item["match_rate"] = round((item["matched_transactions"] / item["total_transactions"]) * 100, 2) if item["total_transactions"] else 0.0
+            items.append(item)
+        items.sort(key=lambda item: (-item["exceptions"], -item["variance_amount"], str(item["profile_id"])))
+        return {"items": items[:limit], "total": len(items)}
+
+    if normalized == "exception":
+        scoped = [row for row in transactions if row.get("exception_id") and (not key or str(row.get("profile_id")) == str(key))]
+        items = [
+            {
+                "exception_id": row.get("exception_id"),
+                "profile_id": row.get("profile_id"),
+                "entity": row.get("entity"),
+                "account": row.get("account"),
+                "classification": row.get("exception_classification"),
+                "status": row.get("exception_status") or "OPEN",
+                "variance_amount": round(abs(float(row.get("match_variance") or 0)), 2),
+                "record_id": row.get("record_id"),
+            }
+            for row in scoped[:limit]
+        ]
+        return {"items": items, "total": len(scoped)}
+
+    if normalized == "transaction":
+        scoped = [row for row in transactions if not key or str(row.get("exception_id")) == str(key)]
+        return {"items": scoped[:limit], "total": len(scoped)}
+
+    return {"items": [], "total": 0}
+
+
+def calculate_risk_scores(db: Session, actor_id: int | None = None):
+    profiles = repository.list_profiles(db)
+    processed = 0
+    updated = []
+    for profile in profiles:
+        scorecard = calculate_risk_score(db, profile.id)
+        processed += 1
+        updated.append(
+            {
+                "profile_id": profile.id,
+                "profile_name": profile.name,
+                "risk_score": scorecard["score"],
+                "risk_level": scorecard["risk_level"],
+            }
+        )
+    return {"status": "completed", "processed": processed, "updated": updated, "actor_id": actor_id}
+
+
+def list_risk_heatmap(db: Session, entity: str | None = None):
+    explorer = reconciliation_analytics_explorer(db)
+    transactions = explorer.get("transactions") or []
+    grouped = {}
+    for row in transactions:
+        entity_key = row.get("entity") or "Unassigned"
+        if entity and entity_key != entity:
+            continue
+        account_key = row.get("account") or "Unassigned"
+        bucket = grouped.setdefault(
+            (entity_key, account_key),
+            {
+                "entity": entity_key,
+                "account": account_key,
+                "exception_count": 0,
+                "variance_amount": 0.0,
+                "days_open": 0,
+                "account_type": account_key,
+                "historical_issues": 0,
+            },
+        )
+        if row.get("exception_id"):
+            bucket["exception_count"] += 1
+            bucket["historical_issues"] += 1
+        bucket["variance_amount"] += abs(float(row.get("match_variance") or 0))
+        tx_date = _parse_date_safe(row.get("tx_date"))
+        if tx_date:
+            bucket["days_open"] = max(bucket["days_open"], (date.today() - tx_date).days)
+
+    entities = sorted({key[0] for key in grouped})
+    accounts = sorted({key[1] for key in grouped})
+    heatmap = []
+    drilldown = []
+    for (entity_key, account_key), payload in grouped.items():
+        score = _risk_score_from_payload(payload)
+        heatmap.append([entities.index(entity_key), accounts.index(account_key), score])
+        drilldown.append(
+            {
+                "entity": entity_key,
+                "account": account_key,
+                "risk_score": score,
+                "risk_level": _risk_level_from_score(score),
+                "exception_count": payload["exception_count"],
+                "variance_amount": round(payload["variance_amount"], 2),
+            }
+        )
+    drilldown.sort(key=lambda item: (-item["risk_score"], -item["variance_amount"], item["entity"], item["account"]))
+    return {"entities": entities, "accounts": accounts, "heatmap": heatmap, "drilldown": drilldown}
+
+
+def get_governance_policies(db: Session):
+    workflows = repository.list_certification_workflows(db)
+    seen_users = {
+        "preparer_ids": sorted({wf.preparer_id for wf in workflows if wf.preparer_id}),
+        "reviewer_ids": sorted({wf.reviewer_id for wf in workflows if wf.reviewer_id}),
+        "approver_ids": sorted({wf.approver_id for wf in workflows if wf.approver_id}),
+        "certifier_ids": sorted({wf.certifier_id for wf in workflows if wf.certifier_id}),
+    }
+    return {
+        "segregation_of_duties": [
+            {"rule": "Preparer != Reviewer", "field_a": "preparer_id", "field_b": "reviewer_id", "enabled": True},
+            {"rule": "Reviewer != Approver", "field_a": "reviewer_id", "field_b": "approver_id", "enabled": True},
+            {"rule": "Approver != Certifier", "field_a": "approver_id", "field_b": "certifier_id", "enabled": True},
+        ],
+        "approval_policies": [
+            {"risk_level": "LOW", "required_approvals": 1},
+            {"risk_level": "MEDIUM", "required_approvals": 1},
+            {"risk_level": "HIGH", "required_approvals": 2},
+            {"risk_level": "CRITICAL", "required_approvals": 3},
+        ],
+        "workflow_population": seen_users,
+    }
+
+
+def upsert_governance_policy(db: Session, payload: dict, actor_id: int | None = None):
+    return {"status": "ok", "policy": payload, "updated_by": actor_id}
+
+
+def enforce_approval_policy(db: Session, action: dict, actor_id: int | None = None):
+    risk = (action.get("risk_level") or "LOW").upper()
+    required = 1
+    if risk == "HIGH":
+        required = 2
+    elif risk == "CRITICAL":
+        required = 3
+    current = int(action.get("current_approvals") or 0)
+    return {
+        "risk_level": risk,
+        "required_approvals": required,
+        "current_approvals": current,
+        "is_satisfied": current >= required,
+        "checked_by": actor_id,
+    }
 
 
 def process_overdue_workflows(db: Session):
@@ -896,6 +1322,33 @@ def process_workflow_notifications(db: Session):
     return {"notifications_sent": sent}
 
 
+def _risk_level_from_score(score: float) -> str:
+    if score >= 80:
+        return "CRITICAL"
+    if score >= 70:
+        return "HIGH"
+    if score >= 40:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _risk_score_from_payload(payload: dict) -> float:
+    exception_count = float(payload.get("exception_count") or 0)
+    variance_amount = abs(float(payload.get("variance_amount") or 0))
+    days_open = float(payload.get("days_open") or 0)
+    historical_issues = float(payload.get("historical_issues") or 0)
+    account_type = str(payload.get("account_type") or "").upper()
+
+    score = 0.0
+    score += min(exception_count * 8, 32)
+    score += min(variance_amount / 10000, 28)
+    score += min(days_open * 1.5, 20)
+    score += min(historical_issues * 5, 15)
+    if any(marker in account_type for marker in ["SUSPENSE", "INTERCOMPANY", "CLEARING", "PAYABLE", "RECEIVABLE"]):
+        score += 8
+    return round(min(score, 100.0), 2)
+
+
 def calculate_risk_score(db: Session, profile_id: int):
     profile = repository.get_profile(db, profile_id)
     if not profile:
@@ -926,12 +1379,14 @@ def calculate_risk_score(db: Session, profile_id: int):
     score += min(historical_findings * 2, 15)
     score = round(min(score, 100.0), 2)
 
-    profile.risk_classification = "HIGH" if score >= 70 else "MEDIUM" if score >= 40 else "LOW"
+    profile.risk_classification = _risk_level_from_score(score)
     db.commit()
     return {
         "profile_id": profile_id,
         "risk_score": score,
+        "score": score,
         "risk_classification": profile.risk_classification,
+        "risk_level": profile.risk_classification,
         "factors": {
             "balance_size": balance_size,
             "unresolved_exceptions": unresolved,
@@ -950,6 +1405,8 @@ def import_transactions(
     dataset_type: str,
     payload: dict,
 ):
+    allowed_db_hosts = _host_allowlist(settings.ALLOWED_DB_IMPORT_HOSTS)
+    allowed_api_hosts = _host_allowlist(settings.ALLOWED_API_IMPORT_HOSTS)
     st = source_type.lower().strip()
     if st == "csv":
         df = pd.read_csv(payload["file_path"])
@@ -964,11 +1421,13 @@ def import_transactions(
         rows = [{child.tag: child.text for child in row} for row in root.findall(row_path)]
         df = pd.DataFrame(rows)
     elif st == "database":
+        _enforce_allowed_host(payload["connection_url"], allowed_db_hosts, "Database import")
         engine = create_engine(payload["connection_url"])
         with engine.connect() as conn:
             df = pd.read_sql(text(payload["query"]), conn)
     elif st == "api":
         method = payload.get("method", "GET").upper()
+        _enforce_allowed_host(payload["endpoint"], allowed_api_hosts, "API import")
         with httpx.Client(timeout=30) as client:
             res = client.request(method, payload["endpoint"], headers=payload.get("headers") or {}, json=payload.get("body"))
             res.raise_for_status()
@@ -1071,6 +1530,15 @@ def add_exception_comment(db: Session, exception_id: int, comment: str, actor_id
     db.commit()
     db.refresh(row)
     return row
+
+
+def list_exception_comments(db: Session, exception_id: int):
+    return (
+        db.query(ExceptionComment)
+        .filter(ExceptionComment.exception_id == exception_id)
+        .order_by(ExceptionComment.created_at.desc())
+        .all()
+    )
 
 
 def resolve_exception(db: Session, exception_id: int, comments: str | None, actor_id: int | None):
@@ -1415,6 +1883,167 @@ def advanced_search(db: Session, filters: dict):
     return rows
 
 
+def profile_transactions_analytics(db: Session, profile_id: int):
+    profile = db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
+    if not profile:
+        raise ValueError("Reconciliation profile not found")
+
+    records = db.query(ReconciliationRecord).filter(ReconciliationRecord.profile_id == profile_id).all()
+    if not records:
+        return []
+
+    record_ids = [r.id for r in records]
+    mgi_rows = (
+        db.query(MatchGroupItem, MatchGroup)
+        .join(MatchGroup, MatchGroupItem.match_group_id == MatchGroup.id)
+        .filter(MatchGroupItem.reconciliation_record_id.in_(record_ids))
+        .all()
+    )
+    group_by_record = {
+        mgi.reconciliation_record_id: mg
+        for mgi, mg in mgi_rows
+    }
+    group_ids = list({mg.id for _, mg in mgi_rows})
+    exceptions = (
+        db.query(ExceptionQueueRecord)
+        .filter(ExceptionQueueRecord.match_group_id.in_(group_ids))
+        .all()
+        if group_ids
+        else []
+    )
+    exception_by_group = {e.match_group_id: e for e in exceptions}
+
+    attachment_counts = {}
+    for row in (
+        db.query(
+            ReconciliationAttachment.reconciliation_record_id,
+            text("count(*) as cnt"),
+        )
+        .filter(ReconciliationAttachment.reconciliation_record_id.in_(record_ids))
+        .group_by(ReconciliationAttachment.reconciliation_record_id)
+        .all()
+    ):
+        attachment_counts[row[0]] = int(row[1] or 0)
+
+    out = []
+    for record in records:
+        match_group = group_by_record.get(record.id)
+        exception = exception_by_group.get(match_group.id) if match_group else None
+        out.append(
+            {
+                "record_id": record.id,
+                "profile_id": record.profile_id,
+                "entity": record.entity,
+                "account": record.account,
+                "period": record.period,
+                "reference": record.reference,
+                "amount": record.amount,
+                "currency": record.currency,
+                "tx_date": record.tx_date,
+                "status": record.status,
+                "match_group_id": match_group.id if match_group else None,
+                "match_classification": match_group.classification if match_group else None,
+                "match_confidence": match_group.confidence if match_group else None,
+                "match_variance": match_group.variance_amount if match_group else None,
+                "exception_id": exception.id if exception else None,
+                "exception_status": exception.status if exception else None,
+                "exception_queue_type": exception.queue_type if exception else None,
+                "exception_classification": exception.classification if exception else None,
+                "evidence_count": attachment_counts.get(record.id, 0),
+            }
+        )
+    return out
+
+
+def reconciliation_analytics_explorer(db: Session, role: str | None = None, user_id: int | None = None):
+    profiles = repository.list_profiles(db, role=role, user_id=user_id)
+    if not profiles:
+        return {"profiles": [], "transactions": [], "exceptions": []}
+
+    profile_ids = [p.id for p in profiles]
+    records = db.query(ReconciliationRecord).filter(ReconciliationRecord.profile_id.in_(profile_ids)).all()
+    if not records:
+        return {"profiles": profiles, "transactions": [], "exceptions": []}
+
+    record_ids = [r.id for r in records]
+    mgi_rows = (
+        db.query(MatchGroupItem, MatchGroup)
+        .join(MatchGroup, MatchGroupItem.match_group_id == MatchGroup.id)
+        .filter(MatchGroupItem.reconciliation_record_id.in_(record_ids))
+        .all()
+    )
+    group_by_record = {mgi.reconciliation_record_id: mg for mgi, mg in mgi_rows}
+    group_ids = list({mg.id for _, mg in mgi_rows})
+
+    all_exceptions = list_exceptions(db, None, role, user_id)
+    exception_by_group = {e.match_group_id: e for e in all_exceptions if e.match_group_id in group_ids}
+    scoped_exceptions = list(exception_by_group.values())
+
+    attachment_counts = {}
+    for row in (
+        db.query(
+            ReconciliationAttachment.reconciliation_record_id,
+            text("count(*) as cnt"),
+        )
+        .filter(ReconciliationAttachment.reconciliation_record_id.in_(record_ids))
+        .group_by(ReconciliationAttachment.reconciliation_record_id)
+        .all()
+    ):
+        attachment_counts[row[0]] = int(row[1] or 0)
+
+    profile_meta = {
+        p.id: {
+            "profile_id": p.id,
+            "name": p.name,
+            "risk_classification": p.risk_classification,
+            "lifecycle_state": p.lifecycle_state,
+            "reconciliation_type": p.reconciliation_type,
+            "frequency": p.frequency,
+            "due_days": p.due_days,
+            "assigned_preparer": p.assigned_preparer,
+            "assigned_reviewer": p.assigned_reviewer,
+            "assigned_approver": p.assigned_approver,
+            "assigned_certifier": p.assigned_certifier,
+        }
+        for p in profiles
+    }
+
+    transactions = []
+    for record in records:
+        match_group = group_by_record.get(record.id)
+        exception = exception_by_group.get(match_group.id) if match_group else None
+        transactions.append(
+            {
+                "record_id": record.id,
+                "profile_id": record.profile_id,
+                "entity": record.entity,
+                "account": record.account,
+                "period": record.period,
+                "reference": record.reference,
+                "amount": record.amount,
+                "currency": record.currency,
+                "tx_date": record.tx_date,
+                "status": record.status,
+                "match_group_id": match_group.id if match_group else None,
+                "match_classification": match_group.classification if match_group else None,
+                "match_confidence": match_group.confidence if match_group else None,
+                "match_variance": match_group.variance_amount if match_group else None,
+                "exception_id": exception.id if exception else None,
+                "exception_status": exception.status if exception else None,
+                "exception_queue_type": exception.queue_type if exception else None,
+                "exception_classification": exception.classification if exception else None,
+                "evidence_count": attachment_counts.get(record.id, 0),
+                "profile": profile_meta.get(record.profile_id),
+            }
+        )
+
+    return {
+        "profiles": profiles,
+        "transactions": transactions,
+        "exceptions": scoped_exceptions,
+    }
+
+
 def bulk_action(db: Session, payload: dict, actor_id: int | None):
     act = (payload.get("action") or "").upper()
     ids = payload.get("profile_ids") or []
@@ -1510,3 +2139,181 @@ def run_scheduled_report(db: Session, report_id: int):
             attachments=[str(pdf_path)],
         )
     return {"report_id": report.id, "output_path": str(pdf_path), "recipients": recipients}
+
+
+def upsert_enterprise_setting(db: Session, payload: dict, actor_id: int | None):
+    row = db.query(EnterpriseSetting).filter(
+        EnterpriseSetting.category == payload["category"],
+        EnterpriseSetting.key == payload["key"],
+    ).first()
+    if not row:
+        row = EnterpriseSetting(category=payload["category"], key=payload["key"])
+        db.add(row)
+    row.value_json = json.dumps(payload.get("value") or {})
+    row.description = payload.get("description")
+    row.updated_by = actor_id
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_enterprise_settings(db: Session, category: str | None = None):
+    q = db.query(EnterpriseSetting)
+    if category:
+        q = q.filter(EnterpriseSetting.category == category)
+    return q.order_by(EnterpriseSetting.category.asc(), EnterpriseSetting.key.asc()).all()
+
+
+def create_retention_policy(db: Session, payload: dict, actor_id: int | None):
+    row = ReconciliationRetentionPolicy(
+        name=payload["name"],
+        retention_days=int(payload.get("retention_days", 365)),
+        purge_after_days=int(payload.get("purge_after_days", 730)),
+        preserve_for_compliance=bool(payload.get("preserve_for_compliance", True)),
+        active=True,
+        created_by=actor_id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_retention_policies(db: Session):
+    return db.query(ReconciliationRetentionPolicy).order_by(ReconciliationRetentionPolicy.created_at.desc()).all()
+
+
+def create_dependency(db: Session, payload: dict, actor_id: int | None):
+    row = ReconciliationDependency(
+        parent_profile_id=payload["parent_profile_id"],
+        child_profile_id=payload["child_profile_id"],
+        dependency_type=payload.get("dependency_type", "close_process"),
+        is_blocking=bool(payload.get("is_blocking", True)),
+        created_by=actor_id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_dependencies(db: Session, profile_id: int | None = None):
+    q = db.query(ReconciliationDependency)
+    if profile_id:
+        q = q.filter(
+            (ReconciliationDependency.parent_profile_id == profile_id) |
+            (ReconciliationDependency.child_profile_id == profile_id)
+        )
+    return q.order_by(ReconciliationDependency.created_at.desc()).all()
+
+
+def archive_period(db: Session, profile_id: int, period_key: str, actor_id: int | None):
+    rows = db.query(ReconciliationRecord).filter(
+        ReconciliationRecord.profile_id == profile_id,
+        ReconciliationRecord.period == period_key,
+    ).all()
+    payload = [
+        {"id": r.id, "status": r.status, "amount": r.amount, "payload_json": r.payload_json}
+        for r in rows
+    ]
+    archive = ReconciliationArchive(
+        profile_id=profile_id,
+        period_key=period_key,
+        archive_payload_json=json.dumps(payload),
+        archived_by=actor_id,
+    )
+    db.add(archive)
+    for r in rows:
+        r.status = "ARCHIVED"
+    db.commit()
+    db.refresh(archive)
+    return {"archive_id": archive.id, "records_archived": len(rows)}
+
+
+def restore_archive(db: Session, archive_id: int, actor_id: int | None):
+    archive = db.query(ReconciliationArchive).filter(ReconciliationArchive.id == archive_id).first()
+    if not archive:
+        raise ValueError("Archive not found")
+    rows = json.loads(archive.archive_payload_json or "[]")
+    restored = 0
+    for item in rows:
+        rec = db.query(ReconciliationRecord).filter(ReconciliationRecord.id == item.get("id")).first()
+        if rec:
+            rec.status = item.get("status") or "VALIDATED"
+            rec.amount = item.get("amount", rec.amount)
+            restored += 1
+    archive.restore_count = int(archive.restore_count or 0) + 1
+    archive.restored_at = datetime.utcnow()
+    db.commit()
+    audit_service.log_action(db, "ARCHIVE_RESTORED", user_id=actor_id, entity_type="archive", entity_id=archive_id, metadata={"restored": restored})
+    return {"archive_id": archive_id, "restored_records": restored}
+
+
+def create_backup(db: Session, actor_id: int | None, backup_type: str = "full"):
+    backup_dir = EVIDENCE_UPLOAD_DIR.parent / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    backup_path = backup_dir / f"drms_{backup_type}_{stamp}.zip"
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        db_url = settings.DATABASE_URL
+        if db_url.startswith("sqlite:///"):
+            db_file = Path(db_url.replace("sqlite:///", ""))
+            if db_file.exists():
+                zf.write(db_file, arcname=f"database/{db_file.name}")
+        if EVIDENCE_UPLOAD_DIR.exists():
+            for p in EVIDENCE_UPLOAD_DIR.rglob("*"):
+                if p.is_file():
+                    zf.write(p, arcname=f"evidence/{p.relative_to(EVIDENCE_UPLOAD_DIR)}")
+    checksum = hashlib.sha256(backup_path.read_bytes()).hexdigest()
+    row = BackupRecord(
+        backup_type=backup_type,
+        target_path=str(backup_path),
+        checksum=checksum,
+        status="COMPLETED",
+        created_by=actor_id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def run_retention_cycle(db: Session):
+    policy = db.query(ReconciliationRetentionPolicy).filter(ReconciliationRetentionPolicy.active == True).order_by(ReconciliationRetentionPolicy.created_at.desc()).first()
+    if not policy:
+        return {"archived": 0, "purged": 0, "policy": None}
+    now = datetime.utcnow()
+    archived = 0
+    purged = 0
+    for rec in db.query(ReconciliationRecord).all():
+        age_days = (now - rec.created_at).days if rec.created_at else 0
+        if age_days >= policy.retention_days and (rec.status or "").upper() != "ARCHIVED":
+            rec.status = "ARCHIVED"
+            archived += 1
+        if (not policy.preserve_for_compliance) and age_days >= policy.purge_after_days:
+            db.delete(rec)
+            purged += 1
+    db.commit()
+    return {"archived": archived, "purged": purged, "policy": policy.name}
+
+
+def record_job_metric(db: Session, job_name: str, status: str, duration_ms: int | None = None, message: str | None = None):
+    metric = JobMetric(job_name=job_name, status=status, duration_ms=duration_ms, message=message)
+    db.add(metric)
+    db.commit()
+    return metric
+
+
+def get_job_metrics(db: Session, limit: int = 100):
+    rows = db.query(JobMetric).order_by(JobMetric.executed_at.desc()).limit(limit).all()
+    dashboard = {}
+    for row in rows:
+        stats = dashboard.setdefault(row.job_name, {"runs": 0, "failed": 0, "avg_duration_ms": 0})
+        stats["runs"] += 1
+        if row.status.upper() != "COMPLETED":
+            stats["failed"] += 1
+        if row.duration_ms:
+            prev_sum = stats["avg_duration_ms"] * (stats["runs"] - 1)
+            stats["avg_duration_ms"] = round((prev_sum + row.duration_ms) / stats["runs"], 2)
+    return {"recent_runs": rows, "dashboard": dashboard}

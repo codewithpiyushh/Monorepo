@@ -71,3 +71,59 @@ def delete_rule(db: Session, rule_id: int, project_id: int) -> None:
         raise HTTPException(status_code=404, detail="Rule not found")
     db.delete(rule)
     db.commit()
+
+
+def get_predefined_rules() -> List[dict]:
+    return [
+        {
+            "name": "Amount Tolerance",
+            "rule_type": "tolerance",
+            "config": {"source_column": "amount", "threshold": 1.0, "tolerance_type": "absolute"},
+            "is_active": True,
+        },
+        {
+            "name": "Reference Fuzzy",
+            "rule_type": "fuzzy",
+            "config": {"source_column": "reference", "threshold": 0.9},
+            "is_active": True,
+        },
+        {
+            "name": "Date Difference",
+            "rule_type": "date_diff",
+            "config": {"source_column": "date", "threshold": 1, "date_format": "%Y-%m-%d"},
+            "is_active": True,
+        },
+        {
+            "name": "Currency Exact",
+            "rule_type": "exact",
+            "config": {"source_column": "currency"},
+            "is_active": True,
+        },
+    ]
+
+
+def seed_predefined_rules_if_missing(db: Session, project_id: int) -> List[Rule]:
+    existing = (
+        db.query(Rule)
+        .filter(Rule.project_id == project_id)
+        .order_by(Rule.created_at.asc())
+        .all()
+    )
+    if existing:
+        return existing
+
+    created: List[Rule] = []
+    for template in get_predefined_rules():
+        row = Rule(
+            project_id=project_id,
+            name=template["name"],
+            rule_type=template["rule_type"],
+            config=json.dumps(template["config"]),
+            is_active=template.get("is_active", True),
+        )
+        db.add(row)
+        created.append(row)
+    db.commit()
+    for row in created:
+        db.refresh(row)
+    return created

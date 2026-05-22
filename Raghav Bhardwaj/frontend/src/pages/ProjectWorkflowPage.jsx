@@ -9,6 +9,8 @@ import MappingStep from '../components/MappingStep'
 import RulesStep from '../components/RulesStep'
 import ExecuteStep from '../components/ExecuteStep'
 import { useAuthStore } from '../store/authStore'
+import { LoadingState } from '../components/ui/PageState'
+import { normalizeRole } from '../utils/roles'
 
 const STEPS = [
   { id: 'ingestion', label: 'Ingestion' },
@@ -27,7 +29,7 @@ const STEP_INDEX = {
 export default function ProjectWorkflowPage() {
   const navigate = useNavigate()
   const { projectId, section = 'ingestion' } = useParams()
-  const role = (useAuthStore((s) => s.user?.role) || '').toLowerCase()
+  const role = normalizeRole(useAuthStore((s) => s.user?.role))
   const [executeTopbar, setExecuteTopbar] = useState({
     status: null,
     running: false,
@@ -66,7 +68,7 @@ export default function ProjectWorkflowPage() {
 
   const hasBothDatasets = Boolean(datasets.source && datasets.target)
   const isFirstStep = section === 'ingestion'
-
+  const currentStep = STEP_INDEX[section]
   useEffect(() => {
     if (project && !hasBothDatasets && section !== 'ingestion') {
       navigate(`/projects/${project.id}/ingestion`, { replace: true })
@@ -209,12 +211,17 @@ export default function ProjectWorkflowPage() {
       </div>
 
       {(projectLoading || datasetsLoading) ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-500 border-t-transparent" />
-          <p className="text-xs text-slate-500">Loading workflow context...</p>
+        <div className="flex-1 px-6 py-6">
+          <LoadingState label="Loading workflow context..." />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto">{renderStep()}</div>
+        <div className="flex-1 overflow-auto p-4 lg:p-6">
+          <div className="w-full">
+            <div className="card overflow-hidden">
+              {renderStep()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

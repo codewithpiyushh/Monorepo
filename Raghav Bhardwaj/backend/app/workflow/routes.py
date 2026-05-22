@@ -82,6 +82,19 @@ def reject_workflow(
     )
 
 
+@router.post("/delete")
+def delete_reconciliation(
+    payload: WorkflowActionRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN])),
+):
+    return service.delete_reconciliation_workflow(
+        db,
+        reconciliation_id=payload.reconciliation_id,
+        actor_id=current_user.id,
+    )
+
+
 @router.get("/{workflow_id}", response_model=WorkflowOut)
 def get_workflow(
     workflow_id: int,

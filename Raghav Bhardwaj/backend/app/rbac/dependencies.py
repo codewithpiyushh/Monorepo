@@ -5,11 +5,17 @@ from sqlalchemy.orm import Session
 from ..models.models import ModulePermission, ReconciliationOwnership
 
 
+def _effective_role(raw_role: str | None) -> str:
+    role = (raw_role or "").lower()
+    # Reviewer and approver are treated as one combined role.
+    return "reviewer" if role == "approver" else role
+
+
 def role_required(allowed_roles: list[str]):
-    allowed = {r.lower() for r in allowed_roles}
+    allowed = {_effective_role(r) for r in allowed_roles}
 
     def _dependency(current_user=Depends(get_current_user)):
-        role = (getattr(current_user, "role", "") or "").lower()
+        role = _effective_role(getattr(current_user, "role", "") or "")
         if role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -22,7 +28,7 @@ def role_required(allowed_roles: list[str]):
 
 def module_permission_required(module_name: str, action: str = "view"):
     def _dependency(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-        role = (getattr(current_user, "role", "") or "").lower()
+        role = _effective_role(getattr(current_user, "role", "") or "")
         perm = (
             db.query(ModulePermission)
             .filter(ModulePermission.role == role, ModulePermission.module_name == module_name)
@@ -39,7 +45,7 @@ def module_permission_required(module_name: str, action: str = "view"):
 
 def ownership_required(profile_id_param: str = "profile_id"):
     def _dependency(current_user=Depends(get_current_user), db: Session = Depends(get_db), **kwargs):
-        role = (getattr(current_user, "role", "") or "").lower()
+        role = _effective_role(getattr(current_user, "role", "") or "")
         if role == "admin":
             return current_user
         profile_id = kwargs.get(profile_id_param)

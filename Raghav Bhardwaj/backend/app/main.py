@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 from .database import init_db
 from .routes import auth, projects, datasets, mappings, rules, executions, audit, export, schedules
+from .routes import ops_v1
 from .sequence import routes as sequences
 from .workflow import routes as workflow
 from .services.auth_service import create_user
@@ -9,10 +11,16 @@ from .schemas.schemas import UserCreate
 from .database import SessionLocal
 from .scheduler import service as scheduler_service
 from .enterprise import routes as enterprise
+from .enterprise import routes_v1 as enterprise_v1
+from .schema_compat import apply_compat_patches
 
 app = FastAPI(
     title="DRMS — Data Reconciliation Management System",
-    description="Enterprise-grade data reconciliation platform inspired by Oracle ARCS",
+    description=(
+        "Enterprise-grade data reconciliation platform inspired by Oracle ARCS.\n\n"
+        "Authentication: use `/api/auth/login`, then pass `Authorization: Bearer <token>`.\n"
+        "Versioned APIs are available under `/api/v1/enterprise` and `/api/v1/ops`.\n"
+    ),
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -39,22 +47,27 @@ app.include_router(sequences.router)
 app.include_router(schedules.router)
 app.include_router(workflow.router)
 app.include_router(enterprise.router)
+app.include_router(enterprise_v1.router)
+app.include_router(ops_v1.router)
 
 
 @app.on_event("startup")
 def on_startup():
     init_db()
+    apply_compat_patches()
     _seed_demo_user()
-    db = SessionLocal()
-    try:
-        scheduler_service.start_scheduler(db)
-    finally:
-        db.close()
+    if os.getenv("DISABLE_SCHEDULER", "false").lower() not in ("1", "true", "yes"):
+        db = SessionLocal()
+        try:
+            scheduler_service.start_scheduler(db)
+        finally:
+            db.close()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    scheduler_service.shutdown_scheduler()
+    if os.getenv("DISABLE_SCHEDULER", "false").lower() not in ("1", "true", "yes"):
+        scheduler_service.shutdown_scheduler()
 
 
 def _seed_demo_user():

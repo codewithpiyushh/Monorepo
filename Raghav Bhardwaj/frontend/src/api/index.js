@@ -5,6 +5,7 @@ export const authAPI = {
     api.post('/auth/login', { username, password }).then((r) => r.data),
   register: (data) => api.post('/auth/register', data).then((r) => r.data),
   me: () => api.get('/auth/me').then((r) => r.data),
+  listUsers: () => api.get('/auth/users').then((r) => r.data),
 }
 
 export const projectsAPI = {
@@ -135,6 +136,7 @@ export const workflowAPI = {
   submit: (data) => api.post('/workflow/submit', data).then((r) => r.data),
   approve: (data) => api.post('/workflow/approve', data).then((r) => r.data),
   reject: (data) => api.post('/workflow/reject', data).then((r) => r.data),
+  delete: (data) => api.post('/workflow/delete', data).then((r) => r.data),
   get: (id) => api.get(`/workflow/${id}`).then((r) => r.data),
 }
 
@@ -146,11 +148,14 @@ export const enterpriseAPI = {
   loadBatch: (batchId, profileId) => api.post(`/enterprise/ingestion/${batchId}/load/${profileId}`).then((r) => r.data),
   createProfile: (data) => api.post('/enterprise/profiles', data).then((r) => r.data),
   listProfiles: () => api.get('/enterprise/profiles').then((r) => r.data),
+  listProfileTransactions: (profileId) => api.get(`/enterprise/profiles/${profileId}/transactions`).then((r) => r.data),
   updateProfile: (profileId, data) => api.patch(`/enterprise/profiles/${profileId}`, data).then((r) => r.data),
   deleteProfile: (profileId) => api.delete(`/enterprise/profiles/${profileId}`).then((r) => r.data),
   runMatching: (data) => api.post('/enterprise/matching/run', data).then((r) => r.data),
   listExceptions: (queueType = '') =>
     api.get(`/enterprise/exceptions${queueType ? `?queue_type=${encodeURIComponent(queueType)}` : ''}`).then((r) => r.data),
+  listNotifications: (limit = 12) =>
+    api.get(`/enterprise/notifications?limit=${encodeURIComponent(limit)}`).then((r) => r.data),
   assignException: (data) => api.post('/enterprise/exceptions/assign', data).then((r) => r.data),
   submitException: (data) => api.post('/enterprise/exceptions/submit', data).then((r) => r.data),
   approveException: (data) => api.post('/enterprise/exceptions/approve', data).then((r) => r.data),
@@ -189,7 +194,22 @@ export const enterpriseAPI = {
   executiveDashboard: () => api.get('/enterprise/dashboard/executive').then((r) => r.data),
   reviewerDashboard: () => api.get('/enterprise/dashboard/reviewer').then((r) => r.data),
   preparerDashboard: () => api.get('/enterprise/dashboard/preparer').then((r) => r.data),
+  analyticsExplorer: () => api.get('/enterprise/analytics/explorer').then((r) => r.data),
+  analyticsSummary: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/analytics/summary${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
+  analyticsDrilldown: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/analytics/drilldown${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
   generateAgingReminders: () => api.post('/enterprise/aging/reminders/generate').then((r) => r.data),
+  riskHeatmap: (entity = '') =>
+    api.get(`/enterprise/risk/heatmap${entity ? `?entity=${encodeURIComponent(entity)}` : ''}`).then((r) => r.data),
+  calculateRisk: () => api.post('/enterprise/risk/calculate').then((r) => r.data),
+  getGovernancePolicies: () => api.get('/enterprise/governance/policies').then((r) => r.data),
+  upsertGovernancePolicy: (data) => api.post('/enterprise/governance/policies', data).then((r) => r.data),
+  enforceApprovalPolicy: (data) => api.post('/enterprise/governance/enforce-approval', data).then((r) => r.data),
   createFxRate: (data) => api.post('/enterprise/fx/rates', data).then((r) => r.data),
   convertFx: (data) => api.post('/enterprise/fx/convert', data).then((r) => r.data),
   fxReconciliation: (profileId, reportingCurrency) => api.get(`/enterprise/fx/reconciliation/${profileId}?reporting_currency=${encodeURIComponent(reportingCurrency)}`).then((r) => r.data),
@@ -200,5 +220,16 @@ export const enterpriseAPI = {
   bulkActions: (data) => api.post('/enterprise/bulk-actions', data).then((r) => r.data),
   addComment: (data) => api.post('/enterprise/comments', data).then((r) => r.data),
   listComments: (profileId) => api.get(`/enterprise/comments/${profileId}`).then((r) => r.data),
+  addExceptionComment: (data) => api.post('/enterprise/exceptions/comment', data).then((r) => r.data),
+  listExceptionComments: (exceptionId) => api.get(`/enterprise/exceptions/${exceptionId}/comments`).then((r) => r.data),
+  classifyException: (data) => api.post('/enterprise/exceptions/classify', data).then((r) => r.data),
+  resolveException: (data) => api.post('/enterprise/exceptions/resolve', data).then((r) => r.data),
+  escalateException: (data) => api.post('/enterprise/exceptions/escalate', data).then((r) => r.data),
+  reopenException: (data) => api.post('/enterprise/exceptions/reopen', data).then((r) => r.data),
   scheduleReport: (data) => api.post('/enterprise/reports/schedule', data).then((r) => r.data),
+  listReportSchedules: () => api.get('/enterprise/reports/schedule').then((r) => r.data),
+  listRetentionPolicies: () => api.get('/enterprise/retention/policies').then((r) => r.data),
+  listDependencies: (profileId) =>
+    api.get(`/enterprise/dependencies${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`).then((r) => r.data),
+  jobMetrics: () => api.get('/enterprise/metrics/jobs').then((r) => r.data),
 }

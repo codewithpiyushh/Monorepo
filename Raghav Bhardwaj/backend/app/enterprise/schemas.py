@@ -30,6 +30,8 @@ class ProfileCreate(BaseModel):
     assigned_certifier: Optional[int] = None
     risk_classification: str = "MEDIUM"
     due_days: int = 5
+    auto_approve_threshold: float = 1.0
+    materiality_limit: float = 0.0
 
 
 class ProfileUpdate(BaseModel):
@@ -46,6 +48,8 @@ class ProfileUpdate(BaseModel):
     assigned_certifier: Optional[int] = None
     risk_classification: Optional[str] = None
     due_days: Optional[int] = None
+    auto_approve_threshold: Optional[float] = None
+    materiality_limit: Optional[float] = None
     lifecycle_state: Optional[str] = None
     active: Optional[bool] = None
 
@@ -232,4 +236,30 @@ class ScheduleReportRequest(BaseModel):
     report_type: str
     cron_expression: str
     recipients: List[str]
+
+
+class RetentionPolicyRequest(BaseModel):
+    name: str
+    retention_days: int = 365
+    purge_after_days: int = 730
+    preserve_for_compliance: bool = True
+
+
+class EnterpriseSettingRequest(BaseModel):
+    category: str
+    key: str
+    value: Dict[str, Any]
+    description: Optional[str] = None
+
+
+class DependencyRequest(BaseModel):
+    parent_profile_id: int
+    child_profile_id: int
+    dependency_type: str = "close_process"
+    is_blocking: bool = True
+
+
+class ArchiveRequest(BaseModel):
+    profile_id: int
+    period_key: str
 
