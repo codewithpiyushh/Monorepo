@@ -105,7 +105,7 @@ export default function EnterpriseReconciliationCenter() {
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Enterprise Reconciliation Workspace"
+        title="Enterprise Reconciliation Workbench"
         subtitle="Premium control center with a queue-first operating model."
         badge={`${rows.length} profiles`}
         actions={(

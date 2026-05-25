@@ -24,7 +24,7 @@ export default function ReconciliationsHub() {
     { title: 'Reconciliation Profiles', to: '/reconciliation-profiles', icon: Workflow, count: profiles.length, unit: 'profiles' },
     { title: 'Close Calendar', to: '/close-calendar', icon: CalendarDays, count: schedules.length, unit: 'schedules' },
     { title: 'Rule Builder', to: '/rule-builder', icon: SlidersHorizontal, count: ruleDefs.length, unit: 'rules' },
-    { title: 'Analytics Explorer', to: '/reconciliation-analytics', icon: BarChart3, count: profiles.length, unit: 'drill-ready views' },
+    { title: 'Reconciliation Compliance', to: '/reconciliation-analytics', icon: BarChart3, count: profiles.length, unit: 'drill-ready views' },
   ]
 
   return (

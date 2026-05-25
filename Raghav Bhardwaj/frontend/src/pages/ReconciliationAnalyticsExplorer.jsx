@@ -1,10 +1,11 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { enterpriseAPI, executionsAPI, projectsAPI } from '../api'
+import { executionsAPI, projectsAPI } from '../api'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
+import { useProjectStore } from '../store/projectStore'
 
 function fmtCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(Number(amount || 0))
@@ -14,22 +15,79 @@ function fmtPct(value) {
   return `${Math.round(Number(value || 0))}%`
 }
 
+function decodeParam(value = '') {
+  if (!value) return ''
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function isMatchedStatus(status) {
   return ['MATCHED', 'RECONCILED', 'FINALIZED', 'APPROVED'].includes(String(status || '').toUpperCase())
 }
 
-function summarizeOwner(profile = {}) {
-  return [
-    profile.assigned_preparer ? `P:${profile.assigned_preparer}` : null,
-    profile.assigned_reviewer ? `R:${profile.assigned_reviewer}` : null,
-    profile.assigned_approver ? `A:${profile.assigned_approver}` : null,
-    profile.assigned_certifier ? `C:${profile.assigned_certifier}` : null,
-  ].filter(Boolean).join(' / ') || 'Unassigned'
+function rankedBarColors(length, palette) {
+  if (!length) return []
+  return Array.from({ length }, (_, idx) => {
+    const p = length === 1 ? 0 : idx / (length - 1)
+    const colorIdx = Math.round(p * (palette.length - 1))
+    return palette[colorIdx]
+  })
 }
 
-function globalFilter(rows, filters) {
+function flattenExecutionResults(executionResults) {
+  const rows = []
+
+  ;(executionResults?.units || []).forEach((unit, unitIndex) => {
+    ;(unit.transactions || []).forEach((transaction) => {
+      const status = String(transaction.match_status || '').toLowerCase()
+      const mismatch = status !== 'matched'
+      const discrepancyList = (() => {
+        if (!transaction.discrepancies) return []
+        try {
+          const parsed = typeof transaction.discrepancies === 'string' ? JSON.parse(transaction.discrepancies) : transaction.discrepancies
+          return Array.isArray(parsed) ? parsed : []
+        } catch {
+          return []
+        }
+      })()
+      const reference = transaction.selected_source_data?.reference
+        || transaction.selected_target_data?.reference
+        || `TXN-${String(transaction.id || 0).padStart(5, '0')}`
+      rows.push({
+        record_id: transaction.id || `${unit.entity || 'NA'}-${unit.account || 'NA'}-${unitIndex}`,
+        profile_id: unitIndex + 1,
+        entity: unit.entity || 'Unassigned',
+        account: unit.account || 'Unassigned',
+        period: 'Current',
+        owner: 'Project Workbench',
+        status: transaction.match_status || 'OPEN',
+        currency: 'USD',
+        risk: status === 'unmatched' ? 'HIGH' : status === 'partial' ? 'MEDIUM' : 'LOW',
+        evidence_count: 0,
+        reference,
+        exception_id: mismatch ? `EX-${transaction.id}` : null,
+        exception_classification: discrepancyList.length ? discrepancyList[0]?.source_column || 'Rule Mismatch' : (mismatch ? 'Unmatched Record' : 'No Exception'),
+        match_variance: mismatch ? Math.round((1 - Number(transaction.match_score || 0)) * 100) : 0,
+        amount: Number(transaction.selected_source_data?.amount || transaction.selected_target_data?.amount || 0),
+        profile: {},
+        selected_source_data: transaction.selected_source_data || {},
+        selected_target_data: transaction.selected_target_data || {},
+        discrepancies: discrepancyList,
+        execution_transaction_id: transaction.id,
+        unit_status: unit.status,
+      })
+    })
+  })
+
+  return rows
+}
+
+function buildGlobalFilter(rows, filters) {
   return rows.filter((row) => {
-    if (filters.period && String(row.period || '') !== filters.period) return false
+    if (filters.period && row.period !== filters.period) return false
     if (filters.entity && row.entity !== filters.entity) return false
     if (filters.account && row.account !== filters.account) return false
     if (filters.owner && row.owner !== filters.owner) return false
@@ -42,12 +100,10 @@ function globalFilter(rows, filters) {
 
 export default function ReconciliationAnalyticsExplorer() {
   const navigate = useNavigate()
-  const [selectedEntity, setSelectedEntity] = useState('')
-  const [selectedAccount, setSelectedAccount] = useState('')
-  const [selectedRecon, setSelectedRecon] = useState(null)
-  const [selectedExceptionType, setSelectedExceptionType] = useState('')
-  const [selectedTransaction, setSelectedTransaction] = useState(null)
-  const [selectedProjectId, setSelectedProjectId] = useState('')
+  const { entity: routeEntity = '', account: routeAccount = '' } = useParams()
+  const selectedEntity = decodeParam(routeEntity)
+  const selectedAccount = decodeParam(routeAccount)
+
   const [filters, setFilters] = useState({
     period: '',
     entity: '',
@@ -57,16 +113,19 @@ export default function ReconciliationAnalyticsExplorer() {
     currency: '',
     risk: '',
   })
+  const [selectedExceptionSlice, setSelectedExceptionSlice] = useState('')
+  const [selectedTransactionId, setSelectedTransactionId] = useState(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 12
 
-  const { data: enterpriseData, isLoading: enterpriseLoading } = useQuery({ queryKey: ['enterprise-analytics-explorer'], queryFn: enterpriseAPI.analyticsExplorer })
+  const { selectedProjectId, setSelectedProjectId } = useProjectStore()
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
 
   useEffect(() => {
     if (!selectedProjectId && projects.length) {
-      const preferred = projects.find((project) => String(project.name || '').toLowerCase() === 'test1') || projects[0]
-      setSelectedProjectId(String(preferred.id))
+      setSelectedProjectId(String(projects[0].id))
     }
-  }, [projects, selectedProjectId])
+  }, [projects, selectedProjectId, setSelectedProjectId])
 
   const { data: executions = [] } = useQuery({
     queryKey: ['analytics-executions', selectedProjectId],
@@ -74,7 +133,10 @@ export default function ReconciliationAnalyticsExplorer() {
     enabled: !!selectedProjectId,
   })
 
-  const latestExecution = useMemo(() => executions.find((row) => String(row.status || '').toLowerCase() === 'completed') || executions[0], [executions])
+  const latestExecution = useMemo(() =>
+    executions.find((row) => String(row.status || '').toLowerCase() === 'completed') || executions[0],
+    [executions],
+  )
 
   const { data: executionResults } = useQuery({
     queryKey: ['analytics-execution-results', selectedProjectId, latestExecution?.id],
@@ -82,142 +144,51 @@ export default function ReconciliationAnalyticsExplorer() {
     enabled: !!selectedProjectId && !!latestExecution?.id,
   })
 
-  const enterpriseTx = enterpriseData?.transactions || []
-  const mode = enterpriseTx.length ? 'enterprise' : 'project'
+  const rawTransactions = useMemo(() => flattenExecutionResults(executionResults), [executionResults])
+  const filteredTransactions = useMemo(() => buildGlobalFilter(rawTransactions, filters), [filters, rawTransactions])
 
-  const baseTx = useMemo(() => {
-    if (enterpriseTx.length) {
-      return enterpriseTx.map((row) => ({
-        record_id: row.record_id,
-        profile_id: row.profile_id,
-        entity: row.entity || 'Unassigned',
-        account: row.account || 'Unassigned',
-        period: row.period || 'Current',
-        owner: summarizeOwner(row.profile || {}),
-        status: row.status || 'OPEN',
-        currency: row.currency || 'USD',
-        risk: row.profile?.risk_classification || 'LOW',
-        evidence_count: Number(row.evidence_count || 0),
-        reference: row.reference || `TXN-${row.record_id}`,
-        exception_id: row.exception_id,
-        exception_status: row.exception_status,
-        exception_classification: row.exception_classification || 'No Exception',
-        match_variance: Number(row.match_variance || 0),
-        amount: Number(row.amount || 0),
-        profile: row.profile || {},
-      }))
-    }
+  const scopedTransactions = useMemo(() => filteredTransactions.filter((row) => {
+    if (selectedEntity && row.entity !== selectedEntity) return false
+    if (selectedAccount && row.account !== selectedAccount) return false
+    if (selectedExceptionSlice && row.exception_classification !== selectedExceptionSlice) return false
+    return true
+  }), [filteredTransactions, selectedEntity, selectedAccount, selectedExceptionSlice])
 
-    const rows = []
-    let seq = 1
-    ;(executionResults?.units || []).forEach((unit, unitIndex) => {
-      ;(unit.transactions || []).forEach((transaction) => {
-        const mismatch = String(transaction.match_status || '').toLowerCase() !== 'matched'
-        rows.push({
-          record_id: seq,
-          profile_id: unitIndex + 1,
-          entity: unit.entity || 'Unassigned',
-          account: unit.account || 'Unassigned',
-          period: 'Current',
-          owner: 'Project Workspace',
-          status: transaction.match_status || 'OPEN',
-          currency: 'USD',
-          risk: mismatch ? 'HIGH' : 'LOW',
-          evidence_count: 0,
-          reference: `TXN-${String(seq).padStart(3, '0')}`,
-          exception_id: mismatch ? `EX-${unitIndex + 1}-${seq}` : null,
-          exception_status: mismatch ? 'OPEN' : null,
-          exception_classification: mismatch ? 'Amount Mismatch' : 'No Exception',
-          match_variance: mismatch ? 100 : 0,
-          amount: Number(transaction.amount || 0),
-          profile: {},
-        })
-        seq += 1
-      })
-    })
-    return rows
-  }, [enterpriseTx, executionResults])
-
-  const periodOptions = useMemo(() => [...new Set(baseTx.map((row) => row.period).filter(Boolean))], [baseTx])
-  const entityOptions = useMemo(() => [...new Set(baseTx.map((row) => row.entity).filter(Boolean))], [baseTx])
-  const accountOptions = useMemo(() => [...new Set(baseTx.map((row) => row.account).filter(Boolean))], [baseTx])
-  const ownerOptions = useMemo(() => [...new Set(baseTx.map((row) => row.owner).filter(Boolean))], [baseTx])
-  const statusOptions = useMemo(() => [...new Set(baseTx.map((row) => String(row.status || '').toUpperCase()).filter(Boolean))], [baseTx])
-  const currencyOptions = useMemo(() => [...new Set(baseTx.map((row) => row.currency).filter(Boolean))], [baseTx])
-  const riskOptions = useMemo(() => [...new Set(baseTx.map((row) => String(row.risk || '').toUpperCase()).filter(Boolean))], [baseTx])
-
-  const filteredTx = useMemo(() => globalFilter(baseTx, filters), [baseTx, filters])
-
-  useEffect(() => {
-    if (selectedEntity && !filteredTx.some((row) => row.entity === selectedEntity)) {
-      setSelectedEntity('')
-      setSelectedAccount('')
-      setSelectedRecon(null)
-      setSelectedExceptionType('')
-      setSelectedTransaction(null)
-      return
-    }
-    if (selectedAccount && !filteredTx.some((row) => row.entity === selectedEntity && row.account === selectedAccount)) {
-      setSelectedAccount('')
-      setSelectedRecon(null)
-      setSelectedExceptionType('')
-      setSelectedTransaction(null)
-      return
-    }
-    if (selectedRecon && !filteredTx.some((row) => row.profile_id === selectedRecon.profileId)) {
-      setSelectedRecon(null)
-      setSelectedExceptionType('')
-      setSelectedTransaction(null)
-      return
-    }
-    if (selectedExceptionType && !filteredTx.some((row) => row.profile_id === selectedRecon?.profileId && row.exception_classification === selectedExceptionType)) {
-      setSelectedExceptionType('')
-      setSelectedTransaction(null)
-      return
-    }
-    if (selectedTransaction && !filteredTx.some((row) => row.record_id === selectedTransaction.record_id)) {
-      setSelectedTransaction(null)
-    }
-  }, [filteredTx, selectedAccount, selectedEntity, selectedExceptionType, selectedRecon, selectedTransaction])
-
-  const totals = useMemo(() => {
-    const reconIds = new Set(filteredTx.map((row) => row.profile_id))
-    const matchedRecon = new Set(filteredTx.filter((row) => isMatchedStatus(row.status)).map((row) => row.profile_id))
-    const exceptions = new Set(filteredTx.map((row) => row.exception_id).filter(Boolean))
-    return {
-      totalRecons: reconIds.size,
-      matched: matchedRecon.size,
-      exceptions: exceptions.size,
-      evidence: filteredTx.reduce((sum, row) => sum + Number(row.evidence_count || 0), 0),
-      matchRate: reconIds.size ? (matchedRecon.size / reconIds.size) * 100 : 0,
-    }
-  }, [filteredTx])
+  const selectedTransaction = useMemo(
+    () => scopedTransactions.find((row) => String(row.record_id) === String(selectedTransactionId)) || null,
+    [scopedTransactions, selectedTransactionId],
+  )
 
   const entityRows = useMemo(() => {
     const groups = new Map()
-    filteredTx.forEach((row) => {
-      const group = groups.get(row.entity) || { entity: row.entity, recons: new Set(), matched: new Set(), exceptions: new Set(), variance: 0, evidence: 0 }
-      group.recons.add(row.profile_id)
-      if (isMatchedStatus(row.status)) group.matched.add(row.profile_id)
+
+    scopedTransactions.forEach((row) => {
+      const group = groups.get(row.entity) || { entity: row.entity, total: 0, matched: 0, exceptions: new Set(), variance: 0 }
+      group.total += 1
+      if (isMatchedStatus(row.status)) group.matched += 1
       if (row.exception_id) group.exceptions.add(row.exception_id)
       group.variance += Math.abs(Number(row.match_variance || 0))
-      group.evidence += Number(row.evidence_count || 0)
       groups.set(row.entity, group)
     })
-    return Array.from(groups.values()).map((row) => ({
-      entity: row.entity,
-      totalRecons: row.recons.size,
-      matchRate: row.recons.size ? (row.matched.size / row.recons.size) * 100 : 0,
-      exceptions: row.exceptions.size,
-      variance: row.variance,
-      evidence: row.evidence,
-    })).sort((a, b) => (b.exceptions - a.exceptions) || (b.variance - a.variance) || a.entity.localeCompare(b.entity))
-  }, [filteredTx])
+
+    return Array.from(groups.values())
+      .map((row) => ({
+        entity: row.entity,
+        total: row.total,
+        matched: row.matched,
+        exceptions: row.exceptions.size,
+        variance: row.variance,
+        matchRate: row.total ? (row.matched / row.total) * 100 : 0,
+      }))
+      .sort((a, b) => (b.exceptions - a.exceptions) || (b.variance - a.variance) || a.entity.localeCompare(b.entity))
+  }, [scopedTransactions])
 
   const accountRows = useMemo(() => {
     if (!selectedEntity) return []
+
     const groups = new Map()
-    filteredTx.filter((row) => row.entity === selectedEntity).forEach((row) => {
+
+    scopedTransactions.forEach((row) => {
       const group = groups.get(row.account) || { account: row.account, total: 0, matched: 0, exceptions: new Set(), variance: 0 }
       group.total += 1
       if (isMatchedStatus(row.status)) group.matched += 1
@@ -225,87 +196,177 @@ export default function ReconciliationAnalyticsExplorer() {
       group.variance += Math.abs(Number(row.match_variance || 0))
       groups.set(row.account, group)
     })
-    return Array.from(groups.values()).map((row) => ({
-      account: row.account,
-      matchRate: row.total ? (row.matched / row.total) * 100 : 0,
-      exceptions: row.exceptions.size,
-      variance: row.variance,
-    })).sort((a, b) => (b.exceptions - a.exceptions) || (b.variance - a.variance) || a.account.localeCompare(b.account))
-  }, [filteredTx, selectedEntity])
 
-  const reconRows = useMemo(() => {
-    if (!selectedEntity || !selectedAccount) return []
+    return Array.from(groups.values())
+      .map((row) => ({
+        account: row.account,
+        total: row.total,
+        matched: row.matched,
+        exceptions: row.exceptions.size,
+        variance: row.variance,
+        matchRate: row.total ? (row.matched / row.total) * 100 : 0,
+      }))
+      .sort((a, b) => (b.exceptions - a.exceptions) || (b.variance - a.variance) || a.account.localeCompare(b.account))
+  }, [scopedTransactions, selectedEntity])
+
+  const exceptionBreakdown = useMemo(() => {
     const groups = new Map()
-    filteredTx.filter((row) => row.entity === selectedEntity && row.account === selectedAccount).forEach((row) => {
-      const group = groups.get(row.profile_id) || { profileId: row.profile_id, total: 0, matched: 0, exceptions: new Set(), status: row.profile?.lifecycle_state || row.status }
-      group.total += 1
-      if (isMatchedStatus(row.status)) group.matched += 1
-      if (row.exception_id) group.exceptions.add(row.exception_id)
-      groups.set(row.profile_id, group)
-    })
-    return Array.from(groups.values()).map((row) => ({
-      profileId: row.profileId,
-      reconId: `Recon-${String(row.profileId).padStart(3, '0')}`,
-      matchRate: row.total ? (row.matched / row.total) * 100 : 0,
-      exceptions: row.exceptions.size,
-      status: row.status,
-    })).sort((a, b) => (b.exceptions - a.exceptions) || a.reconId.localeCompare(b.reconId))
-  }, [filteredTx, selectedAccount, selectedEntity])
 
-  const exceptionRows = useMemo(() => {
-    if (!selectedRecon?.profileId) return []
-    const groups = new Map()
-    filteredTx.filter((row) => row.profile_id === selectedRecon.profileId && row.exception_id).forEach((row) => {
-      const key = row.exception_classification || 'Exception'
-      const group = groups.get(key) || { exceptionType: key, count: 0, variance: 0 }
-      group.count += 1
-      group.variance += Math.abs(Number(row.match_variance || 0))
-      groups.set(key, group)
-    })
-    return Array.from(groups.values()).sort((a, b) => (b.count - a.count) || (b.variance - a.variance))
-  }, [filteredTx, selectedRecon])
+    scopedTransactions
+      .filter((row) => row.exception_id)
+      .forEach((row) => {
+        const item = groups.get(row.exception_classification) || { label: row.exception_classification, count: 0 }
+        item.count += 1
+        groups.set(row.exception_classification, item)
+      })
 
-  const transactionRows = useMemo(() => {
-    if (!selectedRecon?.profileId || !selectedExceptionType) return []
-    return filteredTx.filter((row) => row.profile_id === selectedRecon.profileId && row.exception_classification === selectedExceptionType)
-  }, [filteredTx, selectedExceptionType, selectedRecon])
+    return Array.from(groups.values()).sort((a, b) => b.count - a.count)
+  }, [scopedTransactions])
 
-  const { data: evidenceRows = [], isLoading: evidenceLoading } = useQuery({
-    queryKey: ['analytics-evidence', selectedTransaction?.record_id],
-    queryFn: () => enterpriseAPI.listAttachments(selectedTransaction.record_id),
-    enabled: !!selectedTransaction?.record_id && mode === 'enterprise',
-  })
+  const totals = useMemo(() => {
+    const recons = new Set(scopedTransactions.map((row) => row.profile_id))
+    const matched = new Set(scopedTransactions.filter((row) => isMatchedStatus(row.status)).map((row) => row.profile_id))
+    const exceptions = new Set(scopedTransactions.map((row) => row.exception_id).filter(Boolean))
+
+    return {
+      totalRecons: recons.size,
+      matched: matched.size,
+      exceptions: exceptions.size,
+      evidence: scopedTransactions.reduce((sum, row) => sum + Number(row.evidence_count || 0), 0),
+      matchRate: recons.size ? (matched.size / recons.size) * 100 : 0,
+    }
+  }, [scopedTransactions])
+
+  const goOverview = () => {
+    setFilters((state) => ({ ...state, entity: '', account: '' }))
+    setSelectedExceptionSlice('')
+    setSelectedTransactionId(null)
+    navigate('/analytics-explorer')
+  }
+
+  const goEntity = (entity) => {
+    setFilters((state) => ({ ...state, entity, account: '' }))
+    setSelectedExceptionSlice('')
+    setSelectedTransactionId(null)
+    navigate(`/analytics-explorer/${encodeURIComponent(entity)}`)
+  }
+
+  const goAccount = (entity, account) => {
+    setFilters((state) => ({ ...state, entity, account }))
+    setSelectedExceptionSlice('')
+    setSelectedTransactionId(null)
+    navigate(`/analytics-explorer/${encodeURIComponent(entity)}/${encodeURIComponent(account)}`)
+  }
+
+  const currentDepth = selectedAccount ? 'account' : selectedEntity ? 'entity' : 'overview'
+
+  useEffect(() => {
+    setPage(1)
+  }, [currentDepth, selectedEntity, selectedAccount, selectedExceptionSlice, filters, selectedProjectId])
+
+  const pagedRows = useMemo(() => {
+    const rows = currentDepth === 'overview' ? entityRows : currentDepth === 'entity' ? accountRows : scopedTransactions
+    const total = rows.length
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+    const safePage = Math.min(page, totalPages)
+    const start = (safePage - 1) * PAGE_SIZE
+    return {
+      rows: rows.slice(start, start + PAGE_SIZE),
+      total,
+      totalPages,
+      safePage,
+      start,
+    }
+  }, [currentDepth, entityRows, accountRows, scopedTransactions, page])
 
   const breadcrumbItems = [
-    { label: 'Executive Summary', active: !selectedEntity, onClick: () => { setSelectedEntity(''); setSelectedAccount(''); setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) } },
-    selectedEntity ? { label: selectedEntity, active: !selectedAccount, onClick: () => { setSelectedAccount(''); setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) } } : null,
-    selectedAccount ? { label: selectedAccount, active: !selectedRecon, onClick: () => { setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) } } : null,
-    selectedRecon ? { label: selectedRecon.reconId, active: !selectedExceptionType, onClick: () => { setSelectedExceptionType(''); setSelectedTransaction(null) } } : null,
-    selectedExceptionType ? { label: selectedExceptionType, active: !selectedTransaction, onClick: () => { setSelectedTransaction(null) } } : null,
-    selectedTransaction ? { label: selectedTransaction.reference || `TXN-${selectedTransaction.record_id}`, active: true, onClick: () => {} } : null,
-  ].filter(Boolean)
+    { label: 'Overview', active: currentDepth === 'overview', onClick: goOverview },
+    ...(selectedEntity ? [{ label: selectedEntity, active: currentDepth === 'entity', onClick: () => goEntity(selectedEntity) }] : []),
+    ...(selectedAccount ? [{ label: selectedAccount, active: currentDepth === 'account', onClick: () => goAccount(selectedEntity, selectedAccount) }] : []),
+    ...(selectedExceptionSlice ? [{ label: selectedExceptionSlice, active: true, onClick: () => setSelectedExceptionSlice('') }] : []),
+  ]
 
-  const exceptionByEntityOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: entityRows.map((row) => row.entity), axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-    series: [{ type: 'bar', data: entityRows.map((row) => row.exceptions), itemStyle: { color: '#4f9cf9' }, barMaxWidth: 30 }],
+  const entityChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { top: 20, right: 12, bottom: 40, left: 92 },
+    xAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
+    yAxis: { type: 'category', data: entityRows.map((row) => row.entity), axisLabel: { color: '#94a3b8' } },
+    series: [{
+      type: 'bar',
+      data: entityRows.map((row) => row.exceptions),
+      itemStyle: {
+        color: (params) =>
+          rankedBarColors(entityRows.length, ['#1e3a8a', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'])[params.dataIndex],
+      },
+      label: { show: true, color: '#e2e8f0' },
+      emphasis: { itemStyle: { opacity: 0.9 } },
+    }],
   }), [entityRows])
 
-  const varianceByEntityOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: entityRows.map((row) => row.entity), axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-    series: [{ type: 'line', smooth: true, data: entityRows.map((row) => Number(row.variance.toFixed(0))), lineStyle: { color: '#ef4444', width: 3 }, itemStyle: { color: '#ef4444' } }],
-  }), [entityRows])
+  const accountChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { top: 20, right: 12, bottom: 40, left: 92 },
+    xAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
+    yAxis: { type: 'category', data: accountRows.map((row) => row.account), axisLabel: { color: '#94a3b8' } },
+    series: [{
+      type: 'bar',
+      data: accountRows.map((row) => row.exceptions),
+      itemStyle: {
+        color: (params) =>
+          rankedBarColors(accountRows.length, ['#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4'])[params.dataIndex],
+      },
+      label: { show: true, color: '#e2e8f0' },
+      emphasis: { itemStyle: { opacity: 0.9 } },
+    }],
+  }), [accountRows])
 
-  const isLoading = enterpriseLoading || (mode === 'project' && !!selectedProjectId && !executionResults)
+  const exceptionChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { top: 20, right: 12, bottom: 40, left: 140 },
+    xAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
+    yAxis: { type: 'category', data: exceptionBreakdown.map((row) => row.label), axisLabel: { color: '#94a3b8' } },
+    series: [{
+      type: 'bar',
+      data: exceptionBreakdown.map((row) => row.count),
+      itemStyle: {
+        color: (params) =>
+          rankedBarColors(exceptionBreakdown.length, ['#9a3412', '#c2410c', '#ea580c', '#f97316', '#fb923c', '#fdba74'])[params.dataIndex],
+      },
+      label: { show: true, color: '#e2e8f0' },
+      emphasis: { itemStyle: { opacity: 0.9 } },
+    }],
+  }), [exceptionBreakdown])
+
+  const chartOption = currentDepth === 'account' ? exceptionChartOption : currentDepth === 'entity' ? accountChartOption : entityChartOption
+
+  const chartEvents = currentDepth === 'account'
+    ? {
+        click: (params) => {
+          if (!params?.name) return
+          setSelectedExceptionSlice((state) => (state === params.name ? '' : params.name))
+        },
+      }
+    : currentDepth === 'entity'
+      ? {
+          click: (params) => {
+            if (!params?.name) return
+            goAccount(selectedEntity, params.name)
+          },
+        }
+      : {
+          click: (params) => {
+            if (!params?.name) return
+            goEntity(params.name)
+          },
+        }
+
+  const isLoading = !!selectedProjectId && !executionResults
 
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Reconciliation Analytics Explorer"
-        subtitle={`Executive summary to evidence drilldown in ${mode} mode with filterable slicing.`}
+        title={currentDepth === 'overview' ? 'Reconciliation Compliance' : `Analytics Drilldown - ${selectedEntity}`}
+        subtitle="Click graph bars to drill down and slice data by level (Entity -> Account -> Exception Type -> Transactions)."
         badge={`${totals.totalRecons} reconciliations`}
         actions={
           <div className="flex items-center gap-2">
@@ -316,193 +377,290 @@ export default function ReconciliationAnalyticsExplorer() {
       />
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
-        {mode === 'project' ? (
-          <div className="card p-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-400">Project Source</span>
-            <select className="input max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-              {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name}</option>)}
-            </select>
-            <span className="text-xs text-slate-500">Using latest execution results for drilldown</span>
-          </div>
-        ) : null}
-
-        <div className="card p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
-          <select className="input" value={filters.period} onChange={(e) => setFilters((state) => ({ ...state, period: e.target.value }))}>
-            <option value="">Period: All</option>
-            {periodOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+        <div className="card p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400">Project Source</span>
+          <select className="input max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+            {projects.map((project) => (
+              <option key={project.id} value={String(project.id)}>{project.name}</option>
+            ))}
           </select>
-          <select className="input" value={filters.entity} onChange={(e) => setFilters((state) => ({ ...state, entity: e.target.value }))}>
-            <option value="">Entity: All</option>
-            {entityOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="input" value={filters.account} onChange={(e) => setFilters((state) => ({ ...state, account: e.target.value }))}>
-            <option value="">Account: All</option>
-            {accountOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="input" value={filters.owner} onChange={(e) => setFilters((state) => ({ ...state, owner: e.target.value }))}>
-            <option value="">Owner: All</option>
-            {ownerOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="input" value={filters.status} onChange={(e) => setFilters((state) => ({ ...state, status: e.target.value }))}>
-            <option value="">Status: All</option>
-            {statusOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="input" value={filters.currency} onChange={(e) => setFilters((state) => ({ ...state, currency: e.target.value }))}>
-            <option value="">Currency: All</option>
-            {currencyOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="input" value={filters.risk} onChange={(e) => setFilters((state) => ({ ...state, risk: e.target.value }))}>
-            <option value="">Risk: All</option>
-            {riskOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
+          <span className="text-xs text-slate-500">Graph clicks drive drilldown and replace the current view.</span>
         </div>
 
         {breadcrumbItems.length ? (
           <div className="card p-3 flex flex-wrap items-center gap-2 text-sm">
             {breadcrumbItems.map((item, index) => (
               <div key={item.label} className="flex items-center gap-2">
-                <button className={`px-2 py-1 rounded-lg ${item.active ? 'bg-brand-900/30 text-brand-200 border border-brand-700/40' : 'bg-surface-900/40 text-slate-300 border border-surface-700'}`} onClick={item.onClick}>{item.label}</button>
+                <button
+                  className={`px-2 py-1 rounded-lg ${item.active ? 'bg-brand-900/30 text-brand-200 border border-brand-700/40' : 'bg-surface-900/40 text-slate-300 border border-surface-700'}`}
+                  onClick={item.onClick}
+                >
+                  {item.label}
+                </button>
                 {index < breadcrumbItems.length - 1 ? <span className="text-slate-500">/</span> : null}
               </div>
             ))}
           </div>
         ) : null}
 
-        {isLoading ? <LoadingState label="Loading analytics..." /> : null}
-        {!isLoading && !filteredTx.length ? <EmptyState title="No analytics data" description="No records match the current slice. Reset filters or load transactions." /> : null}
+        <div className="card p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-2">
+          <select className="input" value={filters.period} onChange={(e) => setFilters((state) => ({ ...state, period: e.target.value }))}>
+            <option value="">Period: All</option>
+            {[...new Set(rawTransactions.map((row) => row.period).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.entity} onChange={(e) => setFilters((state) => ({ ...state, entity: e.target.value }))}>
+            <option value="">Entity: All</option>
+            {[...new Set(rawTransactions.map((row) => row.entity).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.account} onChange={(e) => setFilters((state) => ({ ...state, account: e.target.value }))}>
+            <option value="">Account: All</option>
+            {[...new Set(rawTransactions.map((row) => row.account).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.owner} onChange={(e) => setFilters((state) => ({ ...state, owner: e.target.value }))}>
+            <option value="">Owner: All</option>
+            {[...new Set(rawTransactions.map((row) => row.owner).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.status} onChange={(e) => setFilters((state) => ({ ...state, status: e.target.value }))}>
+            <option value="">Status: All</option>
+            {[...new Set(rawTransactions.map((row) => String(row.status || '').toUpperCase()).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.currency} onChange={(e) => setFilters((state) => ({ ...state, currency: e.target.value }))}>
+            <option value="">Currency: All</option>
+            {[...new Set(rawTransactions.map((row) => row.currency).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <select className="input" value={filters.risk} onChange={(e) => setFilters((state) => ({ ...state, risk: e.target.value }))}>
+            <option value="">Risk: All</option>
+            {[...new Set(rawTransactions.map((row) => String(row.risk || '').toUpperCase()).filter(Boolean))].map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
 
-        {!isLoading && filteredTx.length ? (
+        {isLoading ? <LoadingState label="Loading analytics..." /> : null}
+        {!isLoading && !scopedTransactions.length ? <EmptyState title="No analytics data" description="Adjust filters or select another project to view metrics." /> : null}
+
+        {!isLoading && scopedTransactions.length ? (
           <>
             <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-              <button className="oracle-kpi p-3 text-left" onClick={() => { setSelectedEntity(''); setSelectedAccount(''); setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) }}><p className="text-xs text-slate-400">Total Reconciliations</p><p className="text-lg font-semibold text-slate-100">{totals.totalRecons}</p></button>
-              <button className="oracle-kpi p-3 text-left"><p className="text-xs text-slate-400">Matched</p><p className="text-lg font-semibold text-slate-100">{totals.matched}</p></button>
-              <button className="oracle-kpi p-3 text-left" onClick={() => navigate('/exception-ops')}><p className="text-xs text-slate-400">Exceptions</p><p className="text-lg font-semibold text-slate-100">{totals.exceptions}</p></button>
-              <button className="oracle-kpi p-3 text-left"><p className="text-xs text-slate-400">Evidence Count</p><p className="text-lg font-semibold text-slate-100">{totals.evidence}</p></button>
-              <button className="oracle-kpi p-3 text-left"><p className="text-xs text-slate-400">Match Rate</p><p className="text-lg font-semibold text-slate-100">{fmtPct(totals.matchRate)}</p></button>
+              <div className="oracle-kpi p-3 text-left">
+                <p className="text-xs text-slate-400">Total Reconciliations</p>
+                <p className="text-lg font-semibold text-slate-100">{totals.totalRecons}</p>
+              </div>
+              <div className="oracle-kpi p-3 text-left">
+                <p className="text-xs text-slate-400">Matched</p>
+                <p className="text-lg font-semibold text-slate-100">{totals.matched}</p>
+              </div>
+              <div className="oracle-kpi p-3 text-left">
+                <p className="text-xs text-slate-400">Exceptions</p>
+                <p className="text-lg font-semibold text-slate-100">{totals.exceptions}</p>
+              </div>
+              <div className="oracle-kpi p-3 text-left">
+                <p className="text-xs text-slate-400">Evidence Count</p>
+                <p className="text-lg font-semibold text-slate-100">{totals.evidence}</p>
+              </div>
+              <div className="oracle-kpi p-3 text-left">
+                <p className="text-xs text-slate-400">Match Rate</p>
+                <p className="text-lg font-semibold text-slate-100">{fmtPct(totals.matchRate)}</p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Exceptions by Entity</p><ReactECharts style={{ height: 280 }} option={exceptionByEntityOption} /></div>
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Variance by Entity</p><ReactECharts style={{ height: 280 }} option={varianceByEntityOption} /></div>
+              <div className="card p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">{currentDepth === 'overview' ? 'Exceptions by Entity' : currentDepth === 'entity' ? 'Accounts for Selected Entity' : 'Exception Type Slice for Selected Account'}</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {currentDepth === 'overview' ? 'Click any entity bar to drill into that entity.' : currentDepth === 'entity' ? 'Click any account bar to open the next level.' : 'Click an exception bar to slice transactions below. Click again to clear.'}
+                    </p>
+                  </div>
+                  {currentDepth === 'account' && selectedExceptionSlice ? <button className="btn-secondary" onClick={() => setSelectedExceptionSlice('')}>Clear Slice</button> : null}
+                  {currentDepth === 'entity' ? <button className="btn-secondary" onClick={goOverview}>Back to overview</button> : null}
+                  {currentDepth === 'account' ? <button className="btn-secondary" onClick={() => goEntity(selectedEntity)}>Back to entity</button> : null}
+                </div>
+                <ReactECharts
+                  style={{ height: 300 }}
+                  option={chartOption}
+                  onEvents={chartEvents}
+                />
+              </div>
+
+              <div className="card p-4">
+                <p className="text-sm font-semibold text-slate-100 mb-3">Summary</p>
+                <div className="space-y-3">
+                  <div className="oracle-kpi p-3">
+                    <p className="text-xs text-slate-400">Current View</p>
+                    <p className="text-sm font-semibold text-slate-100 capitalize">{currentDepth}</p>
+                  </div>
+                  <div className="oracle-kpi p-3">
+                    <p className="text-xs text-slate-400">Selected Entity</p>
+                    <p className="text-sm font-semibold text-slate-100">{selectedEntity || 'All entities'}</p>
+                  </div>
+                  <div className="oracle-kpi p-3">
+                    <p className="text-xs text-slate-400">Selected Account</p>
+                    <p className="text-sm font-semibold text-slate-100">{selectedAccount || 'All accounts'}</p>
+                  </div>
+                  <div className="oracle-kpi p-3">
+                    <p className="text-xs text-slate-400">Exception Slice</p>
+                    <p className="text-sm font-semibold text-slate-100">{selectedExceptionSlice || 'All exception types'}</p>
+                  </div>
+                  <div className="oracle-kpi p-3">
+                    <p className="text-xs text-slate-400">Selected Transaction</p>
+                    <p className="text-sm font-semibold text-slate-100">{selectedTransaction?.reference || 'None selected'}</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="card p-4 overflow-auto">
-              <p className="text-sm font-semibold text-slate-100 mb-3">Level 1-2: Executive Summary to Entity</p>
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-slate-400 border-b border-surface-700"><th className="p-2">Entity</th><th className="p-2">Reconciliations</th><th className="p-2">Match Rate</th><th className="p-2">Exceptions</th><th className="p-2">Variance</th><th className="p-2">Evidence</th></tr></thead>
-                <tbody>
-                  {entityRows.map((row) => (
-                    <tr key={row.entity} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => { setSelectedEntity(row.entity); setSelectedAccount(''); setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) }}>
-                      <td className="p-2 text-slate-100">{row.entity}</td>
-                      <td className="p-2 text-slate-300">{row.totalRecons}</td>
-                      <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
-                      <td className="p-2 text-slate-300">{row.exceptions}</td>
-                      <td className="p-2 text-slate-300">{fmtCurrency(row.variance, 'INR')}</td>
-                      <td className="p-2 text-slate-300">{row.evidence}</td>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">
+                    {currentDepth === 'overview' ? 'Entity Summary' : currentDepth === 'entity' ? `Accounts for ${selectedEntity}` : `Transactions for ${selectedEntity} / ${selectedAccount}${selectedExceptionSlice ? ` / ${selectedExceptionSlice}` : ''}`}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">The table updates to match the current drilldown level.</p>
+                </div>
+                {selectedEntity ? <button className="btn-secondary" onClick={goOverview}>Reset</button> : null}
+              </div>
+
+              {currentDepth === 'overview' ? (
+                <div className="max-h-[520px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-surface-700">
+                      <th className="p-2">Entity</th>
+                      <th className="p-2">Reconciliations</th>
+                      <th className="p-2">Match Rate</th>
+                      <th className="p-2">Exceptions</th>
+                      <th className="p-2">Variance</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {selectedEntity ? (
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Level 3: Account Type ({selectedEntity})</p>
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-slate-400 border-b border-surface-700"><th className="p-2">Account</th><th className="p-2">Match Rate</th><th className="p-2">Exceptions</th><th className="p-2">Variance</th></tr></thead>
+                  </thead>
                   <tbody>
-                    {accountRows.map((row) => (
-                      <tr key={row.account} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => { setSelectedAccount(row.account); setSelectedRecon(null); setSelectedExceptionType(''); setSelectedTransaction(null) }}>
+                    {pagedRows.rows.map((row) => (
+                      <tr key={row.entity} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => goEntity(row.entity)}>
+                        <td className="p-2 text-slate-100">{row.entity}</td>
+                        <td className="p-2 text-slate-300">{row.total}</td>
+                        <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
+                        <td className="p-2 text-slate-300">{row.exceptions}</td>
+                        <td className="p-2 text-slate-300">{fmtCurrency(row.variance, 'USD')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                </div>
+              ) : currentDepth === 'entity' ? (
+                <div className="max-h-[520px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-surface-700">
+                      <th className="p-2">Account</th>
+                      <th className="p-2">Transactions</th>
+                      <th className="p-2">Match Rate</th>
+                      <th className="p-2">Exceptions</th>
+                      <th className="p-2">Variance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.rows.map((row) => (
+                      <tr key={row.account} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => goAccount(selectedEntity, row.account)}>
                         <td className="p-2 text-slate-100">{row.account}</td>
+                        <td className="p-2 text-slate-300">{row.total}</td>
                         <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
                         <td className="p-2 text-slate-300">{row.exceptions}</td>
-                        <td className="p-2 text-slate-300">{fmtCurrency(row.variance, 'INR')}</td>
+                        <td className="p-2 text-slate-300">{fmtCurrency(row.variance, 'USD')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ) : null}
-
-            {selectedAccount ? (
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Level 4: Reconciliation ({selectedAccount})</p>
+                </div>
+              ) : (
+                <div className="max-h-[520px] overflow-auto">
                 <table className="w-full text-sm">
-                  <thead><tr className="text-left text-slate-400 border-b border-surface-700"><th className="p-2">Reconciliation</th><th className="p-2">Status</th><th className="p-2">Match Rate</th><th className="p-2">Exceptions</th></tr></thead>
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-surface-700">
+                      <th className="p-2">Reference</th>
+                      <th className="p-2">Status</th>
+                      <th className="p-2">Risk</th>
+                      <th className="p-2">Exception</th>
+                      <th className="p-2">Amount</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {reconRows.map((row) => (
-                      <tr key={row.reconId} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => { setSelectedRecon(row); setSelectedExceptionType(''); setSelectedTransaction(null) }}>
-                        <td className="p-2 text-slate-100">{row.reconId}</td>
-                        <td className="p-2 text-slate-300">{row.status}</td>
-                        <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
-                        <td className="p-2 text-slate-300">{row.exceptions}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            {selectedRecon ? (
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Level 5: Exception ({selectedRecon.reconId})</p>
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-slate-400 border-b border-surface-700"><th className="p-2">Exception Type</th><th className="p-2">Count</th><th className="p-2">Variance</th></tr></thead>
-                  <tbody>
-                    {exceptionRows.map((row) => (
-                      <tr key={row.exceptionType} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => { setSelectedExceptionType(row.exceptionType); setSelectedTransaction(null) }}>
-                        <td className="p-2 text-slate-100">{row.exceptionType}</td>
-                        <td className="p-2 text-slate-300">{row.count}</td>
-                        <td className="p-2 text-slate-300">{fmtCurrency(row.variance, 'INR')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            {selectedExceptionType ? (
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Level 6: Transaction ({selectedExceptionType})</p>
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-slate-400 border-b border-surface-700"><th className="p-2">Reference</th><th className="p-2">Owner</th><th className="p-2">Currency</th><th className="p-2">Variance</th><th className="p-2">Evidence</th><th className="p-2">Action</th></tr></thead>
-                  <tbody>
-                    {transactionRows.map((row) => (
-                      <tr key={row.record_id} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => setSelectedTransaction(row)}>
+                    {pagedRows.rows.map((row) => (
+                      <tr
+                        key={row.record_id}
+                        className={`border-b border-surface-800 cursor-pointer ${String(selectedTransactionId) === String(row.record_id) ? 'bg-brand-900/20' : ''}`}
+                        onClick={() => setSelectedTransactionId(row.record_id)}
+                      >
                         <td className="p-2 text-slate-100">{row.reference}</td>
-                        <td className="p-2 text-slate-300">{row.owner}</td>
-                        <td className="p-2 text-slate-300">{row.currency}</td>
-                        <td className="p-2 text-slate-300">{fmtCurrency(row.match_variance, 'INR')}</td>
-                        <td className="p-2 text-slate-300">{row.evidence_count}</td>
-                        <td className="p-2"><button className="btn-secondary text-xs" onClick={(event) => { event.stopPropagation(); navigate(`/exception-investigation/${row.exception_id}`) }}>Investigate</button></td>
+                        <td className="p-2 text-slate-300">{row.status}</td>
+                        <td className="p-2 text-slate-300">{row.risk}</td>
+                        <td className="p-2 text-slate-300">{row.exception_classification}</td>
+                        <td className="p-2 text-slate-300">{fmtCurrency(row.amount, 'USD')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-400">
+                <span>
+                  Showing {pagedRows.total ? pagedRows.start + 1 : 0}-{Math.min(pagedRows.start + PAGE_SIZE, pagedRows.total)} of {pagedRows.total}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button className="btn-secondary px-3 py-1.5" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pagedRows.safePage <= 1}>Prev</button>
+                  <span>Page {pagedRows.safePage} / {pagedRows.totalPages}</span>
+                  <button className="btn-secondary px-3 py-1.5" onClick={() => setPage((p) => Math.min(pagedRows.totalPages, p + 1))} disabled={pagedRows.safePage >= pagedRows.totalPages}>Next</button>
+                </div>
               </div>
-            ) : null}
-
-            {selectedTransaction ? (
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Level 7: Evidence ({selectedTransaction.reference})</p>
-                {mode !== 'enterprise' ? <p className="text-sm text-slate-400">Evidence drilldown is available in enterprise mode once attachments are uploaded.</p> : null}
-                {mode === 'enterprise' && evidenceLoading ? <p className="text-sm text-slate-400">Loading evidence...</p> : null}
-                {mode === 'enterprise' && !evidenceLoading && !evidenceRows.length ? <p className="text-sm text-slate-400">No evidence uploaded for this transaction yet.</p> : null}
-                {mode === 'enterprise' && !evidenceLoading && evidenceRows.length ? (
-                  <div className="space-y-2">
-                    {evidenceRows.map((row) => (
-                      <div key={row.id} className="rounded-xl border border-surface-700 bg-surface-900/40 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-slate-100">{row.document_name}</p>
-                            <p className="mt-1 text-xs text-slate-400">{row.document_type} · {row.document_status} · Version {row.version}</p>
-                          </div>
-                          <span className="text-xs text-slate-500">{row.document_path || 'Uploaded file'}</span>
-                        </div>
-                      </div>
-                    ))}
+            </div>
+            {currentDepth === 'account' && selectedTransaction ? (
+              <div className="card p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">Transaction Root Cause</p>
+                    <p className="text-xs text-slate-400 mt-1">Trace summary metrics to field-level differences and action points.</p>
                   </div>
-                ) : null}
+                  <button className="btn-secondary" onClick={() => navigate(`/projects/${selectedProjectId}/results`)}>Open Workbench</button>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-surface-700 p-3">
+                    <p className="text-xs text-slate-400 mb-2">Source Data</p>
+                    <pre className="text-xs text-slate-200 whitespace-pre-wrap">{JSON.stringify(selectedTransaction.selected_source_data || {}, null, 2)}</pre>
+                  </div>
+                  <div className="rounded-xl border border-surface-700 p-3">
+                    <p className="text-xs text-slate-400 mb-2">Target Data</p>
+                    <pre className="text-xs text-slate-200 whitespace-pre-wrap">{JSON.stringify(selectedTransaction.selected_target_data || {}, null, 2)}</pre>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-xs text-slate-400 mb-2">Discrepancies</p>
+                  {!selectedTransaction.discrepancies?.length ? (
+                    <p className="text-sm text-slate-300">No explicit field discrepancies captured for this row.</p>
+                  ) : (
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-slate-400 border-b border-surface-700">
+                            <th className="p-2">Field</th>
+                            <th className="p-2">Source</th>
+                            <th className="p-2">Target</th>
+                            <th className="p-2">Rule</th>
+                            <th className="p-2">Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedTransaction.discrepancies.map((d, idx) => (
+                            <tr key={`${d.source_column || 'field'}-${idx}`} className="border-b border-surface-800">
+                              <td className="p-2 text-slate-200">{d.source_column || '-'}</td>
+                              <td className="p-2 text-slate-300">{String(d.source_value ?? '-')}</td>
+                              <td className="p-2 text-slate-300">{String(d.target_value ?? '-')}</td>
+                              <td className="p-2 text-slate-300">{d.rule_type || '-'}</td>
+                              <td className="p-2 text-slate-300">{typeof d.score === 'number' ? d.score.toFixed(3) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : null}
           </>

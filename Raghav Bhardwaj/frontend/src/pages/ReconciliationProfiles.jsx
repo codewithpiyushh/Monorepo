@@ -33,8 +33,10 @@ export default function ReconciliationProfiles() {
     due_date: '',
   })
   const [certForm, setCertForm] = useState({ workflow_id: '', action: 'PREPARE', comments: '' })
+  const [selectedTemplateType, setSelectedTemplateType] = useState('')
 
   const { data: profiles = [] } = useQuery({ queryKey: ['enterprise-profiles'], queryFn: enterpriseAPI.listProfiles })
+  const { data: templates = [] } = useQuery({ queryKey: ['reconciliation-templates'], queryFn: enterpriseAPI.listReconciliationTemplates })
   const { data: calendars = [] } = useQuery({
     queryKey: ['enterprise-close-calendar', selectedProfile],
     queryFn: () => enterpriseAPI.listCloseCalendar(selectedProfile || undefined),
@@ -133,6 +135,23 @@ export default function ReconciliationProfiles() {
     }
   }
 
+  const applyTemplate = () => {
+    const t = templates.find((row) => row.template_type === selectedTemplateType)
+    if (!t) return
+    const templateThresholds = t.thresholds || {}
+    const inferredTolerance = Number(templateThresholds.tolerance ?? form.tolerance_threshold ?? 0) || 0
+    const inferredDateWindow = Number(templateThresholds.date_window_days ?? form.date_window_days ?? 0) || 0
+    setForm((state) => ({
+      ...state,
+      reconciliation_type: t.template_type,
+      tolerance_threshold: inferredTolerance,
+      date_window_days: inferredDateWindow,
+      matching_rules: JSON.stringify({ template: t.name, conditions: t.conditions || {}, thresholds: t.thresholds || {} }, null, 2),
+      workflow_config: JSON.stringify({ requires_reviewer: true, template_type: t.template_type }, null, 2),
+    }))
+    toast.success(`Template applied: ${t.name}`)
+  }
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
@@ -144,8 +163,25 @@ export default function ReconciliationProfiles() {
         <div className="card p-4 space-y-2">
           <input className="input" placeholder="Profile Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <div className="grid grid-cols-2 gap-2">
-            <input className="input" placeholder="Type" value={form.reconciliation_type} onChange={(e) => setForm({ ...form, reconciliation_type: e.target.value })} />
+            <select className="input" value={form.reconciliation_type} onChange={(e) => setForm({ ...form, reconciliation_type: e.target.value })}>
+              <option value="TRANSACTION">TRANSACTION</option>
+              <option value="BALANCE_SHEET">BALANCE_SHEET</option>
+              <option value="INTERCOMPANY">INTERCOMPANY</option>
+              <option value="BANK">BANK</option>
+              <option value="PAYROLL">PAYROLL</option>
+              <option value="VENDOR">VENDOR</option>
+              <option value="SUSPENSE">SUSPENSE</option>
+              <option value="CLEARING">CLEARING</option>
+              <option value="ACCRUAL">ACCRUAL</option>
+            </select>
             <input className="input" placeholder="Frequency" value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <select className="input" value={selectedTemplateType} onChange={(e) => setSelectedTemplateType(e.target.value)}>
+              <option value="">Select template</option>
+              {templates.map((t) => <option key={t.template_type} value={t.template_type}>{t.template_type} - {t.name}</option>)}
+            </select>
+            <button className="btn-secondary" onClick={applyTemplate} disabled={!selectedTemplateType}>Apply Template</button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <input className="input" placeholder="Tolerance" value={form.tolerance_threshold} onChange={(e) => setForm({ ...form, tolerance_threshold: e.target.value })} />

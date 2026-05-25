@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
-import { enterpriseAPI } from '../api'
+import { executionsAPI, projectsAPI } from '../api'
 import PageHeader from '../components/ui/PageHeader'
-import { EmptyState, ErrorState, LoadingState } from '../components/ui/PageState'
+import { EmptyState, LoadingState } from '../components/ui/PageState'
+import { useProjectStore } from '../store/projectStore'
 
 function formatCurrency(amount, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
@@ -14,29 +15,34 @@ function formatCurrency(amount, currency = 'USD') {
   }).format(Number(amount || 0))
 }
 
-function buildTrendBuckets(transactions = []) {
-  const buckets = new Map()
-  transactions.forEach((row) => {
-    const txDate = row.tx_date ? new Date(row.tx_date) : null
-    const label = row.period || (txDate && !Number.isNaN(txDate.getTime()) ? txDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) : 'Current')
-    if (!buckets.has(label)) {
-      buckets.set(label, {
-        label,
-        total: 0,
-        matched: 0,
-        exceptions: 0,
-        variance: 0,
-        certified: 0,
+function flattenExecution(executionResults) {
+  const rows = []
+  let i = 1
+  ;(executionResults?.units || []).forEach((unit) => {
+    ;(unit.transactions || []).forEach((transaction) => {
+      const mismatch = String(transaction.match_status || '').toLowerCase() !== 'matched'
+      rows.push({
+        id: i,
+        entity: unit.entity || 'Unassigned',
+        account: unit.account || 'Unassigned',
+        status: transaction.match_status || 'OPEN',
+        exception: mismatch,
+        variance: mismatch ? 100 : 0,
       })
-    }
-    const bucket = buckets.get(label)
-    bucket.total += 1
-    if (['MATCHED', 'RECONCILED', 'FINALIZED', 'APPROVED'].includes(String(row.status || '').toUpperCase())) bucket.matched += 1
-    if (row.exception_id) bucket.exceptions += 1
-    if (row.profile?.lifecycle_state && ['CLOSED', 'CERTIFIED', 'FORCE_CLOSED'].includes(String(row.profile.lifecycle_state).toUpperCase())) bucket.certified += 1
-    bucket.variance += Math.abs(Number(row.match_variance || 0))
+      i += 1
+    })
   })
-  return Array.from(buckets.values()).slice(-6)
+  return rows
+}
+
+function parseStats(raw) {
+  if (!raw) return {}
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return {}
+  }
 }
 
 function KpiButton({ title, value, subtext, tone = 'default', onClick }) {
@@ -57,174 +63,129 @@ function KpiButton({ title, value, subtext, tone = 'default', onClick }) {
 
 export default function ExecutiveDashboard() {
   const navigate = useNavigate()
-  const { data: summary, isLoading: summaryLoading, isError: summaryError, error: summaryErr, refetch: refetchSummary } = useQuery({
-    queryKey: ['analytics-summary'],
-    queryFn: () => enterpriseAPI.analyticsSummary(),
+  const { selectedProjectId, setSelectedProjectId } = useProjectStore()
+
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
+  useEffect(() => {
+    if (!selectedProjectId && projects.length) setSelectedProjectId(String(projects[0].id))
+  }, [projects, selectedProjectId, setSelectedProjectId])
+
+  const { data: executions = [] } = useQuery({
+    queryKey: ['executive-executions', selectedProjectId],
+    queryFn: () => executionsAPI.list(Number(selectedProjectId)),
+    enabled: !!selectedProjectId,
   })
-  const { data: explorer, isLoading: explorerLoading, isError: explorerError, error: explorerErr, refetch: refetchExplorer } = useQuery({
-    queryKey: ['analytics-explorer-executive'],
-    queryFn: enterpriseAPI.analyticsExplorer,
+
+  const latestExecution = useMemo(() => executions.find((row) => String(row.status || '').toLowerCase() === 'completed') || executions[0], [executions])
+  const completedExecutions = useMemo(
+    () => executions.filter((row) => String(row.status || '').toLowerCase() === 'completed'),
+    [executions]
+  )
+
+  const { data: executionResults } = useQuery({
+    queryKey: ['executive-results', selectedProjectId, latestExecution?.id],
+    queryFn: () => executionsAPI.results(Number(selectedProjectId), latestExecution.id, { page: 1, page_size: 1000 }),
+    enabled: !!selectedProjectId && !!latestExecution?.id,
   })
 
-  const loading = summaryLoading || explorerLoading
-  const hasError = summaryError || explorerError
-  const transactions = explorer?.transactions || []
+  const transactions = useMemo(() => flattenExecution(executionResults), [executionResults])
+  const summary = useMemo(() => {
+    const total = transactions.length
+    const matched = transactions.filter((row) => String(row.status || '').toLowerCase() === 'matched').length
+    const openExceptions = transactions.filter((row) => row.exception).length
+    const varianceAmount = transactions.reduce((sum, row) => sum + Math.abs(Number(row.variance || 0)), 0)
 
-  const trendBuckets = useMemo(() => buildTrendBuckets(transactions), [transactions])
-  const labels = trendBuckets.map((bucket) => bucket.label)
+    const accountMap = new Map()
+    transactions.forEach((row) => {
+      const data = accountMap.get(row.account) || { account: row.account, exception_count: 0, variance_amount: 0, risk_level: 'LOW' }
+      if (row.exception) data.exception_count += 1
+      data.variance_amount += Math.abs(Number(row.variance || 0))
+      if (data.exception_count >= 5) data.risk_level = 'HIGH'
+      else if (data.exception_count >= 2) data.risk_level = 'MEDIUM'
+      accountMap.set(row.account, data)
+    })
 
-  const matchRateOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } },
-    series: [{
-      data: trendBuckets.map((bucket) => (bucket.total ? Number(((bucket.matched / bucket.total) * 100).toFixed(1)) : 0)),
-      type: 'line',
-      smooth: true,
-      lineStyle: { color: '#4f9cf9', width: 3 },
-      itemStyle: { color: '#4f9cf9' },
-      areaStyle: { color: 'rgba(79,156,249,0.16)' },
-    }],
-  }), [labels, trendBuckets])
+    return {
+      match_rate: total ? Number(((matched / total) * 100).toFixed(2)) : 0,
+      open_exceptions: openExceptions,
+      pending_approvals: openExceptions,
+      certification_pct: total ? Number((((total - openExceptions) / total) * 100).toFixed(2)) : 0,
+      variance_amount: varianceAmount,
+      high_risk_accounts: Array.from(accountMap.values()).sort((a, b) => b.exception_count - a.exception_count).slice(0, 6),
+      total_reconciliations: executionResults?.units?.length || 0,
+    }
+  }, [transactions, executionResults])
 
-  const exceptionTrendOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-    series: [{
-      data: trendBuckets.map((bucket) => bucket.exceptions),
-      type: 'bar',
-      itemStyle: { color: '#f59e0b' },
-      barMaxWidth: 28,
-    }],
-  }), [labels, trendBuckets])
+  const trendRows = useMemo(() => {
+    const rows = completedExecutions
+      .slice(0, 6)
+      .reverse()
+      .map((run, index) => {
+        const stats = parseStats(run.stats)
+        const matched = Number(stats.matched || 0)
+        const unmatched = Number(stats.unmatched || 0)
+        const partial = Number(stats.partial || 0)
+        const total = Math.max(1, Number(stats.total_source || (matched + unmatched + partial)))
+        return {
+          label: `Run ${index + 1}`,
+          matchRate: Number(stats.match_rate || ((matched / total) * 100).toFixed(2)),
+          exceptions: unmatched + partial,
+          variance: unmatched * 100 + partial * 50,
+          certification: Number((((matched) / total) * 100).toFixed(2)),
+        }
+      })
+    if (!rows.length) {
+      return [{
+        label: 'Latest Run',
+        matchRate: Number(summary.match_rate || 0),
+        exceptions: Number(summary.open_exceptions || 0),
+        variance: Number(summary.variance_amount || 0),
+        certification: Number(summary.certification_pct || 0),
+      }]
+    }
+    return rows
+  }, [completedExecutions, summary])
 
-  const varianceTrendOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-    series: [{
-      data: trendBuckets.map((bucket) => Number(bucket.variance.toFixed(0))),
-      type: 'line',
-      smooth: true,
-      lineStyle: { color: '#ef4444', width: 3 },
-      itemStyle: { color: '#ef4444' },
-    }],
-  }), [labels, trendBuckets])
+  const trendLabels = trendRows.map((row) => row.label)
+  const matchRateOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } }, series: [{ data: trendRows.map((row) => row.matchRate), type: 'line', smooth: true, lineStyle: { color: '#4f9cf9', width: 3 }, itemStyle: { color: '#4f9cf9' }, areaStyle: { color: 'rgba(79,156,249,0.16)' } }] }
+  const exceptionTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } }, series: [{ data: trendRows.map((row) => row.exceptions), type: 'bar', itemStyle: { color: '#f59e0b' }, barMaxWidth: 28 }] }
+  const varianceTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } }, series: [{ data: trendRows.map((row) => row.variance), type: 'line', smooth: true, lineStyle: { color: '#ef4444', width: 3 }, itemStyle: { color: '#ef4444' } }] }
+  const certificationTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } }, series: [{ data: trendRows.map((row) => row.certification), type: 'line', smooth: true, lineStyle: { color: '#22c55e', width: 3 }, itemStyle: { color: '#22c55e' } }] }
 
-  const certificationTrendOption = useMemo(() => ({
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, axisLabel: { color: '#94a3b8' } },
-    yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } },
-    series: [{
-      data: trendBuckets.map((bucket) => (bucket.total ? Number(((bucket.certified / bucket.total) * 100).toFixed(1)) : 0)),
-      type: 'line',
-      smooth: true,
-      lineStyle: { color: '#22c55e', width: 3 },
-      itemStyle: { color: '#22c55e' },
-      areaStyle: { color: 'rgba(34,197,94,0.14)' },
-    }],
-  }), [labels, trendBuckets])
+  const loading = !!selectedProjectId && !executionResults
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader
-        title="Executive Dashboard"
-        subtitle="Business KPIs for close progress, exception pressure, certification health, and exposure."
-        badge={`${summary?.total_reconciliations || 0} reconciliations`}
-      />
+      <PageHeader title="Executive Overview" subtitle="Business KPIs from the selected project's latest reconciliation run." badge={`${summary.total_reconciliations || 0} reconciliations`} />
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
+        <div className="card p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400">Project Source</span>
+          <select className="input max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+            {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name}</option>)}
+          </select>
+          <span className="text-xs text-slate-500">KPIs are scoped to this project only</span>
+        </div>
+
         {loading ? <LoadingState label="Loading executive dashboard..." /> : null}
+        {!loading && !transactions.length ? <EmptyState title="No executive data" description="Run reconciliation for this project to populate KPI and trend views." /> : null}
 
-        {!loading && hasError ? (
-          <ErrorState
-            title="Unable to load executive dashboard"
-            description={summaryErr?.response?.data?.detail || explorerErr?.response?.data?.detail || 'Please retry in a moment.'}
-            action={<button className="btn-secondary" onClick={() => { refetchSummary(); refetchExplorer() }}>Retry</button>}
-          />
-        ) : null}
-
-        {!loading && !hasError && !transactions.length ? (
-          <EmptyState title="No executive data" description="Load reconciliation activity first to populate KPI and trend views." />
-        ) : null}
-
-        {!loading && !hasError && transactions.length ? (
+        {!loading && transactions.length ? (
           <>
             <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
-              <KpiButton title="Match Rate" value={`${Math.round(summary?.match_rate || 0)}%`} subtext="Click into reconciliation analytics" onClick={() => navigate('/analytics-explorer')} />
-              <KpiButton title="Open Exceptions" value={summary?.open_exceptions || 0} subtext="Investigate unresolved breaks" tone="danger" onClick={() => navigate('/exception-ops')} />
-              <KpiButton title="Pending Approvals" value={summary?.pending_approvals || 0} subtext="Certification workflow bottlenecks" tone="warning" onClick={() => navigate('/close-certification')} />
-              <KpiButton title="Certification %" value={`${Math.round(summary?.certification_pct || 0)}%`} subtext="Close-cycle completion health" onClick={() => navigate('/close-certification')} />
-              <KpiButton title="Variance Amount" value={formatCurrency(summary?.variance_amount, 'INR')} subtext="Net unresolved variance in scope" tone="danger" onClick={() => navigate('/analytics-explorer')} />
-              <KpiButton title="High Risk Accounts" value={summary?.high_risk_accounts?.length || 0} subtext="Open risk dashboard" tone="warning" onClick={() => navigate('/risk-dashboard')} />
+              <KpiButton title="Match Rate" value={`${Math.round(summary.match_rate || 0)}%`} subtext="Click into reconciliation analytics" onClick={() => navigate('/analytics-explorer')} />
+              <KpiButton title="Open Exceptions" value={summary.open_exceptions || 0} subtext="Investigate unresolved breaks" tone="danger" onClick={() => navigate('/exception-ops')} />
+              <KpiButton title="Pending Approvals" value={summary.pending_approvals || 0} subtext="Certification workflow bottlenecks" tone="warning" onClick={() => navigate('/close-certification')} />
+              <KpiButton title="Certification %" value={`${Math.round(summary.certification_pct || 0)}%`} subtext="Close-cycle completion health" onClick={() => navigate('/close-certification')} />
+              <KpiButton title="Variance Amount" value={formatCurrency(summary.variance_amount, 'INR')} subtext="Net unresolved variance in scope" tone="danger" onClick={() => navigate('/analytics-explorer')} />
+              <KpiButton title="High Risk Accounts" value={summary.high_risk_accounts?.length || 0} subtext="Open risk dashboard" tone="warning" onClick={() => navigate('/risk-dashboard')} />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Match Rate Trend</p>
-                <ReactECharts style={{ height: 260 }} option={matchRateOption} />
-              </div>
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Exception Trend</p>
-                <ReactECharts style={{ height: 260 }} option={exceptionTrendOption} />
-              </div>
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Variance Trend</p>
-                <ReactECharts style={{ height: 260 }} option={varianceTrendOption} />
-              </div>
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Certification Trend</p>
-                <ReactECharts style={{ height: 260 }} option={certificationTrendOption} />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="card p-4 overflow-auto">
-                <p className="text-sm font-semibold text-slate-100 mb-3">High Risk Accounts</p>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-slate-400 border-b border-surface-700">
-                      <th className="p-2">Account</th>
-                      <th className="p-2">Risk</th>
-                      <th className="p-2">Exceptions</th>
-                      <th className="p-2">Variance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(summary?.high_risk_accounts || []).map((row) => (
-                      <tr key={row.account} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => navigate('/risk-dashboard')}>
-                        <td className="p-2 text-slate-100">{row.account}</td>
-                        <td className="p-2 text-amber-300">{row.risk_level || row.risk_score}</td>
-                        <td className="p-2 text-slate-300">{row.exception_count || 0}</td>
-                        <td className="p-2 text-slate-300">{formatCurrency(row.variance_amount, 'INR')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Executive Actions</p>
-                <div className="space-y-3">
-                  <button className="btn-secondary w-full justify-between" onClick={() => navigate('/analytics-explorer')}>
-                    Open Analytics Explorer
-                    <span className="text-xs text-slate-400">Entity to evidence drilldown</span>
-                  </button>
-                  <button className="btn-secondary w-full justify-between" onClick={() => navigate('/risk-dashboard')}>
-                    Open Risk Dashboard
-                    <span className="text-xs text-slate-400">Heatmaps and account exposure</span>
-                  </button>
-                  <button className="btn-secondary w-full justify-between" onClick={() => navigate('/controls-governance')}>
-                    Review Governance Controls
-                    <span className="text-xs text-slate-400">SOD and approval policies</span>
-                  </button>
-                  <button className="btn-secondary w-full justify-between" onClick={() => navigate('/exception-ops')}>
-                    Investigate Exceptions
-                    <span className="text-xs text-slate-400">Jump to queue and workspace</span>
-                  </button>
-                </div>
-              </div>
+              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Match Rate Trend</p><ReactECharts style={{ height: 260 }} option={matchRateOption} /></div>
+              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Exception Trend</p><ReactECharts style={{ height: 260 }} option={exceptionTrendOption} /></div>
+              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Variance Trend</p><ReactECharts style={{ height: 260 }} option={varianceTrendOption} /></div>
+              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Certification Trend</p><ReactECharts style={{ height: 260 }} option={certificationTrendOption} /></div>
             </div>
           </>
         ) : null}

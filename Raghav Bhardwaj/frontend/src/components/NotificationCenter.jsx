@@ -8,9 +8,9 @@ import { enterpriseAPI } from '../api'
 import { normalizeRole } from '../utils/roles'
 
 const fallbackTemplates = {
-  admin: [{ id: 'a1', type: 'info', text: 'No active workflow notifications.' }],
-  preparer: [{ id: 'p1', type: 'info', text: 'No active workflow notifications.' }],
-  reviewer: [{ id: 'r1', type: 'info', text: 'No active workflow notifications.' }],
+  admin: [{ id: 'a1', type: 'info', text: 'No active workflow notifications.', action: null }],
+  preparer: [{ id: 'p1', type: 'info', text: 'No active workflow notifications.', action: null }],
+  reviewer: [{ id: 'r1', type: 'info', text: 'No active workflow notifications.', action: null }],
 }
 
 function ItemIcon({ type }) {
@@ -36,7 +36,12 @@ export default function NotificationCenter({ floating = false }) {
   const notificationCount = notificationPayload?.count
 
   const items = useMemo(() => {
-    if (Array.isArray(itemsFromApi) && itemsFromApi.length > 0) return itemsFromApi
+    if (Array.isArray(itemsFromApi) && itemsFromApi.length > 0) {
+      return itemsFromApi.map((item) => ({
+        ...item,
+        action: item.action || (item.type === 'info' ? null : 'Open queue'),
+      }))
+    }
     return fallbackTemplates[role] || fallbackTemplates.admin
   }, [itemsFromApi, role])
 
@@ -119,17 +124,18 @@ export default function NotificationCenter({ floating = false }) {
                   <ItemIcon type={item.type} />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-slate-300">{item.text}</p>
-                    <button
-                      className="mt-1 text-[11px] text-brand-300 hover:text-brand-200"
-                      onClick={() => {
-                        if (role === 'preparer') navigate('/work-queue')
-                        else if (role === 'reviewer') navigate('/work-queue')
-                        else navigate('/admin')
-                        setOpen(false)
-                      }}
-                    >
-                      Open queue
-                    </button>
+                    {item.action ? (
+                      <button
+                        className="mt-1 text-[11px] text-brand-300 hover:text-brand-200"
+                        onClick={() => {
+                          if (role === 'preparer' || role === 'reviewer') navigate('/work-queue')
+                          else navigate('/admin')
+                          setOpen(false)
+                        }}
+                      >
+                        {item.action}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))}

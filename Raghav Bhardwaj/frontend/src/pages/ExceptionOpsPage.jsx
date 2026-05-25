@@ -24,14 +24,14 @@ export default function ExceptionOpsPage() {
   const filtered = useMemo(() => rows.filter((r) => statusFilter === 'ALL' || (r.status || '').toUpperCase() === statusFilter), [rows, statusFilter])
 
   const assignMutation = useMutation({
-    mutationFn: (id) => enterpriseAPI.assignException({ exception_id: id, assigned_to: 1, comments: 'Assigned from Exception Ops' }),
+    mutationFn: (id) => enterpriseAPI.assignException({ exception_id: id, assigned_to: 1, comments: 'Assigned from Transaction Matching' }),
     onSuccess: () => { toast.success('Assigned'); qc.invalidateQueries({ queryKey: ['exception-ops'] }) },
     onError: (e) => toast.error(e.response?.data?.detail || 'Assign failed'),
   })
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="Exception Ops" subtitle="Queue-first exception triage with role-aware handling and fast actions." badge={`${filtered.length} visible`} />
+      <PageHeader title="Transaction Matching" subtitle="Queue-first exception triage with role-aware handling and fast actions." badge={`${filtered.length} visible`} />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         <div className="card p-3 grid grid-cols-1 md:grid-cols-3 gap-2">
           <select className="input" value={queueType} onChange={(e) => setQueueType(e.target.value)}>

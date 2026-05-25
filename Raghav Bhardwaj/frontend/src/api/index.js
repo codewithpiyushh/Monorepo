@@ -152,6 +152,7 @@ export const enterpriseAPI = {
   updateProfile: (profileId, data) => api.patch(`/enterprise/profiles/${profileId}`, data).then((r) => r.data),
   deleteProfile: (profileId) => api.delete(`/enterprise/profiles/${profileId}`).then((r) => r.data),
   runMatching: (data) => api.post('/enterprise/matching/run', data).then((r) => r.data),
+  matchSuggestions: (data) => api.post('/enterprise/matching/suggestions', data).then((r) => r.data),
   listExceptions: (queueType = '') =>
     api.get(`/enterprise/exceptions${queueType ? `?queue_type=${encodeURIComponent(queueType)}` : ''}`).then((r) => r.data),
   listNotifications: (limit = 12) =>
@@ -214,6 +215,7 @@ export const enterpriseAPI = {
   convertFx: (data) => api.post('/enterprise/fx/convert', data).then((r) => r.data),
   fxReconciliation: (profileId, reportingCurrency) => api.get(`/enterprise/fx/reconciliation/${profileId}?reporting_currency=${encodeURIComponent(reportingCurrency)}`).then((r) => r.data),
   createJournal: (data) => api.post('/enterprise/journals', data).then((r) => r.data),
+  autoJournal: (data) => api.post('/enterprise/journals/auto', data).then((r) => r.data),
   journalAction: (adjustmentId, action, comments = '') => api.post(`/enterprise/journals/${adjustmentId}/${action}`, { adjustment_id: adjustmentId, comments }).then((r) => r.data),
   variance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),
   advancedSearch: (data) => api.post('/enterprise/search', data).then((r) => r.data),

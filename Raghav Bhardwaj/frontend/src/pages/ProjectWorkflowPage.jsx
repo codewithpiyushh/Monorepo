@@ -16,7 +16,7 @@ const STEPS = [
   { id: 'ingestion', label: 'Ingestion' },
   { id: 'mapping', label: 'Auto Mapping' },
   { id: 'rules', label: 'Matching Rules' },
-  { id: 'results', label: 'Workspace' },
+  { id: 'results', label: 'Workbench' },
 ]
 
 const STEP_INDEX = {

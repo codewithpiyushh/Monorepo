@@ -57,7 +57,11 @@ export default function App() {
             <Route path="exception-investigation" element={<ExceptionInvestigation />} />
             <Route path="exception-investigation/:exceptionId" element={<ExceptionInvestigation />} />
             <Route path="analytics-explorer" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="analytics-explorer/:entity" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="analytics-explorer/:entity/:account" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="risk-dashboard" element={<RiskDashboard />} />
+            <Route path="risk-dashboard/:entity" element={<RiskDashboard />} />
+            <Route path="risk-dashboard/:entity/:account" element={<RiskDashboard />} />
             <Route path="close-certification" element={<CloseCertificationPage />} />
             <Route path="controls-governance" element={<ControlsGovernancePage />} />
             <Route path="platform-admin" element={<PlatformAdminPage />} />

@@ -20,7 +20,6 @@ Raghav Bhardwaj/
 |   |-- src/
 |   `-- package.json
 |-- evidences/
-|-- demo_check.ps1
 `-- readme.md
 ```
 
@@ -72,6 +71,35 @@ python scripts/apply_oracle_style_migration.py
 - `admin` / `admin123`
 - `preparer` / `preparer123`
 - `reviewer` / `reviewer123`
+
+## One-Command Demo Reset (5 Fresh Projects)
+Use this when you want to show complete project flow with clean demo data.
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe seed.py
+.\.venv\Scripts\python.exe scripts\bootstrap_demo_projects.py
+```
+
+What it does:
+1. Removes existing projects (after clearing dependent sequence/workflow artifacts).
+2. Creates 5 new projects with different reconciliation scenarios.
+3. Uploads source/target datasets, applies mappings and rules.
+4. Runs executions and advances workflow (assign -> submit -> approve).
+
+Generated dataset files are exported to:
+- `backend/generated_projects/`
+
+Current seeded demo projects:
+1. Retail Cash Reconciliation
+2. Bank vs GL Month End
+3. Intercompany AP-AR
+4. Payroll Clearing
+5. Suspense Account Cleanup
+
+## Analyze Section Scope (Latest Change)
+- `Executive Overview`, `Reconciliation Compliance`, and `Risk & Compliance Dashboard` now use the selected project context.
+- Select a project once (header project selector), and all Analyze pages use that project’s latest execution data.
 
 ## Key Implemented Areas
 - Project lifecycle, ingestion, mapping, rules, matching

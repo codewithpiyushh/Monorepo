@@ -46,7 +46,7 @@ export default function ControlsGovernancePage() {
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Controls & Governance"
+        title="Policy & Controls Studio"
         subtitle="Segregation-of-duties enforcement, approval policy testing, and reusable control coverage."
         badge={`${sodRules.length} SOD rules`}
       />

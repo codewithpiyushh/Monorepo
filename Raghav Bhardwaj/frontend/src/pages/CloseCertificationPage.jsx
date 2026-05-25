@@ -20,7 +20,7 @@ export default function CloseCertificationPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="Close & Certification" subtitle="Manage period controls and certification state progression with traceable workflow history." badge={`${kpis.periods} periods`} />
+      <PageHeader title="Period Close Monitor" subtitle="Manage period controls and certification state progression with traceable workflow history." badge={`${kpis.periods} periods`} />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         {loading ? <LoadingState label="Loading close and certification..." /> : null}
 

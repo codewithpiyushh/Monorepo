@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
 
-export default function BalanceReconciliationsWorkspace() {
+export default function BalanceReconciliationsWorkbench() {
   const [batchId, setBatchId] = useState('')
   const [profileId, setProfileId] = useState('')
 
@@ -16,7 +16,7 @@ export default function BalanceReconciliationsWorkspace() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="section-header"><h1 className="text-base font-semibold text-white">Balance Reconciliations Workspace</h1></div>
+      <div className="section-header"><h1 className="text-base font-semibold text-white">Balance Reconciliations Workbench</h1></div>
       <div className="p-6">
         <div className="card p-4 space-y-3 max-w-2xl">
           <p className="text-xs text-slate-500">

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Any, Dict, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class IngestionBatchCreate(BaseModel):
@@ -57,8 +57,14 @@ class ProfileUpdate(BaseModel):
 class MatchRequest(BaseModel):
     profile_id: int
     strategy: str = "rule_based"
-    auto_match_threshold: float = 1.0
-    max_group_size: int = 3
+    auto_match_threshold: float = Field(default=1.0, ge=0.0, le=1.0)
+    max_group_size: int = Field(default=3, ge=2, le=10)
+
+
+class MatchSuggestionRequest(BaseModel):
+    profile_id: int
+    top_k: int = Field(default=20, ge=1, le=200)
+    min_confidence: float = Field(default=0.6, ge=0.0, le=1.0)
 
 
 class WorkflowActionRequest(BaseModel):
@@ -90,6 +96,15 @@ class CertificationActionRequest(BaseModel):
     workflow_id: int
     action: str
     comments: Optional[str] = None
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, value: str):
+        normalized = (value or "").strip().upper()
+        allowed = {"PREPARE", "SUBMIT", "REVIEW", "APPROVE", "CERTIFY", "CLOSE", "REOPEN", "FORCE_CLOSE"}
+        if normalized not in allowed:
+            raise ValueError("Unsupported certification action")
+        return normalized
 
 
 class RuleDefinitionCreate(BaseModel):
@@ -178,13 +193,13 @@ class SnapshotCompareRequest(BaseModel):
 class ExchangeRateCreate(BaseModel):
     from_currency: str
     to_currency: str
-    rate: float
+    rate: float = Field(gt=0.0)
     rate_date: str
     source: Optional[str] = None
 
 
 class CurrencyConvertRequest(BaseModel):
-    amount: float
+    amount: float = Field(ge=0.0)
     from_currency: str
     to_currency: str
     conversion_date: Optional[str] = None
@@ -204,6 +219,13 @@ class JournalAdjustmentCreate(BaseModel):
 class JournalAdjustmentAction(BaseModel):
     adjustment_id: int
     comments: Optional[str] = None
+
+
+class AutoJournalRequest(BaseModel):
+    profile_id: int
+    period_key: Optional[str] = None
+    reporting_currency: Optional[str] = None
+    min_amount: float = Field(default=0.0, ge=0.0)
 
 
 class BulkActionRequest(BaseModel):

@@ -80,7 +80,7 @@ export default function CommandCenter() {
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Command Center"
+        title="Reconciliation Command Center"
         subtitle="Operate, analyze, and govern reconciliation operations from one role-aware control plane."
         badge={`${projects.length} active project${projects.length !== 1 ? 's' : ''}`}
       />
@@ -134,13 +134,13 @@ export default function CommandCenter() {
                 <p className="text-sm font-semibold text-slate-200 mb-3">Quick Actions</p>
                 <div className="space-y-2">
                   <button className="btn-secondary w-full justify-between" onClick={() => navigate('/reconciliation-runs')}>
-                    Reconciliation Runs <Briefcase className="w-4 h-4" />
+                    Auto Reconciliation <Briefcase className="w-4 h-4" />
                   </button>
                   <button className="btn-secondary w-full justify-between" onClick={() => navigate('/exception-ops')}>
-                    Exception Ops <AlertTriangle className="w-4 h-4" />
+                    Transaction Matching <AlertTriangle className="w-4 h-4" />
                   </button>
                   <button className="btn-secondary w-full justify-between" onClick={() => navigate('/analytics-explorer')}>
-                    Analytics Explorer <ArrowRight className="w-4 h-4" />
+                    Reconciliation Compliance <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>

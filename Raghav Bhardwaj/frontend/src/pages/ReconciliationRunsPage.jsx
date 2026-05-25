@@ -68,7 +68,7 @@ export default function ReconciliationRunsPage() {
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Reconciliation Runs"
+        title="Auto Reconciliation"
         subtitle="Pipeline-first execution workspace for ingestion readiness, controls coverage, and run progression."
         badge={`${runHealth.ready}/${runHealth.total} ready`}
       />
@@ -91,7 +91,7 @@ export default function ReconciliationRunsPage() {
               <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Projects</p><p className="text-lg font-semibold text-slate-100">{runHealth.total}</p></div>
               <div className="oracle-kpi kpi-success p-3"><p className="text-xs text-slate-400">Ready to Run</p><p className="text-lg font-semibold text-slate-100">{runHealth.ready}</p></div>
               <div className="oracle-kpi kpi-danger p-3"><p className="text-xs text-slate-400">Blocked</p><p className="text-lg font-semibold text-slate-100">{runHealth.blocked}</p></div>
-              <button className="oracle-kpi p-3 text-left" onClick={() => navigate('/command-center')}><p className="text-xs text-slate-400">Command Center</p><p className="text-sm font-semibold text-slate-100 mt-2">Back to priorities</p></button>
+              <button className="oracle-kpi p-3 text-left" onClick={() => navigate('/command-center')}><p className="text-xs text-slate-400">Reconciliation Command Center</p><p className="text-sm font-semibold text-slate-100 mt-2">Back to priorities</p></button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">

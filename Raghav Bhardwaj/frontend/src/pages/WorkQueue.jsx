@@ -39,7 +39,7 @@ export default function WorkQueue() {
         icon: CheckCircle2,
       },
       {
-        title: 'Execution Workspace',
+        title: 'Execution Workbench',
         description: 'Run reconciliation and complete role-based workflow actions.',
         to: selectedProjectId ? `${projectPath}/results` : '/reconciliations',
         icon: AlertTriangle,
@@ -75,7 +75,7 @@ export default function WorkQueue() {
           <div className="text-xs text-slate-400 flex items-end">
             {role === 'preparer' && 'Preparer role: open Preparer Workbench first.'}
             {role === 'reviewer' && 'Reviewer role: open Reviewer Workbench first.'}
-            {role === 'admin' && 'Admin role: use Execution Workspace for full lifecycle control.'}
+            {role === 'admin' && 'Admin role: use Execution Workbench for full lifecycle control.'}
           </div>
         </div>
         {isLoading ? <LoadingState label="Loading work queue..." /> : null}

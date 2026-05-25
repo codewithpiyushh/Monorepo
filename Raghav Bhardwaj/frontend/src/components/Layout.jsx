@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, NavLink, matchPath, useLocation, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
   AlertTriangle,
@@ -26,20 +27,22 @@ import {
 import NotificationCenter from './NotificationCenter'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore } from '../store/themeStore'
-import { authAPI } from '../api'
+import { authAPI, projectsAPI } from '../api'
 import { normalizeRole } from '../utils/roles'
+import { useProjectStore } from '../store/projectStore'
 
 const PAGE_TITLES = {
-  '/command-center': 'Command Center',
-  '/executive-dashboard': 'Executive Dashboard',
-  '/reconciliation-runs': 'Reconciliation Runs',
-  '/exception-ops': 'Exception Ops',
+  '/command-center': 'Reconciliation Command Center',
+  '/executive-dashboard': 'Executive Overview',
+  '/reconciliation-runs': 'Auto Reconciliation',
+  '/exception-ops': 'Transaction Matching',
   '/exception-investigation': 'Exception Investigation',
-  '/analytics-explorer': 'Analytics Explorer',
-  '/risk-dashboard': 'Risk Dashboard',
-  '/close-certification': 'Close & Certification',
-  '/controls-governance': 'Controls & Governance',
-  '/platform-admin': 'Platform Admin',
+  '/analytics-explorer': 'Reconciliation Compliance',
+  '/risk-dashboard': 'Risk & Compliance Dashboard',
+  '/close-certification': 'Period Close Monitor',
+  '/controls-governance': 'Policy & Controls Studio',
+  '/platform-admin': 'Application Administration',
+  '/admin': 'Admin Operations',
 }
 
 export default function Layout() {
@@ -47,7 +50,9 @@ export default function Layout() {
   const navigate = useNavigate()
   const { user, clearAuth, setAuth } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
+  const { selectedProjectId, setSelectedProjectId } = useProjectStore()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('drms_sidebar_collapsed') === '1')
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
 
   const workflowMatch = matchPath('/projects/:projectId/:section', location.pathname)
   const activeProjectId = workflowMatch?.params?.projectId || null
@@ -57,25 +62,25 @@ export default function Layout() {
     {
       title: 'Operate',
       items: [
-        { to: '/command-center', label: 'Command Center', icon: Command, end: true, show: true },
-        { to: '/reconciliation-runs', label: 'Reconciliation Runs', icon: PlaySquare, show: true },
-        { to: '/exception-ops', label: 'Exception Ops', icon: AlertTriangle, show: true },
+        { to: '/command-center', label: 'Reconciliation Command Center', icon: Command, end: true, show: true },
+        { to: '/reconciliation-runs', label: 'Auto Reconciliation', icon: PlaySquare, show: true },
+        { to: '/exception-ops', label: 'Transaction Matching', icon: AlertTriangle, show: true },
+        { to: '/analytics-explorer', label: 'Reconciliation Compliance', icon: BarChart3, show: role === 'admin' || role === 'preparer' },
       ],
     },
     {
       title: 'Analyze',
       items: [
-        { to: '/executive-dashboard', label: 'Executive Dashboard', icon: BarChart3, show: role === 'admin' || role === 'reviewer' },
-        { to: '/analytics-explorer', label: 'Analytics Explorer', icon: BarChart3, show: true },
-        { to: '/risk-dashboard', label: 'Risk Dashboard', icon: ShieldAlert, show: role === 'admin' || role === 'reviewer' },
+        { to: '/executive-dashboard', label: 'Executive Overview', icon: BarChart3, show: role === 'admin' || role === 'reviewer' },
+        { to: '/risk-dashboard', label: 'Risk & Compliance Dashboard', icon: ShieldAlert, show: role === 'admin' || role === 'reviewer' },
       ],
     },
     {
       title: 'Control',
       items: [
-        { to: '/close-certification', label: 'Close & Certification', icon: CalendarCheck2, show: true },
-        { to: '/controls-governance', label: 'Controls & Governance', icon: ShieldCheck, show: role === 'admin' || role === 'reviewer' },
-        { to: '/platform-admin', label: 'Platform Admin', icon: Shield, show: role === 'admin' || role === 'reviewer' },
+        { to: '/close-certification', label: 'Period Close Monitor', icon: CalendarCheck2, show: true },
+        { to: '/controls-governance', label: 'Policy & Controls Studio', icon: ShieldCheck, show: role === 'admin' || role === 'reviewer' },
+        { to: '/admin', label: 'Admin Operations', icon: Shield, show: role === 'admin' || role === 'reviewer' },
       ],
     },
   ]
@@ -85,16 +90,16 @@ export default function Layout() {
         { to: `/projects/${activeProjectId}/ingestion`, label: 'Ingestion', icon: FolderOpen, show: role === 'admin' },
         { to: `/projects/${activeProjectId}/mapping`, label: 'Auto Mapping', icon: Link, show: role === 'admin' },
         { to: `/projects/${activeProjectId}/rules`, label: 'Matching Rules', icon: ShieldCheck, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/results`, label: 'Workspace', icon: Play, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/preparer`, label: 'Preparer Workspace', icon: User, show: role === 'preparer' },
-        { to: `/projects/${activeProjectId}/reviewer`, label: 'Reviewer Workspace', icon: User, show: role === 'reviewer' },
+        { to: `/projects/${activeProjectId}/results`, label: 'Workbench', icon: Play, show: role === 'admin' },
+        { to: `/projects/${activeProjectId}/preparer`, label: 'Preparer Workbench', icon: User, show: role === 'preparer' },
+        { to: `/projects/${activeProjectId}/reviewer`, label: 'Reviewer Workbench', icon: User, show: role === 'reviewer' },
       ].filter((item) => item.show)
     : []
 
   const currentTitle = useMemo(() => {
-    if (location.pathname.startsWith('/projects/')) return 'Project Workflow'
+    if (location.pathname.startsWith('/projects/')) return 'Reconciliation Process'
     if (location.pathname.startsWith('/exception-investigation')) return 'Exception Investigation'
-    return PAGE_TITLES[location.pathname] || 'Workspace'
+    return PAGE_TITLES[location.pathname] || 'Workbench'
   }, [location.pathname])
 
   useEffect(() => {
@@ -104,6 +109,18 @@ export default function Layout() {
   useEffect(() => {
     localStorage.setItem('drms_sidebar_collapsed', sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    if (activeProjectId && String(activeProjectId) !== String(selectedProjectId || '')) {
+      setSelectedProjectId(String(activeProjectId))
+    }
+  }, [activeProjectId, selectedProjectId, setSelectedProjectId])
+
+  useEffect(() => {
+    if (!selectedProjectId && projects.length) {
+      setSelectedProjectId(String(projects[0].id))
+    }
+  }, [projects, selectedProjectId, setSelectedProjectId])
 
   const handleLogout = () => {
     clearAuth()
@@ -193,7 +210,7 @@ export default function Layout() {
                 {!sidebarCollapsed && (
                   <p className="px-3 pb-1 text-[10px] uppercase tracking-[0.13em] text-slate-500 flex items-center gap-2">
                     <Workflow className="w-3 h-3" />
-                    Project Flow
+                    Reconciliation Process
                   </p>
                 )}
                 {workflowItems.map(({ to, label, icon: Icon }) => (
@@ -250,10 +267,19 @@ export default function Layout() {
           <div className="relative z-10 h-full flex flex-col">
             <div className="h-[74px] px-6 border-b border-surface-700/60 backdrop-blur-xl flex items-center justify-between" style={{ background: 'color-mix(in srgb, var(--header-bg) 82%, transparent)' }}>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Workspace</p>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Workbench</p>
                 <p className="text-base font-semibold text-slate-100">{currentTitle}</p>
               </div>
-              <NotificationCenter floating={false} />
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Project</span>
+                  <select className="input h-9 py-1 min-w-[220px]" value={selectedProjectId || ''} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                    {!projects.length ? <option value="">No projects</option> : null}
+                    {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name} (#{project.id})</option>)}
+                  </select>
+                </div>
+                <NotificationCenter floating={false} />
+              </div>
             </div>
             <div className="flex-1 min-h-0">
               <Outlet />

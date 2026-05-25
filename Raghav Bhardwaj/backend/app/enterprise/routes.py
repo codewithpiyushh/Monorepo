@@ -12,6 +12,7 @@ from .schemas import (
     ProfileCreate,
     ProfileUpdate,
     MatchRequest,
+    MatchSuggestionRequest,
     WorkflowActionRequest,
     FinancialCloseCalendarCreate,
     FinancialCloseCalendarAction,
@@ -35,6 +36,7 @@ from .schemas import (
     CurrencyConvertRequest,
     JournalAdjustmentCreate,
     JournalAdjustmentAction,
+    AutoJournalRequest,
     BulkActionRequest,
     AdvancedSearchRequest,
     CommentCreateRequest,
@@ -127,6 +129,19 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db), current_user=
 def run_matching(payload: MatchRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
     try:
         return service.run_matching(db, payload.profile_id, payload.strategy, payload.auto_match_threshold, current_user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/matching/suggestions")
+def matching_suggestions(payload: MatchSuggestionRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER]))):
+    try:
+        return service.match_suggestions(
+            db,
+            profile_id=payload.profile_id,
+            top_k=payload.top_k,
+            min_confidence=payload.min_confidence,
+        )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -533,6 +548,12 @@ def create_journal(payload: JournalAdjustmentCreate, db: Session = Depends(get_d
 @router.post("/journals/{adjustment_id}/{action}")
 def journal_action(adjustment_id: int, action: str, payload: JournalAdjustmentAction, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER]))):
     return service.journal_action(db, adjustment_id, action, current_user.id, payload.comments)
+
+
+@router.post("/journals/auto")
+def auto_journal(payload: AutoJournalRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
+    raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    return service.auto_generate_journal_adjustments(db, raw, current_user.id)
 
 
 @router.get("/variance/{profile_id}")

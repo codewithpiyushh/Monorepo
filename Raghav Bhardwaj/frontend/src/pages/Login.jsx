@@ -38,7 +38,7 @@ export default function Login() {
             <Scale className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-white">DRMS</h1>
-          <p className="text-slate-400 text-sm mt-1">Enterprise Reconciliation Workspace</p>
+          <p className="text-slate-400 text-sm mt-1">Enterprise Reconciliation Workbench</p>
         </div>
 
         {/* Card */}

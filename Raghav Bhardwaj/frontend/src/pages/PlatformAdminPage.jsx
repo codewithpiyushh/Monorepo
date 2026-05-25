@@ -16,7 +16,7 @@ export default function PlatformAdminPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="Platform Admin" subtitle="Users, audit telemetry, scheduled reports, and operational job health." badge={`${users.length} users`} />
+      <PageHeader title="Application Administration" subtitle="Users, audit telemetry, scheduled reports, and operational job health." badge={`${users.length} users`} />
       <div className="flex-1 overflow-auto p-6 space-y-4">
         {loading ? <LoadingState label="Loading platform controls..." /> : null}
 

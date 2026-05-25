@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
@@ -10,11 +10,42 @@ export default function WorkflowPage() {
   const [workflowId, setWorkflowId] = useState('')
   const [action, setAction] = useState('PREPARE')
   const [comments, setComments] = useState('')
+  const [profileFilter, setProfileFilter] = useState('')
+
+  const { data: profiles = [] } = useQuery({
+    queryKey: ['certification-profiles'],
+    queryFn: enterpriseAPI.listProfiles,
+  })
 
   const { data: workflows = [] } = useQuery({
-    queryKey: ['certification-workflows', profileId],
-    queryFn: () => enterpriseAPI.listCertificationWorkflows(profileId || undefined),
+    queryKey: ['certification-workflows', profileFilter],
+    queryFn: () => enterpriseAPI.listCertificationWorkflows(profileFilter || undefined),
   })
+  const selectedWorkflow = workflows.find((w) => String(w.id) === String(workflowId))
+  const actionOptionsByStatus = {
+    OPEN: ['PREPARE', 'FORCE_CLOSE'],
+    PREPARED: ['SUBMIT', 'REOPEN', 'FORCE_CLOSE'],
+    SUBMITTED: ['REVIEW', 'REOPEN', 'FORCE_CLOSE'],
+    REVIEWED: ['APPROVE', 'REOPEN', 'FORCE_CLOSE'],
+    APPROVED: ['CERTIFY', 'REOPEN', 'FORCE_CLOSE'],
+    CERTIFIED: ['CLOSE', 'REOPEN'],
+    CLOSED: ['REOPEN'],
+    REOPENED: ['PREPARE', 'FORCE_CLOSE'],
+    FORCE_CLOSED: ['REOPEN'],
+  }
+  const allowedActions = actionOptionsByStatus[(selectedWorkflow?.status || 'OPEN').toUpperCase()] || ['PREPARE']
+
+  useEffect(() => {
+    if (!workflowId && workflows.length) {
+      setWorkflowId(String(workflows[0].id))
+    }
+  }, [workflowId, workflows])
+
+  useEffect(() => {
+    if (!allowedActions.includes(action)) {
+      setAction(allowedActions[0])
+    }
+  }, [allowedActions, action])
 
   const { data: history = [] } = useQuery({
     queryKey: ['certification-history', workflowId],
@@ -51,7 +82,14 @@ export default function WorkflowPage() {
       <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4 space-y-3">
           <h2 className="text-sm font-semibold text-slate-200">Create Workflow</h2>
-          <input className="input" placeholder="Profile ID" value={profileId} onChange={(e) => setProfileId(e.target.value)} />
+          <select className="input" value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+            <option value="">Select Profile</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                #{p.id} | {p.name} | {p.lifecycle_state}
+              </option>
+            ))}
+          </select>
           <button
             className="btn-primary"
             onClick={() => createMutation.mutate({ profile_id: Number(profileId) })}
@@ -63,6 +101,14 @@ export default function WorkflowPage() {
 
         <div className="card p-4 space-y-3">
           <h2 className="text-sm font-semibold text-slate-200">Action</h2>
+          <select className="input" value={profileFilter} onChange={(e) => setProfileFilter(e.target.value)}>
+            <option value="">Filter Workflows: All Profiles</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                #{p.id} | {p.name}
+              </option>
+            ))}
+          </select>
           <select className="input" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}>
             <option value="">Select Workflow</option>
             {workflows.map((w) => (
@@ -72,14 +118,9 @@ export default function WorkflowPage() {
             ))}
           </select>
           <select className="input" value={action} onChange={(e) => setAction(e.target.value)}>
-            <option value="PREPARE">PREPARE</option>
-            <option value="SUBMIT">SUBMIT</option>
-            <option value="REVIEW">REVIEW</option>
-            <option value="APPROVE">APPROVE</option>
-            <option value="CERTIFY">CERTIFY</option>
-            <option value="CLOSE">CLOSE</option>
-            <option value="REOPEN">REOPEN</option>
-            <option value="FORCE_CLOSE">FORCE_CLOSE</option>
+            {allowedActions.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
           </select>
           <textarea className="input min-h-[80px]" placeholder="Comments" value={comments} onChange={(e) => setComments(e.target.value)} />
           <button
@@ -93,6 +134,7 @@ export default function WorkflowPage() {
 
         <div className="card p-4">
           <h2 className="text-sm font-semibold text-slate-200 mb-3">Audit History</h2>
+          {workflowId ? <p className="text-xs text-slate-500 mb-2">Workflow #{workflowId}</p> : null}
           <div className="space-y-2 max-h-[420px] overflow-auto">
             {history.map((h) => (
               <div key={h.id} className="border border-surface-700 rounded-md p-2 text-xs text-slate-300">

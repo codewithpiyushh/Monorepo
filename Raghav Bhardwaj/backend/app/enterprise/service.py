@@ -152,6 +152,13 @@ def _parse_iso_date(value: str | None):
         return None
 
 
+def _normalize_currency_code(value: str | None, field_label: str):
+    code = (value or "").strip().upper()
+    if len(code) != 3 or not code.isalpha():
+        raise ValueError(f"{field_label} must be a 3-letter ISO currency code")
+    return code
+
+
 def transform_batch(db: Session, batch_id: str, user_id: int | None):
     batch = db.query(IngestionBatch).filter(IngestionBatch.batch_id == batch_id).first()
     if not batch:
@@ -357,6 +364,66 @@ def run_matching(db: Session, profile_id: int, strategy: str, auto_match_thresho
     repository.commit(db)
     audit_service.log_action(db, "MATCHING_COMPLETED", user_id=user_id, entity_type="profile", entity_id=profile_id, metadata={"strategy": strategy, "match_groups": matched_groups, "exceptions": exception_count})
     return {"profile_id": profile_id, "match_groups": matched_groups, "exceptions": exception_count}
+
+
+def match_suggestions(db: Session, profile_id: int, top_k: int = 20, min_confidence: float = 0.6):
+    profile = db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
+    if not profile:
+        raise ValueError("Reconciliation profile not found")
+    records = repository.get_records_by_profile(db, profile_id)
+    candidates = [r for r in records if (r.status or "").upper() in {"UNMATCHED", "PARTIAL_MATCH", "VALIDATED"}]
+    suggestions = []
+    tolerance = abs(float(profile.tolerance_threshold or 0.0))
+    date_window_days = max(int(profile.date_window_days or 0), 0)
+
+    for left in candidates:
+        for right in candidates:
+            if left.id >= right.id:
+                continue
+            if left.entity != right.entity or left.account != right.account:
+                continue
+            left_amt = float(left.amount or 0.0)
+            right_amt = float(right.amount or 0.0)
+            amount_delta = abs(left_amt + right_amt)
+            if amount_delta == 0:
+                amount_score = 1.0
+            elif tolerance > 0 and amount_delta <= tolerance:
+                amount_score = max(0.0, 1.0 - (amount_delta / tolerance))
+            else:
+                amount_score = max(0.0, 1.0 - (amount_delta / max(abs(left_amt) + abs(right_amt), 1.0)))
+            ref_score = fuzz.token_sort_ratio(str(left.reference or ""), str(right.reference or "")) / 100.0
+            date_score = 0.0
+            d1 = _parse_iso_date(left.tx_date)
+            d2 = _parse_iso_date(right.tx_date)
+            if d1 and d2:
+                diff = abs((d1 - d2).days)
+                window = max(date_window_days, 2)
+                date_score = 1.0 if diff <= window else max(0.0, 1.0 - (diff / max(window * 5, 30)))
+            confidence = round((amount_score * 0.55) + (ref_score * 0.35) + (date_score * 0.10), 4)
+            if confidence < min_confidence:
+                continue
+            suggestions.append(
+                {
+                    "left_record_id": left.id,
+                    "right_record_id": right.id,
+                    "entity": left.entity,
+                    "account": left.account,
+                    "left_reference": left.reference,
+                    "right_reference": right.reference,
+                    "left_amount": left_amt,
+                    "right_amount": right_amt,
+                    "amount_delta": amount_delta,
+                    "confidence": confidence,
+                    "why": {
+                        "amount_score": round(amount_score, 4),
+                        "reference_score": round(ref_score, 4),
+                        "date_score": round(date_score, 4),
+                    },
+                }
+            )
+
+    suggestions.sort(key=lambda x: (x["confidence"], -x["amount_delta"]), reverse=True)
+    return {"profile_id": profile_id, "count": min(len(suggestions), top_k), "items": suggestions[:top_k]}
 
 
 def _parse_date_safe(raw: str | None):
@@ -927,6 +994,8 @@ def create_certification_workflow(db: Session, payload: dict, actor_id: int | No
     profile = repository.get_profile(db, payload["profile_id"])
     if not profile:
         raise ValueError("Reconciliation profile not found")
+    if profile.assigned_preparer is None or (profile.assigned_reviewer is None and profile.assigned_approver is None) or profile.assigned_certifier is None:
+        raise ValueError("Profile must have preparer, reviewer/approver, and certifier assignments before creating workflow")
     row = repository.create_certification_workflow(
         db,
         {
@@ -965,20 +1034,31 @@ def action_certification_workflow(
         normalized_role = "reviewer"
 
     transitions = {
-        "PREPARE": ("preparer", STATUS["PREPARED"], "REVIEWER"),
-        "SUBMIT": ("preparer", STATUS["SUBMITTED"], "REVIEWER"),
-        "REVIEW": ("reviewer", STATUS["REVIEWED"], "APPROVER"),
-        "APPROVE": ("reviewer", STATUS["APPROVED"], "CERTIFIER"),
-        "CERTIFY": ("certifier", STATUS["CERTIFIED"], "ADMIN"),
-        "CLOSE": ("admin", STATUS["CLOSED"], "DONE"),
-        "REOPEN": ("admin", STATUS["REOPENED"], "PREPARER"),
-        "FORCE_CLOSE": ("admin", STATUS["FORCE_CLOSED"], "DONE"),
+        "PREPARE": ("preparer", STATUS["PREPARED"], "REVIEWER", {STATUS["OPEN"], STATUS["REOPENED"]}),
+        "SUBMIT": ("preparer", STATUS["SUBMITTED"], "REVIEWER", {STATUS["PREPARED"]}),
+        "REVIEW": ("reviewer", STATUS["REVIEWED"], "APPROVER", {STATUS["SUBMITTED"]}),
+        "APPROVE": ("reviewer", STATUS["APPROVED"], "CERTIFIER", {STATUS["REVIEWED"]}),
+        "CERTIFY": ("certifier", STATUS["CERTIFIED"], "ADMIN", {STATUS["APPROVED"]}),
+        "CLOSE": ("admin", STATUS["CLOSED"], "DONE", {STATUS["CERTIFIED"]}),
+        "REOPEN": ("admin", STATUS["REOPENED"], "PREPARER", {STATUS["PREPARED"], STATUS["SUBMITTED"], STATUS["REVIEWED"], STATUS["APPROVED"], STATUS["CERTIFIED"], STATUS["CLOSED"], STATUS["FORCE_CLOSED"]}),
+        "FORCE_CLOSE": ("admin", STATUS["FORCE_CLOSED"], "DONE", {STATUS["OPEN"], STATUS["PREPARED"], STATUS["SUBMITTED"], STATUS["REVIEWED"], STATUS["APPROVED"], STATUS["REOPENED"]}),
     }
     if normalized_action not in transitions:
         raise ValueError("Unsupported action")
-    required_role, target_status, stage = transitions[normalized_action]
+    required_role, target_status, stage, allowed_from = transitions[normalized_action]
+    if current not in allowed_from:
+        raise ValueError(f"Action {normalized_action} is not allowed from status {current}")
     if normalized_role != required_role and normalized_role != "admin":
         raise ValueError(f"{required_role} role required")
+    if normalized_role == required_role and actor_id is not None:
+        if required_role == "preparer" and wf.preparer_id and actor_id != wf.preparer_id:
+            raise ValueError("Only assigned preparer can perform this action")
+        if required_role == "reviewer" and (wf.reviewer_id or wf.approver_id) and actor_id not in {wf.reviewer_id, wf.approver_id}:
+            raise ValueError("Only assigned reviewer/approver can perform this action")
+        if required_role == "certifier" and wf.certifier_id and actor_id != wf.certifier_id:
+            raise ValueError("Only assigned certifier can perform this action")
+    if normalized_action in {"REOPEN", "FORCE_CLOSE"} and not (comments or "").strip():
+        raise ValueError("Comments are required for reopen/force-close actions")
     if normalized_action in {"REVIEW", "APPROVE", "CERTIFY"} and actor_id is not None:
         prior = (
             db.query(CertificationWorkflowHistory)
@@ -1742,9 +1822,13 @@ def compare_snapshots(db: Session, base_snapshot_id: int, compare_snapshot_id: i
 
 
 def create_exchange_rate(db: Session, payload: dict):
+    from_ccy = _normalize_currency_code(payload["from_currency"], "from_currency")
+    to_ccy = _normalize_currency_code(payload["to_currency"], "to_currency")
+    if from_ccy == to_ccy:
+        raise ValueError("from_currency and to_currency must be different")
     row = ExchangeRate(
-        from_currency=payload["from_currency"].upper(),
-        to_currency=payload["to_currency"].upper(),
+        from_currency=from_ccy,
+        to_currency=to_ccy,
         rate=float(payload["rate"]),
         rate_date=payload["rate_date"],
         source=payload.get("source"),
@@ -1756,22 +1840,36 @@ def create_exchange_rate(db: Session, payload: dict):
 
 
 def convert_currency(db: Session, amount: float, from_currency: str, to_currency: str, conversion_date: str | None = None):
-    if from_currency.upper() == to_currency.upper():
+    from_ccy = _normalize_currency_code(from_currency, "from_currency")
+    to_ccy = _normalize_currency_code(to_currency, "to_currency")
+    if from_ccy == to_ccy:
         return {"converted_amount": amount, "rate": 1.0, "rate_date": conversion_date, "fx_variance": 0.0}
     q = db.query(ExchangeRate).filter(
-        ExchangeRate.from_currency == from_currency.upper(),
-        ExchangeRate.to_currency == to_currency.upper(),
+        ExchangeRate.from_currency == from_ccy,
+        ExchangeRate.to_currency == to_ccy,
     )
     if conversion_date:
         q = q.filter(ExchangeRate.rate_date <= conversion_date)
     rate_row = q.order_by(ExchangeRate.rate_date.desc()).first()
+    use_inverse = False
     if not rate_row:
-        raise ValueError("Exchange rate not found")
-    converted = amount * rate_row.rate
-    return {"converted_amount": converted, "rate": rate_row.rate, "rate_date": rate_row.rate_date, "fx_variance": converted - amount}
+        inverse_q = db.query(ExchangeRate).filter(
+            ExchangeRate.from_currency == to_ccy,
+            ExchangeRate.to_currency == from_ccy,
+        )
+        if conversion_date:
+            inverse_q = inverse_q.filter(ExchangeRate.rate_date <= conversion_date)
+        rate_row = inverse_q.order_by(ExchangeRate.rate_date.desc()).first()
+        use_inverse = bool(rate_row)
+    if not rate_row:
+        raise ValueError("Exchange rate not found for selected currency pair")
+    rate_value = (1.0 / float(rate_row.rate)) if use_inverse else float(rate_row.rate)
+    converted = amount * rate_value
+    return {"converted_amount": converted, "rate": rate_value, "rate_date": rate_row.rate_date, "fx_variance": converted - amount, "inverse_rate_used": use_inverse}
 
 
 def fx_reconciliation(db: Session, profile_id: int, reporting_currency: str):
+    report_ccy = _normalize_currency_code(reporting_currency, "reporting_currency")
     records = repository.get_records_by_profile(db, profile_id)
     details = []
     total_source = 0.0
@@ -1779,10 +1877,10 @@ def fx_reconciliation(db: Session, profile_id: int, reporting_currency: str):
     for rec in records:
         src_amt = rec.amount or 0.0
         total_source += src_amt
-        conv = convert_currency(db, src_amt, rec.currency or reporting_currency, reporting_currency, rec.period)
+        conv = convert_currency(db, src_amt, rec.currency or report_ccy, report_ccy, rec.period)
         total_converted += conv["converted_amount"]
-        details.append({"record_id": rec.id, "from_currency": rec.currency, "to_currency": reporting_currency, "source_amount": src_amt, "converted_amount": conv["converted_amount"], "fx_variance": conv["fx_variance"]})
-    return {"profile_id": profile_id, "reporting_currency": reporting_currency, "source_total": total_source, "converted_total": total_converted, "fx_variance_total": total_converted - total_source, "details": details}
+        details.append({"record_id": rec.id, "from_currency": rec.currency, "to_currency": report_ccy, "source_amount": src_amt, "converted_amount": conv["converted_amount"], "fx_variance": conv["fx_variance"], "inverse_rate_used": conv.get("inverse_rate_used", False)})
+    return {"profile_id": profile_id, "reporting_currency": report_ccy, "source_total": total_source, "converted_total": total_converted, "fx_variance_total": total_converted - total_source, "details": details}
 
 
 def create_journal_adjustment(db: Session, payload: dict, actor_id: int | None):
@@ -1833,6 +1931,56 @@ def journal_action(db: Session, adjustment_id: int, action: str, actor_id: int |
     db.commit()
     db.refresh(row)
     return row
+
+
+def auto_generate_journal_adjustments(db: Session, payload: dict, actor_id: int | None):
+    profile_id = int(payload["profile_id"])
+    period_key = payload.get("period_key")
+    reporting_currency = payload.get("reporting_currency")
+    min_amount = abs(float(payload.get("min_amount") or 0.0))
+
+    records = repository.get_records_by_profile(db, profile_id)
+    scoped = [r for r in records if (r.status or "").upper() in {"UNMATCHED", "PARTIAL_MATCH"}]
+    if period_key:
+        scoped = [r for r in scoped if (r.period or "") == period_key]
+
+    grouped = {}
+    for rec in scoped:
+        key = (rec.account or "UNASSIGNED", rec.currency or "USD", rec.period or period_key or "N/A")
+        grouped[key] = grouped.get(key, 0.0) + float(rec.amount or 0.0)
+
+    created = []
+    for (account, currency, rec_period), total in grouped.items():
+        if abs(total) < min_amount:
+            continue
+        row_payload = {
+            "profile_id": profile_id,
+            "period_key": rec_period,
+            "account": account,
+            "currency": currency,
+            "amount": total,
+            "functional_currency": currency,
+            "reporting_currency": reporting_currency or currency,
+            "reason": f"Auto-generated from unresolved reconciliation variance ({len(scoped)} records in scope)",
+        }
+        created_row = create_journal_adjustment(db, row_payload, actor_id)
+        created.append(
+            {
+                "adjustment_id": created_row.id,
+                "account": created_row.account,
+                "currency": created_row.currency,
+                "amount": created_row.amount,
+                "converted_amount": created_row.converted_amount,
+                "status": created_row.status,
+            }
+        )
+
+    return {
+        "profile_id": profile_id,
+        "period_key": period_key,
+        "created_count": len(created),
+        "items": created,
+    }
 
 
 def variance_analysis(db: Session, profile_id: int):
