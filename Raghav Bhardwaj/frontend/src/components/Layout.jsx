@@ -33,16 +33,12 @@ import { useProjectStore } from '../store/projectStore'
 
 const PAGE_TITLES = {
   '/command-center': 'Reconciliation Command Center',
-  '/executive-dashboard': 'Executive Overview',
   '/reconciliation-runs': 'Auto Reconciliation',
   '/exception-ops': 'Transaction Matching',
-  '/exception-investigation': 'Exception Investigation',
+  '/reconciliation-profiles': 'Reconciliation Type & Templates',
+  '/certification-workflow': 'Certification Workflow',
   '/analytics-explorer': 'Reconciliation Compliance',
   '/risk-dashboard': 'Risk & Compliance Dashboard',
-  '/close-certification': 'Period Close Monitor',
-  '/controls-governance': 'Policy & Controls Studio',
-  '/platform-admin': 'Application Administration',
-  '/admin': 'Admin Operations',
 }
 
 export default function Layout() {
@@ -60,27 +56,14 @@ export default function Layout() {
 
   const navGroups = [
     {
-      title: 'Operate',
+      title: 'Oracle ARCS Flow',
       items: [
-        { to: '/command-center', label: 'Reconciliation Command Center', icon: Command, end: true, show: true },
-        { to: '/reconciliation-runs', label: 'Auto Reconciliation', icon: PlaySquare, show: true },
-        { to: '/exception-ops', label: 'Transaction Matching', icon: AlertTriangle, show: true },
-        { to: '/analytics-explorer', label: 'Reconciliation Compliance', icon: BarChart3, show: role === 'admin' || role === 'preparer' },
-      ],
-    },
-    {
-      title: 'Analyze',
-      items: [
-        { to: '/executive-dashboard', label: 'Executive Overview', icon: BarChart3, show: role === 'admin' || role === 'reviewer' },
-        { to: '/risk-dashboard', label: 'Risk & Compliance Dashboard', icon: ShieldAlert, show: role === 'admin' || role === 'reviewer' },
-      ],
-    },
-    {
-      title: 'Control',
-      items: [
-        { to: '/close-certification', label: 'Period Close Monitor', icon: CalendarCheck2, show: true },
-        { to: '/controls-governance', label: 'Policy & Controls Studio', icon: ShieldCheck, show: role === 'admin' || role === 'reviewer' },
-        { to: '/admin', label: 'Admin Operations', icon: Shield, show: role === 'admin' || role === 'reviewer' },
+        { to: '/reconciliation-profiles', label: '1. Reconciliation Type & Templates', icon: Command, show: true },
+        { to: '/reconciliation-runs', label: '2. Run Auto Reconciliation', icon: PlaySquare, show: true },
+        { to: '/exception-ops', label: '3. Matching & Exceptions', icon: AlertTriangle, show: true },
+        { to: '/certification-workflow', label: '4. Certification Workflow', icon: CalendarCheck2, show: true },
+        { to: '/analytics-explorer', label: '5. Reconciliation Compliance', icon: BarChart3, show: true },
+        { to: '/risk-dashboard', label: '6. Risk & Compliance Dashboard', icon: ShieldAlert, show: true },
       ],
     },
   ]
@@ -155,18 +138,18 @@ export default function Layout() {
     )
 
   return (
-    <div className="h-screen w-screen p-3">
-      <div className="premium-shell flex h-full w-full overflow-hidden rounded-2xl border border-surface-700/70">
+    <div className="h-screen w-screen p-2">
+      <div className="premium-shell flex h-full w-full overflow-hidden rounded border border-surface-700/70">
         <aside
           className={clsx(
             'premium-sidebar relative flex-shrink-0 border-r border-surface-700/60 flex flex-col transition-all duration-200',
             sidebarCollapsed ? 'w-[92px]' : 'w-[294px]'
           )}
         >
-          <div className={clsx('h-[74px] border-b border-surface-700/60 relative', sidebarCollapsed ? 'px-2' : 'px-5')}>
+          <div className={clsx('h-[66px] border-b border-surface-700/60 relative', sidebarCollapsed ? 'px-2' : 'px-4')}>
             <div className={clsx('h-full flex items-center', sidebarCollapsed ? 'justify-center' : 'justify-between')}>
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border border-brand-600/40 bg-brand-900/20">
+                <div className="w-9 h-9 rounded-sm flex items-center justify-center flex-shrink-0 border border-brand-600/40 bg-brand-900/20">
                   <Scale className="w-5 h-5 text-slate-100" />
                 </div>
                 {!sidebarCollapsed && (
@@ -263,9 +246,8 @@ export default function Layout() {
         </aside>
 
         <main className="premium-main flex-1 min-w-0 overflow-auto relative">
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-48 bg-[radial-gradient(800px_180px_at_75%_0%,rgba(60,130,246,0.20),transparent),radial-gradient(700px_200px_at_12%_0%,rgba(47,187,127,0.14),transparent)]" />
           <div className="relative z-10 h-full flex flex-col">
-            <div className="h-[74px] px-6 border-b border-surface-700/60 backdrop-blur-xl flex items-center justify-between" style={{ background: 'color-mix(in srgb, var(--header-bg) 82%, transparent)' }}>
+            <div className="h-[66px] px-4 border-b border-surface-700/60 flex items-center justify-between" style={{ background: 'var(--header-bg)' }}>
               <div>
                 <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Workbench</p>
                 <p className="text-base font-semibold text-slate-100">{currentTitle}</p>

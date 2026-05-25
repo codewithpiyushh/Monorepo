@@ -51,10 +51,21 @@ function flattenExecution(executionResults) {
           transaction.selected_target_data?.reference ||
           `TXN-${String(transaction.id || 0).padStart(5, '0')}`,
         match_variance: mismatch ? Math.round((1 - Number(transaction.match_score || 0)) * 100) : 0,
+        tx_date:
+          transaction.selected_source_data?.date ||
+          transaction.selected_target_data?.date ||
+          null,
       })
     })
   })
   return rows
+}
+
+function toMonthName(rawDate) {
+  if (!rawDate) return 'Unknown'
+  const date = new Date(rawDate)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  return date.toLocaleString('en-US', { month: 'long' })
 }
 
 function decodeParam(value = '') {
@@ -66,6 +77,18 @@ function decodeParam(value = '') {
   }
 }
 
+function parseMatrixPath(key = '') {
+  const parts = String(key).split('|')
+  const out = {}
+  parts.forEach((part) => {
+    if (part.startsWith('E:')) out.entity = part.slice(2)
+    if (part.startsWith('A:')) out.account = part.slice(2)
+    if (part.startsWith('S:')) out.status = part.slice(2)
+    if (part.startsWith('X:')) out.exception = part.slice(2)
+  })
+  return out
+}
+
 export default function RiskDashboard() {
   const navigate = useNavigate()
   const { entity: routeEntity = '', account: routeAccount = '' } = useParams()
@@ -74,6 +97,10 @@ export default function RiskDashboard() {
 
   const [selectedEntity, setSelectedEntity] = useState(selectedEntityRoute)
   const [selectedAccount, setSelectedAccount] = useState(selectedAccountRoute)
+  const [sliceEntity, setSliceEntity] = useState('ALL')
+  const [sliceStatus, setSliceStatus] = useState('ALL')
+  const [sliceException, setSliceException] = useState('ALL')
+  const [expandedRows, setExpandedRows] = useState({})
   const [entityPage, setEntityPage] = useState(1)
   const [accountPage, setAccountPage] = useState(1)
   const [txnPage, setTxnPage] = useState(1)
@@ -170,6 +197,86 @@ export default function RiskDashboard() {
     [transactions, selectedEntity, selectedAccount],
   )
 
+  const matrixScopeTransactions = useMemo(() => {
+    return selectedTransactions.filter((row) => {
+      if (sliceEntity !== 'ALL' && row.entity !== sliceEntity) return false
+      if (sliceStatus !== 'ALL' && String(row.status || '').toUpperCase() !== sliceStatus) return false
+      if (sliceException !== 'ALL' && String(row.exception_classification || '') !== sliceException) return false
+      return true
+    })
+  }, [selectedTransactions, sliceEntity, sliceStatus, sliceException])
+
+  const matrixMonths = useMemo(() => {
+    const months = Array.from(new Set(matrixScopeTransactions.map((row) => toMonthName(row.tx_date))))
+    return months.length ? months : ['Unknown']
+  }, [matrixScopeTransactions])
+
+  const matrixRows = useMemo(() => {
+    const byEntity = new Map()
+    matrixScopeTransactions.forEach((row) => {
+      const entity = row.entity || 'Unassigned'
+      const account = row.account || 'Unassigned'
+      const status = String(row.status || 'OPEN').toUpperCase()
+      const exception = row.exception_classification || 'No Exception'
+      const month = toMonthName(row.tx_date)
+      const value = Number(row.match_variance || 0)
+
+      if (!byEntity.has(entity)) byEntity.set(entity, { values: {}, children: new Map(), count: 0 })
+      const eNode = byEntity.get(entity)
+      eNode.values[month] = (eNode.values[month] || 0) + value
+      eNode.count += 1
+
+      if (!eNode.children.has(account)) eNode.children.set(account, { values: {}, children: new Map(), count: 0 })
+      const aNode = eNode.children.get(account)
+      aNode.values[month] = (aNode.values[month] || 0) + value
+      aNode.count += 1
+
+      if (!aNode.children.has(status)) aNode.children.set(status, { values: {}, children: new Map(), count: 0 })
+      const sNode = aNode.children.get(status)
+      sNode.values[month] = (sNode.values[month] || 0) + value
+      sNode.count += 1
+
+      if (!sNode.children.has(exception)) sNode.children.set(exception, { values: {}, count: 0 })
+      const xNode = sNode.children.get(exception)
+      xNode.values[month] = (xNode.values[month] || 0) + value
+      xNode.count += 1
+    })
+
+    const out = []
+    const pushRows = (label, level, pathKey, node, hasChildren) => {
+      out.push({
+        label,
+        level,
+        key: pathKey,
+        hasChildren,
+        count: node.count || 0,
+        values: node.values || {},
+      })
+    }
+
+    Array.from(byEntity.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([entity, eNode]) => {
+      const eKey = `E:${entity}`
+      pushRows(entity, 0, eKey, eNode, eNode.children.size > 0)
+      if (!expandedRows[eKey]) return
+      Array.from(eNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([account, aNode]) => {
+        const aKey = `${eKey}|A:${account}`
+        pushRows(account, 1, aKey, aNode, aNode.children.size > 0)
+        if (!expandedRows[aKey]) return
+        Array.from(aNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([status, sNode]) => {
+          const sKey = `${aKey}|S:${status}`
+          pushRows(status, 2, sKey, sNode, sNode.children.size > 0)
+          if (!expandedRows[sKey]) return
+          Array.from(sNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([exception, xNode]) => {
+            const xKey = `${sKey}|X:${exception}`
+            pushRows(exception, 3, xKey, xNode, false)
+          })
+        })
+      })
+    })
+
+    return out
+  }, [matrixScopeTransactions, expandedRows])
+
   const exceptionBreakdown = useMemo(() => {
     const grouped = new Map()
     selectedTransactions
@@ -238,6 +345,25 @@ export default function RiskDashboard() {
   const selectAccount = (account) => {
     setSelectedAccount(account)
     setTxnPage(1)
+  }
+  const handleMatrixDrill = (row) => {
+    const path = parseMatrixPath(row?.key)
+    if (row.level === 0 && path.entity) {
+      goEntity(path.entity)
+      return
+    }
+    if (row.level === 1 && path.entity && path.account) {
+      goEntity(path.entity)
+      selectAccount(path.account)
+      return
+    }
+    if (row.level === 2) {
+      setSliceStatus(path.status || 'ALL')
+      return
+    }
+    if (row.level === 3) {
+      setSliceException(path.exception || 'ALL')
+    }
   }
 
   const paginatedEntities = useMemo(() => {
@@ -310,6 +436,10 @@ export default function RiskDashboard() {
 
   const loading = !!selectedProjectId && !executionResults
 
+  const entityOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => r.entity))).sort(), [selectedTransactions])
+  const statusOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => String(r.status || '').toUpperCase()))).sort(), [selectedTransactions])
+  const exceptionOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => String(r.exception_classification || '')))).sort(), [selectedTransactions])
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
@@ -365,6 +495,72 @@ export default function RiskDashboard() {
 
         {!loading && transactions.length ? (
           <>
+            <div className="card focus-surface pulse-update p-4 overflow-auto">
+              <p className="text-sm font-semibold text-slate-100 mb-2">Oracle-style Drilldown Matrix</p>
+              <p className="hint-text mb-2">Tip: click hierarchy rows for instant drilldown; use + / - for expand and collapse.</p>
+              <div className="space-y-1 text-xs mb-3">
+                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
+                  Entity [ {sliceEntity === 'ALL' ? entityOptions.join(', ') || 'All' : sliceEntity} ]
+                </div>
+                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
+                  Status [ {sliceStatus === 'ALL' ? statusOptions.join(', ') || 'All' : sliceStatus} ]
+                </div>
+                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
+                  Exception [ {sliceException === 'ALL' ? 'All' : sliceException} ]
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+                <select className="input" value={sliceEntity} onChange={(e) => setSliceEntity(e.target.value)}>
+                  <option value="ALL">All Entities</option>
+                  {entityOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <select className="input" value={sliceStatus} onChange={(e) => setSliceStatus(e.target.value)}>
+                  <option value="ALL">All Statuses</option>
+                  {statusOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <select className="input" value={sliceException} onChange={(e) => setSliceException(e.target.value)}>
+                  <option value="ALL">All Exceptions</option>
+                  {exceptionOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+                <button className="btn-secondary" onClick={() => { setSliceEntity('ALL'); setSliceStatus('ALL'); setSliceException('ALL') }}>
+                  Clear Slicers
+                </button>
+              </div>
+              <table className="enterprise-table text-sm">
+                <thead>
+                  <tr>
+                    <th>Hierarchy</th>
+                    <th>Records</th>
+                    {matrixMonths.map((m) => <th key={m}>{m}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map((row) => (
+                    <tr key={row.key} className="cursor-pointer drill-row" onClick={() => handleMatrixDrill(row)}>
+                      <td className="text-slate-100">
+                        <div style={{ paddingLeft: `${row.level * 16}px` }} className="flex items-center gap-2">
+                          {row.hasChildren ? (
+                            <button
+                              className="text-xs border border-surface-600 rounded px-1"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setExpandedRows((prev) => ({ ...prev, [row.key]: !prev[row.key] }))
+                              }}
+                            >
+                              {expandedRows[row.key] ? '-' : '+'}
+                            </button>
+                          ) : <span className="w-4 inline-block" />}
+                          <span>{row.label}</span>
+                        </div>
+                      </td>
+                      <td>{row.count}</td>
+                      {matrixMonths.map((m) => <td key={`${row.key}-${m}`}>{toCurrency(row.values[m] || 0, 'USD')}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Risk Score</p><p className="text-xl font-semibold text-slate-100">{riskSignals.riskScore}</p></div>
               <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Exception Heatmap</p><p className="text-sm font-semibold text-slate-100">{riskSignals.exceptionHeatmap}</p></div>
@@ -410,7 +606,7 @@ export default function RiskDashboard() {
             </div>
 
             {currentDepth === 'overview' ? (
-              <div className="card p-4 overflow-auto">
+              <div className="card focus-surface p-4 overflow-auto">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <p className="text-sm font-semibold text-slate-100">Entity impact</p>
                   <span className="text-xs text-slate-400">Click any row to drill into the selected entity.</span>
@@ -419,7 +615,7 @@ export default function RiskDashboard() {
                   <thead><tr><th>Entity</th><th>Accounts</th><th>Risk</th><th>Exceptions</th><th>Variance</th></tr></thead>
                   <tbody>
                     {paginatedEntities.map((row) => (
-                      <tr key={row.entity} className="cursor-pointer" onClick={() => goEntity(row.entity)}>
+                      <tr key={row.entity} className="cursor-pointer drill-row" onClick={() => goEntity(row.entity)}>
                         <td className="text-slate-100">{row.entity}</td>
                         <td className="text-slate-300">{row.account_count}</td>
                         <td className="text-slate-300">{row.risk_score}</td>
@@ -454,7 +650,7 @@ export default function RiskDashboard() {
                     <thead><tr><th>Account</th><th>Risk</th><th>Exceptions</th><th>Exception Rate</th><th>Variance</th></tr></thead>
                     <tbody>
                       {paginatedAccounts.map((row) => (
-                        <tr key={`${row.entity}-${row.account}`} className={`cursor-pointer ${selectedAccount === row.account ? 'bg-brand-900/10' : ''}`} onClick={() => selectAccount(row.account)}>
+                        <tr key={`${row.entity}-${row.account}`} className={`cursor-pointer drill-row ${selectedAccount === row.account ? 'bg-brand-900/10' : ''}`} onClick={() => selectAccount(row.account)}>
                           <td className="text-slate-100">{row.account}</td>
                           <td className={`font-medium ${statusTone(row.risk_level)}`}><span className={`status-chip status-chip-${String(row.risk_level || '').toLowerCase()}`}>{row.risk_level}</span> <span className="ml-2">({row.risk_score})</span></td>
                           <td className="text-slate-300">{row.exception_count}</td>

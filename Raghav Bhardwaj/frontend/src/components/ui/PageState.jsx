@@ -2,10 +2,16 @@ import { AlertTriangle, Inbox, Loader2 } from 'lucide-react'
 
 export function LoadingState({ label = 'Loading...' }) {
   return (
-    <div className="flex min-h-[260px] items-center justify-center">
-      <div className="flex items-center gap-3 rounded-2xl border border-surface-700 bg-surface-800/60 px-5 py-3 text-sm text-slate-300">
+    <div className="min-h-[260px] rounded-xl border border-surface-700 bg-surface-800/40 p-5">
+      <div className="mb-4 flex items-center gap-3 text-sm text-slate-300">
         <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
         {label}
+      </div>
+      <div className="space-y-2">
+        <div className="h-8 animate-pulse rounded-md bg-surface-700/40" />
+        <div className="h-8 animate-pulse rounded-md bg-surface-700/30" />
+        <div className="h-8 animate-pulse rounded-md bg-surface-700/40" />
+        <div className="h-8 animate-pulse rounded-md bg-surface-700/30" />
       </div>
     </div>
   )

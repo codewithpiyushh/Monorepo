@@ -78,11 +78,19 @@ function flattenExecutionResults(executionResults) {
         discrepancies: discrepancyList,
         execution_transaction_id: transaction.id,
         unit_status: unit.status,
+        tx_date: transaction.selected_source_data?.date || transaction.selected_target_data?.date || null,
       })
     })
   })
 
   return rows
+}
+
+function toMonthName(rawDate) {
+  if (!rawDate) return 'Unknown'
+  const d = new Date(rawDate)
+  if (Number.isNaN(d.getTime())) return 'Unknown'
+  return d.toLocaleString('en-US', { month: 'long' })
 }
 
 function buildGlobalFilter(rows, filters) {
@@ -96,6 +104,18 @@ function buildGlobalFilter(rows, filters) {
     if (filters.risk && String(row.risk || '').toUpperCase() !== filters.risk) return false
     return true
   })
+}
+
+function parseMatrixPath(key = '') {
+  const parts = String(key).split('|')
+  const out = {}
+  parts.forEach((part) => {
+    if (part.startsWith('E:')) out.entity = part.slice(2)
+    if (part.startsWith('A:')) out.account = part.slice(2)
+    if (part.startsWith('S:')) out.status = part.slice(2)
+    if (part.startsWith('R:')) out.risk = part.slice(2)
+  })
+  return out
 }
 
 export default function ReconciliationAnalyticsExplorer() {
@@ -115,6 +135,10 @@ export default function ReconciliationAnalyticsExplorer() {
   })
   const [selectedExceptionSlice, setSelectedExceptionSlice] = useState('')
   const [selectedTransactionId, setSelectedTransactionId] = useState(null)
+  const [matrixEntity, setMatrixEntity] = useState('ALL')
+  const [matrixStatus, setMatrixStatus] = useState('ALL')
+  const [matrixRisk, setMatrixRisk] = useState('ALL')
+  const [expandedRows, setExpandedRows] = useState({})
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 12
 
@@ -158,6 +182,83 @@ export default function ReconciliationAnalyticsExplorer() {
     () => scopedTransactions.find((row) => String(row.record_id) === String(selectedTransactionId)) || null,
     [scopedTransactions, selectedTransactionId],
   )
+
+  const matrixScopeTransactions = useMemo(() => {
+    return scopedTransactions.filter((row) => {
+      if (matrixEntity !== 'ALL' && row.entity !== matrixEntity) return false
+      if (matrixStatus !== 'ALL' && String(row.status || '').toUpperCase() !== matrixStatus) return false
+      if (matrixRisk !== 'ALL' && String(row.risk || '').toUpperCase() !== matrixRisk) return false
+      return true
+    })
+  }, [scopedTransactions, matrixEntity, matrixStatus, matrixRisk])
+
+  const matrixMonths = useMemo(() => {
+    const months = Array.from(new Set(matrixScopeTransactions.map((row) => toMonthName(row.tx_date))))
+    return months.length ? months : ['Unknown']
+  }, [matrixScopeTransactions])
+
+  const matrixRows = useMemo(() => {
+    const byEntity = new Map()
+
+    matrixScopeTransactions.forEach((row) => {
+      const entity = row.entity || 'Unassigned'
+      const account = row.account || 'Unassigned'
+      const status = String(row.status || 'OPEN').toUpperCase()
+      const risk = String(row.risk || 'LOW').toUpperCase()
+      const month = toMonthName(row.tx_date)
+      const value = Number(row.amount || 0)
+
+      if (!byEntity.has(entity)) byEntity.set(entity, { values: {}, children: new Map(), count: 0 })
+      const e = byEntity.get(entity)
+      e.values[month] = (e.values[month] || 0) + value
+      e.count += 1
+
+      if (!e.children.has(account)) e.children.set(account, { values: {}, children: new Map(), count: 0 })
+      const a = e.children.get(account)
+      a.values[month] = (a.values[month] || 0) + value
+      a.count += 1
+
+      if (!a.children.has(status)) a.children.set(status, { values: {}, children: new Map(), count: 0 })
+      const s = a.children.get(status)
+      s.values[month] = (s.values[month] || 0) + value
+      s.count += 1
+
+      if (!s.children.has(risk)) s.children.set(risk, { values: {}, count: 0 })
+      const r = s.children.get(risk)
+      r.values[month] = (r.values[month] || 0) + value
+      r.count += 1
+    })
+
+    const out = []
+    const push = (label, level, key, node, hasChildren) => {
+      out.push({ label, level, key, values: node.values || {}, count: node.count || 0, hasChildren })
+    }
+
+    Array.from(byEntity.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([entity, eNode]) => {
+      const eKey = `E:${entity}`
+      push(entity, 0, eKey, eNode, eNode.children.size > 0)
+      if (!expandedRows[eKey]) return
+      Array.from(eNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([account, aNode]) => {
+        const aKey = `${eKey}|A:${account}`
+        push(account, 1, aKey, aNode, aNode.children.size > 0)
+        if (!expandedRows[aKey]) return
+        Array.from(aNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([status, sNode]) => {
+          const sKey = `${aKey}|S:${status}`
+          push(status, 2, sKey, sNode, sNode.children.size > 0)
+          if (!expandedRows[sKey]) return
+          Array.from(sNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([risk, rNode]) => {
+            push(risk, 3, `${sKey}|R:${risk}`, rNode, false)
+          })
+        })
+      })
+    })
+
+    return out
+  }, [matrixScopeTransactions, expandedRows])
+
+  const matrixEntityOptions = useMemo(() => Array.from(new Set(scopedTransactions.map((row) => row.entity))).sort(), [scopedTransactions])
+  const matrixStatusOptions = useMemo(() => Array.from(new Set(scopedTransactions.map((row) => String(row.status || '').toUpperCase()))).sort(), [scopedTransactions])
+  const matrixRiskOptions = useMemo(() => Array.from(new Set(scopedTransactions.map((row) => String(row.risk || '').toUpperCase()))).sort(), [scopedTransactions])
 
   const entityRows = useMemo(() => {
     const groups = new Map()
@@ -259,6 +360,27 @@ export default function ReconciliationAnalyticsExplorer() {
   }
 
   const currentDepth = selectedAccount ? 'account' : selectedEntity ? 'entity' : 'overview'
+
+  const handleMatrixDrill = (row) => {
+    const path = parseMatrixPath(row?.key)
+    if (row.level === 0 && path.entity) {
+      goEntity(path.entity)
+      return
+    }
+    if (row.level === 1 && path.entity && path.account) {
+      goAccount(path.entity, path.account)
+      return
+    }
+    if (row.level === 2) {
+      if (path.entity && path.account) goAccount(path.entity, path.account)
+      setFilters((state) => ({ ...state, status: path.status || '' }))
+      return
+    }
+    if (row.level === 3) {
+      if (path.entity && path.account) goAccount(path.entity, path.account)
+      setFilters((state) => ({ ...state, risk: path.risk || '' }))
+    }
+  }
 
   useEffect(() => {
     setPage(1)
@@ -434,6 +556,66 @@ export default function ReconciliationAnalyticsExplorer() {
           </select>
         </div>
 
+        <div className="card focus-surface pulse-update p-4 overflow-auto">
+          <p className="text-sm font-semibold text-slate-100 mb-2">Oracle-style Compliance Matrix</p>
+          <p className="hint-text mb-2">Tip: click hierarchy labels to drill instantly; use + / - to expand or collapse groups.</p>
+          <div className="space-y-1 text-xs mb-3">
+            <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">Entity [ {matrixEntity === 'ALL' ? matrixEntityOptions.join(', ') || 'All' : matrixEntity} ]</div>
+            <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">Status [ {matrixStatus === 'ALL' ? matrixStatusOptions.join(', ') || 'All' : matrixStatus} ]</div>
+            <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">Risk [ {matrixRisk === 'ALL' ? matrixRiskOptions.join(', ') || 'All' : matrixRisk} ]</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+            <select className="input" value={matrixEntity} onChange={(e) => setMatrixEntity(e.target.value)}>
+              <option value="ALL">All Entities</option>
+              {matrixEntityOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select className="input" value={matrixStatus} onChange={(e) => setMatrixStatus(e.target.value)}>
+              <option value="ALL">All Statuses</option>
+              {matrixStatusOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <select className="input" value={matrixRisk} onChange={(e) => setMatrixRisk(e.target.value)}>
+              <option value="ALL">All Risks</option>
+              {matrixRiskOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+            <button className="btn-secondary" onClick={() => { setMatrixEntity('ALL'); setMatrixStatus('ALL'); setMatrixRisk('ALL') }}>
+              Clear Slicers
+            </button>
+          </div>
+          <table className="enterprise-table text-sm">
+            <thead>
+              <tr>
+                <th>Hierarchy</th>
+                <th>Records</th>
+                {matrixMonths.map((m) => <th key={m}>{m}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {matrixRows.map((row) => (
+                <tr key={row.key} className="cursor-pointer drill-row" onClick={() => handleMatrixDrill(row)}>
+                  <td className="text-slate-100">
+                    <div style={{ paddingLeft: `${row.level * 16}px` }} className="flex items-center gap-2">
+                      {row.hasChildren ? (
+                        <button
+                          className="text-xs border border-surface-600 rounded px-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setExpandedRows((prev) => ({ ...prev, [row.key]: !prev[row.key] }))
+                          }}
+                        >
+                          {expandedRows[row.key] ? '-' : '+'}
+                        </button>
+                      ) : <span className="w-4 inline-block" />}
+                      <span>{row.label}</span>
+                    </div>
+                  </td>
+                  <td>{row.count}</td>
+                  {matrixMonths.map((m) => <td key={`${row.key}-${m}`}>{fmtCurrency(row.values[m] || 0, 'USD')}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         {isLoading ? <LoadingState label="Loading analytics..." /> : null}
         {!isLoading && !scopedTransactions.length ? <EmptyState title="No analytics data" description="Adjust filters or select another project to view metrics." /> : null}
 
@@ -509,13 +691,13 @@ export default function ReconciliationAnalyticsExplorer() {
               </div>
             </div>
 
-            <div className="card p-4 overflow-auto">
+            <div className="card focus-surface p-4 overflow-auto">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-100">
                     {currentDepth === 'overview' ? 'Entity Summary' : currentDepth === 'entity' ? `Accounts for ${selectedEntity}` : `Transactions for ${selectedEntity} / ${selectedAccount}${selectedExceptionSlice ? ` / ${selectedExceptionSlice}` : ''}`}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">The table updates to match the current drilldown level.</p>
+                  <p className="hint-text mt-1">Real-time drilldown: entity to account to exception to transaction evidence.</p>
                 </div>
                 {selectedEntity ? <button className="btn-secondary" onClick={goOverview}>Reset</button> : null}
               </div>
@@ -534,7 +716,7 @@ export default function ReconciliationAnalyticsExplorer() {
                   </thead>
                   <tbody>
                     {pagedRows.rows.map((row) => (
-                      <tr key={row.entity} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => goEntity(row.entity)}>
+                      <tr key={row.entity} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer drill-row" onClick={() => goEntity(row.entity)}>
                         <td className="p-2 text-slate-100">{row.entity}</td>
                         <td className="p-2 text-slate-300">{row.total}</td>
                         <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
@@ -559,7 +741,7 @@ export default function ReconciliationAnalyticsExplorer() {
                   </thead>
                   <tbody>
                     {pagedRows.rows.map((row) => (
-                      <tr key={row.account} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer" onClick={() => goAccount(selectedEntity, row.account)}>
+                      <tr key={row.account} className="border-b border-surface-800 hover:bg-surface-800/40 cursor-pointer drill-row" onClick={() => goAccount(selectedEntity, row.account)}>
                         <td className="p-2 text-slate-100">{row.account}</td>
                         <td className="p-2 text-slate-300">{row.total}</td>
                         <td className="p-2 text-slate-300">{fmtPct(row.matchRate)}</td>
@@ -586,7 +768,7 @@ export default function ReconciliationAnalyticsExplorer() {
                     {pagedRows.rows.map((row) => (
                       <tr
                         key={row.record_id}
-                        className={`border-b border-surface-800 cursor-pointer ${String(selectedTransactionId) === String(row.record_id) ? 'bg-brand-900/20' : ''}`}
+                        className={`border-b border-surface-800 cursor-pointer drill-row ${String(selectedTransactionId) === String(row.record_id) ? 'bg-brand-900/20' : ''}`}
                         onClick={() => setSelectedTransactionId(row.record_id)}
                       >
                         <td className="p-2 text-slate-100">{row.reference}</td>

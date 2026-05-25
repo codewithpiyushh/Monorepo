@@ -49,7 +49,7 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route index element={<Navigate to="/command-center" replace />} />
+            <Route index element={<Navigate to="/reconciliation-profiles" replace />} />
             <Route path="command-center" element={<CommandCenter />} />
             <Route path="executive-dashboard" element={<ExecutiveDashboard />} />
             <Route path="reconciliation-runs" element={<ReconciliationRunsPage />} />

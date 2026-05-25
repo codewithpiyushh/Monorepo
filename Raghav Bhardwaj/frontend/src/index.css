@@ -29,7 +29,18 @@
   --chart-blue-3: #326dcf;
   --chart-blue-4: #5f9af9;
   --chart-blue-5: #7bb0ff;
-  --shadow: 0 10px 30px rgba(3, 8, 20, 0.34);
+  --shadow: 0 8px 22px rgba(6, 14, 30, 0.22);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
 }
 
 .theme-light {
@@ -78,14 +89,10 @@
 
   body {
     @apply antialiased;
-    background:
-      radial-gradient(1200px 620px at 100% -220px, rgba(74, 141, 255, 0.24), transparent 56%),
-      radial-gradient(900px 520px at -10% -160px, rgba(53, 199, 138, 0.16), transparent 52%),
-      radial-gradient(800px 400px at 50% 0%, rgba(240, 180, 87, 0.08), transparent 65%),
-      var(--bg);
+    background: var(--bg);
     color: var(--text);
     font-family: 'Manrope', 'Segoe UI', sans-serif;
-    line-height: 1.45;
+    line-height: 1.42;
   }
 
   h1, h2, h3 {
@@ -99,7 +106,7 @@
 
 @layer components {
   .premium-shell {
-    background: color-mix(in srgb, var(--bg) 82%, black 18%);
+    background: var(--bg);
   }
 
   .premium-sidebar {
@@ -114,21 +121,22 @@
   .surface-panel,
   .card {
     border: 1px solid var(--line);
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0)), var(--card-bg);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), var(--card-bg);
     box-shadow: var(--shadow);
+    transition: box-shadow var(--motion-base) ease, border-color var(--motion-base) ease, transform var(--motion-fast) ease;
   }
 
   .oracle-hero {
-    border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
-    border-radius: 14px;
-    background: linear-gradient(120deg, color-mix(in srgb, var(--brand) 16%, transparent), color-mix(in srgb, var(--ok) 12%, transparent) 42%, transparent 78%), var(--bg-elev);
+    border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line));
+    border-radius: 12px;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 68%), var(--card-bg);
   }
 
   .oracle-kpi {
-    border: 1px solid color-mix(in srgb, var(--brand) 28%, transparent);
-    border-radius: 12px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 14%, transparent), transparent 65%), var(--bg-elev);
+    border: 1px solid color-mix(in srgb, var(--line) 82%, var(--brand) 18%);
+    border-radius: 10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 8%, transparent), transparent 70%), var(--card-bg);
   }
 
   .section-header {
@@ -160,7 +168,7 @@
 
   .btn-primary {
     @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--brand) 75%, white 25%);
     background: linear-gradient(180deg, var(--brand), var(--brand-strong));
     color: #fff;
@@ -170,7 +178,7 @@
 
   .btn-secondary {
     @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid var(--line-soft);
     background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
     color: var(--text);
@@ -180,7 +188,7 @@
 
   .btn-ghost {
     @apply inline-flex items-center gap-2 px-3 py-1.5 text-sm transition-colors;
-    border-radius: 9px;
+    border-radius: 8px;
     color: var(--muted);
   }
 
@@ -188,7 +196,7 @@
 
   .input {
     @apply w-full px-3 py-2 text-sm focus:outline-none;
-    border-radius: 10px;
+    border-radius: 8px;
     border: 1px solid var(--line-soft);
     background: var(--filter-bg);
     color: var(--text);
@@ -202,9 +210,9 @@
   }
 
   .sidebar-nav-item {
-    min-height: 42px;
+    min-height: 40px;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: 8px;
   }
 
   .sidebar-nav-item:hover {
@@ -221,7 +229,7 @@
   .sidebar-collapse-btn {
     width: 30px;
     height: 30px;
-    border-radius: 9999px;
+    border-radius: 8px;
     border: 1px solid var(--line-soft);
     background: var(--bg-elev);
     display: flex;
@@ -231,7 +239,7 @@
 
   .theme-toggle {
     @apply w-full mb-3 px-3 py-2.5 border flex items-center justify-between;
-    border-radius: 10px;
+    border-radius: 8px;
     border-color: var(--line-soft);
     background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
   }
@@ -269,7 +277,7 @@
     border-collapse: separate;
     border-spacing: 0;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
     background: var(--table-bg);
   }
@@ -284,11 +292,15 @@
     letter-spacing: 0.06em;
     color: var(--muted);
     font-weight: 700;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    backdrop-filter: blur(3px);
   }
 
   .enterprise-table th,
   .enterprise-table td {
-    padding: 10px 12px;
+    padding: 9px 11px;
     border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
   }
 
@@ -298,6 +310,37 @@
 
   .enterprise-table tbody tr:hover {
     background: color-mix(in srgb, var(--bg-soft) 54%, transparent);
+  }
+
+  .enterprise-table tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--bg-soft) 20%, transparent);
+  }
+
+  .focus-surface {
+    border-color: color-mix(in srgb, var(--brand) 42%, var(--line));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 22%, transparent), var(--shadow);
+  }
+
+  .drill-row {
+    transition: background-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+  }
+
+  .drill-row:active {
+    transform: translateY(1px);
+  }
+
+  .pulse-update {
+    animation: pulseUpdate 360ms ease-out;
+  }
+
+  @keyframes pulseUpdate {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 35%, transparent); }
+    100% { box-shadow: 0 0 0 10px transparent; }
+  }
+
+  .hint-text {
+    font-size: 12px;
+    color: var(--muted);
   }
 
   .status-chip {
