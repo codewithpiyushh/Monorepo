@@ -3,7 +3,7 @@
  * All pages import { api } from "../hooks/api"
  */
 
-const API_BASE = "http://localhost:8000/api";
+import API_BASE from "../config";
 
 async function request(method, path, body) {
   const opts = {
@@ -97,3 +97,5 @@ export const api = {
   downloadUrl: (projectId, datasetId, fileName) =>
     `${API_BASE}/projects/${projectId}/datasets/${datasetId}/download?file=${fileName}`,
 };
+
+export default API_BASE;

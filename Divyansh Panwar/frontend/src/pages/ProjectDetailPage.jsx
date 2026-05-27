@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../hooks/api";
+import API_BASE from "../config";
+import DatasetDashboard from "./DatasetDashboard";
 import "./ProjectDetailPage.css";
-import DatasetDashboard from './DatasetDashboard';
-const API_BASE = "http://localhost:8000/api";
 
 export default function ProjectDetailPage({ navigate, params }) {
   const { projectId } = params || {};
@@ -314,8 +314,11 @@ const [savingCode, setSavingCode] = useState(false);
                       <div className="expanded-toolbar">
                         <h4 className="section-heading">Generated Files</h4>
                         <div className="expanded-actions">
-                          {/* NEW: View Analytics Dashboard Button */}
-                          <button className="btn-outline-small" style={{ borderColor: '#e11d48', color: '#e11d48' }} onClick={() => setActiveDashboardDatasetId(ds.id)}>
+                          <button
+                            className="btn-outline-small"
+                            style={{ borderColor: '#e11d48', color: '#e11d48' }}
+                            onClick={() => navigate("analytics", { projectId, datasetId: ds.id })}
+                          >
                             📊 View Analytics
                           </button>
 

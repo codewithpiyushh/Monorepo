@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import API_BASE from '../config';
 import './DatasetDashboard.css';
 
 const COLORS = ['#e11d48', '#2dd4bf', '#fbbf24', '#818cf8', '#f472b6', '#a855f7', '#10b981'];
@@ -10,6 +11,7 @@ const AVAILABLE_METRICS = ['revenue', 'cogs', 'ebitda', 'units', 'marketing_expe
 export default function DatasetDashboard({ projectId, datasetId }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // --- Dynamic Chart State ---
   const [customData, setCustomData] = useState([]);
@@ -18,31 +20,52 @@ export default function DatasetDashboard({ projectId, datasetId }) {
   const [chartType, setChartType] = useState('Bar');
 
   useEffect(() => {
+    if (!projectId || !datasetId) {
+      setLoading(false);
+      return;
+    }
+
     // Load standard dashboard stats
-    fetch(`http://localhost:8000/api/projects/${projectId}/datasets/${datasetId}/dashboard-stats`)
-      .then(res => res.json())
-      .then(data => {
+    fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/dashboard-stats`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Failed to load analytics.');
+        }
+        return res.json();
+      })
+      .then((data) => {
         setStats(data);
         setLoading(false);
       })
-      .catch(err => console.error("Failed to load stats", err));
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
   }, [projectId, datasetId]);
 
   // Fetch custom chart data whenever the user changes the dropdowns!
   useEffect(() => {
-    if (!datasetId || selectedMetrics.length === 0) return;
+    if (!projectId || !datasetId || selectedMetrics.length === 0) return;
 
-    fetch(`http://localhost:8000/api/projects/${projectId}/datasets/${datasetId}/custom-chart`, {
+    fetch(`${API_BASE}/projects/${projectId}/datasets/${datasetId}/custom-chart`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ dimension: selectedDim, metrics: selectedMetrics })
     })
-      .then(res => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Failed to fetch custom chart data.');
+        }
+        return res.json();
+      })
       .then(data => setCustomData(data.data || []))
       .catch(err => console.error("Failed to fetch custom chart data", err));
   }, [projectId, datasetId, selectedDim, selectedMetrics]);
 
   if (loading) return <div className="dashboard-loading">Analyzing million-row dataset...</div>;
+  if (error) return <div className="dashboard-loading">{error}</div>;
   if (!stats || stats.error) return null;
 
   const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: "compact" }).format(val);

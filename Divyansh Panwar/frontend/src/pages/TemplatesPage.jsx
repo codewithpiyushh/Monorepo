@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
+import API_BASE from "../config";
 import "./TemplatesPage.css";
-
-const API_BASE = "http://localhost:8000/api";
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState([]);

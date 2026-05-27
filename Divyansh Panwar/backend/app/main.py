@@ -29,6 +29,28 @@ else:
 DATA_ROOT = BASE_DIR / "data"
 DATA_ROOT.mkdir(exist_ok=True, parents=True)
 
+
+def _find_project_fact_file(project_id: int, dataset_id: Optional[int] = None) -> Optional[Path]:
+    project_dir = DATA_ROOT / str(project_id)
+    if not project_dir.exists():
+        return None
+
+    preferred_dir = project_dir / str(dataset_id) if dataset_id is not None else None
+    if preferred_dir and preferred_dir.exists():
+        preferred_fact_files = list(preferred_dir.glob("fact_*.csv"))
+        if preferred_fact_files:
+            return preferred_fact_files[0]
+
+    for candidate_dir in sorted(project_dir.iterdir(), key=lambda item: item.name):
+        if not candidate_dir.is_dir():
+            continue
+        fact_files = list(candidate_dir.glob("fact_*.csv"))
+        if fact_files:
+            return fact_files[0]
+
+    return None
+
+
 from app import models
 from app.database import engine, SessionLocal
 import json
@@ -711,18 +733,12 @@ def delete_dataset(project_id: int, dataset_id: int, db: Session = Depends(get_d
 
 @app.get("/api/projects/{project_id}/datasets/{dataset_id}/dashboard-stats")
 def get_dashboard_stats(project_id: int, dataset_id: int, db: Session = Depends(get_db)):
-    ds_dir = DATA_ROOT / str(project_id) / str(dataset_id)
-    if not ds_dir.exists():
-        raise HTTPException(status_code=404, detail="Dataset not found")
-        
-    # Find the main fact table (usually starts with fact_ and ends with .csv)
-    fact_files = list(ds_dir.glob("fact_*.csv"))
-    if not fact_files:
+    fact_file = _find_project_fact_file(project_id, dataset_id)
+    if not fact_file:
         raise HTTPException(status_code=404, detail="No fact tables generated to analyze.")
-        
+
     try:
-        # Read the first fact table
-        df = pd.read_csv(fact_files[0])
+        df = pd.read_csv(fact_file)
         
         # Ensure we have a date column to group by
         date_col = 'date' if 'date' in df.columns else 'Date' if 'Date' in df.columns else None
@@ -832,14 +848,12 @@ def save_custom_logic(project_id: int, body: dict, db: Session = Depends(get_db)
 # --- NEW DYNAMIC CHART BUILDER ROUTE ---
 @app.post("/api/projects/{project_id}/datasets/{dataset_id}/custom-chart")
 def get_custom_chart_data(project_id: int, dataset_id: int, body: CustomChartRequest):
-    ds_dir = DATA_ROOT / str(project_id) / str(dataset_id)
-    fact_files = list(ds_dir.glob("fact_*.csv"))
-    
-    if not fact_files:
+    fact_file = _find_project_fact_file(project_id, dataset_id)
+    if not fact_file:
         raise HTTPException(status_code=404, detail="No fact tables found.")
 
     try:
-        df = pd.read_csv(fact_files[0])
+        df = pd.read_csv(fact_file)
         dim = body.dimension.lower()
         
         # Format dates nicely if they choose month/year
