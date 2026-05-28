@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from ..models.models import Project
+from ..models.models import Project, AuditLog
 from ..schemas.schemas import ProjectCreate, ProjectUpdate
 from ..rbac.roles import ADMIN
 
@@ -65,6 +65,28 @@ def delete_project(db: Session, project_id: int, user_id: int, user_role: str) -
 
 
 def enrich_project(project: Project) -> dict:
+    created_by_user = project.owner.username if project.owner else None
+    audit_username = None
+    if project.id:
+        # Use the most recent project update audit entry to infer the updater.
+        from ..database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            log = (
+                db.query(AuditLog)
+                .filter(AuditLog.entity_type == "project", AuditLog.entity_id == project.id, AuditLog.action_type == "PROJECT_UPDATED")
+                .order_by(AuditLog.timestamp.desc())
+                .first()
+            )
+            if log and log.user:
+                audit_username = log.user.username
+        finally:
+            db.close()
+
+    source_dataset = next((d for d in project.datasets if d.dataset_type == "source"), None) if hasattr(project, "datasets") else None
+    target_dataset = next((d for d in project.datasets if d.dataset_type == "target"), None) if hasattr(project, "datasets") else None
+
     return {
         "id": project.id,
         "name": project.name,
@@ -74,4 +96,8 @@ def enrich_project(project: Project) -> dict:
         "created_at": project.created_at,
         "updated_at": project.updated_at,
         "owner_username": project.owner.username if project.owner else None,
+        "created_by_username": created_by_user,
+        "updated_by_username": audit_username or created_by_user,
+        "source_dataset_name": source_dataset.name if source_dataset else None,
+        "target_dataset_name": target_dataset.name if target_dataset else None,
     }

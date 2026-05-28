@@ -3,7 +3,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str  # 👈 remove default (important)
+    DATABASE_URL: str = "sqlite:///./drms.db"
 
     SECRET_KEY: str = "drms-super-secret-key-change-in-production-abc123"
     ALGORITHM: str = "HS256"

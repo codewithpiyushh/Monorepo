@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, FolderKanban, Upload, Play, RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Link, ShieldCheck, Upload, Play, RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
 import { datasetsAPI, projectsAPI } from '../api'
-import Stepper from '../components/Stepper'
 import UploadStep from '../components/UploadStep'
 import MappingStep from '../components/MappingStep'
 import RulesStep from '../components/RulesStep'
@@ -13,10 +12,10 @@ import { LoadingState } from '../components/ui/PageState'
 import { normalizeRole } from '../utils/roles'
 
 const STEPS = [
-  { id: 'ingestion', label: 'Ingestion' },
-  { id: 'mapping', label: 'Auto Mapping' },
-  { id: 'rules', label: 'Matching Rules' },
-  { id: 'results', label: 'Workbench' },
+  { id: 'ingestion', label: 'Ingestion', icon: FolderOpen },
+  { id: 'mapping', label: 'Auto Mapping', icon: Link },
+  { id: 'rules', label: 'Matching Rules', icon: ShieldCheck },
+  { id: 'results', label: 'Workbench', icon: Play },
 ]
 
 const STEP_INDEX = {
@@ -68,7 +67,6 @@ export default function ProjectWorkflowPage() {
 
   const hasBothDatasets = Boolean(datasets.source && datasets.target)
   const isFirstStep = section === 'ingestion'
-  const currentStep = STEP_INDEX[section]
   useEffect(() => {
     if (project && !hasBothDatasets && section !== 'ingestion') {
       navigate(`/projects/${project.id}/ingestion`, { replace: true })
@@ -146,33 +144,40 @@ export default function ProjectWorkflowPage() {
     }
   }
 
+  const goToStep = (stepId) => {
+    if (!project) return
+    navigate(`/projects/${project.id}/${stepId}`)
+  }
+
   return (
     <div className="h-full flex flex-col">
-      <div className="premium-header premium-topbar">
-        <div className="w-full flex items-center gap-4 min-h-16">
-          <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
-            <FolderKanban className="w-5 h-5 text-slate-300" />
-            <div className="min-w-0">
-              <h1 className="text-base font-semibold text-white truncate">
-                {project?.name || 'Reconciliation Workbench'}
-              </h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <p className="text-xs text-slate-500">EPM-style Lifecycle</p>
-                <span className="chip-neutral capitalize">{section}</span>
-              </div>
+      <div className="h-[66px] px-4 border-b border-surface-700/60 flex items-center" style={{ background: 'var(--header-bg)' }}>
+        <div className="w-full flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex w-full flex-wrap items-center gap-2">
+              {STEPS.map((step) => {
+                const Icon = step.icon
+                const isActive = step.id === section
+                return (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => goToStep(step.id)}
+                    className={`h-10 px-3 rounded-lg border text-xs font-semibold transition inline-flex items-center gap-2 ${
+                      isActive
+                        ? 'border-brand-500/60 bg-brand-500/15 text-slate-100 shadow-sm'
+                        : 'border-surface-700/70 bg-surface-900/30 text-slate-400 hover:text-slate-100 hover:border-surface-500'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {step.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          <div className="flex-1 min-w-0 px-1 hidden lg:block">
-            <Stepper
-              steps={STEPS}
-              currentStep={STEP_INDEX[section]}
-              compact
-              className="w-full"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {section === 'ingestion' && (
               <button className="btn-secondary" onClick={() => navigate(`/projects/${project?.id}/ingestion`)}>
                 <Upload className="w-4 h-4" />
@@ -198,15 +203,6 @@ export default function ProjectWorkflowPage() {
               Back
             </button>
           </div>
-        </div>
-
-        <div className="pt-2 lg:hidden">
-          <Stepper
-            steps={STEPS}
-            currentStep={STEP_INDEX[section]}
-            compact
-            className="w-full"
-          />
         </div>
       </div>
 

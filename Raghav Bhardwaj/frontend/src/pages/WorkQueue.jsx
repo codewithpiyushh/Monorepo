@@ -47,11 +47,19 @@ export default function WorkQueue() {
     ]
   }, [selectedProjectId])
 
+  const pageTitle = role === 'preparer' ? 'Preparer Worklist' : role === 'reviewer' ? 'Review Queue' : 'Work Queue'
+  const pageSubtitle =
+    role === 'preparer'
+      ? 'Access your assigned reconciliation work and submit completed items.'
+      : role === 'reviewer'
+      ? 'Review submissions, resolve issues, and approve completed reconciliations.'
+      : 'Role-aware queue for preparation, review, and exception handling.'
+
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title="Work Queue"
-        subtitle="Role-aware queue for preparation, review, and exception handling."
+        title={pageTitle}
+        subtitle={pageSubtitle}
         badge={(user?.role || 'user').toUpperCase()}
       />
       <div className="flex-1 overflow-auto p-6 md:p-8">

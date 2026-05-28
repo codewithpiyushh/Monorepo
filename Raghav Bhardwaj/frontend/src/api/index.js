@@ -132,12 +132,21 @@ export const workflowAPI = {
     const qs = new URLSearchParams(params).toString()
     return api.get(`/workflow${qs ? `?${qs}` : ''}`).then((r) => r.data)
   },
+  get: (id) => api.get(`/workflow/${id}`).then((r) => r.data),
   assign: (data) => api.post('/workflow/assign', data).then((r) => r.data),
   submit: (data) => api.post('/workflow/submit', data).then((r) => r.data),
   approve: (data) => api.post('/workflow/approve', data).then((r) => r.data),
   reject: (data) => api.post('/workflow/reject', data).then((r) => r.data),
   delete: (data) => api.post('/workflow/delete', data).then((r) => r.data),
-  get: (id) => api.get(`/workflow/${id}`).then((r) => r.data),
+  listAttachments: (workflowId) => api.get(`/workflow/${workflowId}/attachments`).then((r) => r.data),
+  uploadAttachment: (workflowId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/workflow/${workflowId}/attachments`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data)
+  },
+  downloadAttachmentUrl: (attachmentId) => `${api.defaults.baseURL}/workflow/attachments/${attachmentId}/download`,
 }
 
 export const enterpriseAPI = {

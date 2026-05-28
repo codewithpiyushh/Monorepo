@@ -1,13 +1,13 @@
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import { normalizeRole } from './utils/roles'
 import Layout from './components/Layout'
 
 const Login = lazy(() => import('./pages/Login'))
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'))
 const CommandCenter = lazy(() => import('./pages/CommandCenter'))
 const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'))
-const ReconciliationRunsPage = lazy(() => import('./pages/ReconciliationRunsPage'))
 const ExceptionOpsPage = lazy(() => import('./pages/ExceptionOpsPage'))
 const ExceptionInvestigation = lazy(() => import('./pages/ExceptionInvestigation'))
 const CloseCertificationPage = lazy(() => import('./pages/CloseCertificationPage'))
@@ -18,7 +18,6 @@ const AuditLogs = lazy(() => import('./pages/AuditLogs'))
 const ProjectWorkflowPage = lazy(() => import('./pages/ProjectWorkflowPage'))
 const PreparerWorkbench = lazy(() => import('./pages/PreparerWorkbench'))
 const ReviewerWorkbench = lazy(() => import('./pages/ReviewerWorkbench'))
-const ReconciliationProfiles = lazy(() => import('./pages/ReconciliationProfiles'))
 const Schedules = lazy(() => import('./pages/Schedules'))
 const WorkflowPage = lazy(() => import('./pages/Workflow'))
 const RuleBuilder = lazy(() => import('./pages/RuleBuilder'))
@@ -28,10 +27,21 @@ const ReconciliationsHub = lazy(() => import('./pages/ReconciliationsHub'))
 const AdminCenter = lazy(() => import('./pages/AdminCenter'))
 const ReconciliationAnalyticsExplorer = lazy(() => import('./pages/ReconciliationAnalyticsExplorer'))
 const RiskDashboard = lazy(() => import('./pages/RiskDashboard'))
+const MyPerformance = lazy(() => import('./pages/MyPerformance'))
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
   return token ? children : <Navigate to="/login" replace />
+}
+
+function DefaultPageRedirect() {
+  const user = useAuthStore((s) => s.user)
+  const role = normalizeRole(user?.role)
+
+  if (role === 'preparer' || role === 'reviewer') {
+    return <Navigate to="/work-queue" replace />
+  }
+  return <Navigate to="/command-center" replace />
 }
 
 export default function App() {
@@ -49,10 +59,9 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route index element={<Navigate to="/reconciliation-profiles" replace />} />
+            <Route index element={<DefaultPageRedirect />} />
             <Route path="command-center" element={<CommandCenter />} />
             <Route path="executive-dashboard" element={<ExecutiveDashboard />} />
-            <Route path="reconciliation-runs" element={<ReconciliationRunsPage />} />
             <Route path="exception-ops" element={<ExceptionOpsPage />} />
             <Route path="exception-investigation" element={<ExceptionInvestigation />} />
             <Route path="exception-investigation/:exceptionId" element={<ExceptionInvestigation />} />
@@ -66,14 +75,16 @@ export default function App() {
             <Route path="controls-governance" element={<ControlsGovernancePage />} />
             <Route path="platform-admin" element={<PlatformAdminPage />} />
             <Route path="work-queue" element={<WorkQueue />} />
+            <Route path="workspaces" element={<Navigate to="/work-queue" replace />} />
+            <Route path="preparer-worklist" element={<Navigate to="/work-queue" replace />} />
+            <Route path="review-queue" element={<Navigate to="/work-queue" replace />} />
+            <Route path="my-performance" element={<MyPerformance />} />
             <Route path="reconciliations" element={<ReconciliationsHub />} />
-            <Route path="reconciliation-analytics" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="admin" element={<AdminCenter />} />
             <Route path="projects/:projectId/:section" element={<ProjectWorkflowPage />} />
             <Route path="projects/:projectId/preparer" element={<PreparerWorkbench />} />
             <Route path="projects/:projectId/reviewer" element={<ReviewerWorkbench />} />
             <Route path="audit" element={<AuditLogs />} />
-            <Route path="reconciliation-profiles" element={<ReconciliationProfiles />} />
             <Route path="close-calendar" element={<Schedules />} />
             <Route path="certification-workflow" element={<WorkflowPage />} />
             <Route path="rule-builder" element={<RuleBuilder />} />

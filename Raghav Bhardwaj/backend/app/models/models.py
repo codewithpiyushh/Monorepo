@@ -209,7 +209,18 @@ class Workflow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     execution = relationship("Execution", back_populates="workflow")
-    history = relationship("WorkflowHistory", back_populates="workflow", cascade="all, delete-orphan")
+    history = relationship(
+        "WorkflowHistory",
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="WorkflowHistory.created_at.asc()",
+    )
+    attachments = relationship(
+        "WorkflowAttachment",
+        back_populates="workflow",
+        cascade="all, delete-orphan",
+        order_by="WorkflowAttachment.created_at.desc()",
+    )
 
 
 class WorkflowHistory(Base):
@@ -225,6 +236,20 @@ class WorkflowHistory(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     workflow = relationship("Workflow", back_populates="history")
+
+
+class WorkflowAttachment(Base):
+    __tablename__ = "workflow_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    file_name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    workflow = relationship("Workflow", back_populates="attachments")
 
 
 class Result(Base):

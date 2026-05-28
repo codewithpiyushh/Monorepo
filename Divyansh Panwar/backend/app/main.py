@@ -158,11 +158,7 @@ def _sync_template_to_file(db_template: models.Template):
         }
     }
     
-    # Write the fresh, mathematically sound file
-    with open(file_path, "w") as f:
-        json.dump(template_data, f, indent=4)
-    
-    # 4. Write the fresh, valid file
+    # Write the template JSON file (single write)
     with open(file_path, "w") as f:
         json.dump(template_data, f, indent=4)
 
@@ -876,3 +872,205 @@ def get_custom_chart_data(project_id: int, dataset_id: int, body: CustomChartReq
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Dynamic chart error: {str(e)}")
+
+# ── Health Check ──────────────────────────────────────────────────────────────
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "version": "1.0.0"}
+
+@app.get("/")
+async def root():
+    return {
+        "message": "FP&A Backend Running",
+        "docs": "/docs",
+        "health": "/api/health"
+    }
+
+# ── Demo Seed Endpoint ────────────────────────────────────────────────────────
+@app.post("/api/seed-demo", status_code=201)
+def seed_demo_data(db: Session = Depends(get_db)):
+    """
+    Populates the workspace with 3 rich demo projects (CPG, SaaS, Retail)
+    and multiple pre-generated datasets so you can explore the app immediately.
+    Safe to call multiple times – skips projects that already exist.
+    """
+    from datetime import datetime
+
+    DEMO_PROJECTS = [
+        {
+            "name": "NutriCo Foods – Annual Planning 2024",
+            "industry": "cpg",
+            "description": "Multi-scenario FP&A dataset for CPG snack & beverage brand across 3 regions.",
+            "datasets": [
+                {
+                    "name": "Base + Optimistic (2Y)",
+                    "params": dict(
+                        start_year=2023, num_years=2,
+                        dimensions=["product", "region", "channel"],
+                        products=["Snacks", "Beverages", "Health Bars"],
+                        regions=["North America", "Europe", "Asia Pacific"],
+                        channels=["Grocery", "E-Commerce", "Convenience"],
+                        scenarios=["Base Scenario", "Optimistic"],
+                        seasonality_profile="holiday_peak",
+                        marketing_intensity=1.2, sentiment_volatility=0.15,
+                        fx_volatility=0.08, inflation_preset="medium",
+                        random_seed=42, accounts=[], custom_dimensions={},
+                    ),
+                },
+                {
+                    "name": "Recession Stress Test",
+                    "params": dict(
+                        start_year=2024, num_years=1,
+                        dimensions=["product", "region"],
+                        products=["Snacks", "Beverages"],
+                        regions=["North America", "Europe"],
+                        channels=[], scenarios=["Pessimistic"],
+                        seasonality_profile="flat",
+                        marketing_intensity=0.7, sentiment_volatility=0.35,
+                        fx_volatility=0.15, inflation_preset="high",
+                        random_seed=99, accounts=[], custom_dimensions={},
+                    ),
+                },
+            ],
+        },
+        {
+            "name": "CloudMetrics – SaaS Revenue Model",
+            "industry": "saas",
+            "description": "Subscription revenue model with enterprise cycles and multi-tier pricing.",
+            "datasets": [
+                {
+                    "name": "Enterprise Subscription Baseline",
+                    "params": dict(
+                        start_year=2023, num_years=3,
+                        dimensions=["product", "region", "channel"],
+                        products=["Starter Plan", "Pro Plan", "Enterprise"],
+                        regions=["North America", "EMEA", "APAC"],
+                        channels=["Direct Sales", "Partner Network", "Online Self-Service"],
+                        scenarios=["Base Scenario", "Optimistic", "Pessimistic"],
+                        seasonality_profile="enterprise_cycles",
+                        marketing_intensity=1.5, sentiment_volatility=0.1,
+                        fx_volatility=0.06, inflation_preset="low",
+                        random_seed=7, accounts=[], custom_dimensions={},
+                    ),
+                },
+            ],
+        },
+        {
+            "name": "StyleHouse – Retail Omnichannel FY2024",
+            "industry": "retail",
+            "description": "Multi-channel fashion retailer with physical stores and digital presence.",
+            "datasets": [
+                {
+                    "name": "Full-Year Forecast",
+                    "params": dict(
+                        start_year=2024, num_years=1,
+                        dimensions=["product", "region", "channel"],
+                        products=["Apparel", "Footwear", "Accessories", "Outerwear"],
+                        regions=["Northeast", "Southeast", "West Coast", "Midwest"],
+                        channels=["In-Store", "Online", "Mobile App"],
+                        scenarios=["Base Scenario", "Holiday Upside"],
+                        seasonality_profile="holiday_peak",
+                        marketing_intensity=1.3, sentiment_volatility=0.2,
+                        fx_volatility=0.03, inflation_preset="medium",
+                        random_seed=55, accounts=[], custom_dimensions={},
+                    ),
+                },
+            ],
+        },
+    ]
+
+    created_projects = []
+    skipped_projects = []
+
+    for proj_spec in DEMO_PROJECTS:
+        existing = db.query(models.Project).filter_by(name=proj_spec["name"]).first()
+        if existing:
+            skipped_projects.append(proj_spec["name"])
+            continue
+
+        # Create industry
+        ind = db.query(models.Industry).filter_by(name=proj_spec["industry"]).first()
+        if not ind:
+            ind = models.Industry(name=proj_spec["industry"])
+            db.add(ind)
+            db.commit()
+            db.refresh(ind)
+
+        # Create project
+        project = models.Project(
+            name=proj_spec["name"],
+            industry_id=ind.id,
+            description=proj_spec["description"],
+        )
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+
+        (DATA_ROOT / str(project.id)).mkdir(parents=True, exist_ok=True)
+
+        datasets_created = []
+        for ds_spec in proj_spec["datasets"]:
+            ds = models.Dataset(
+                project_id=project.id,
+                name=ds_spec["name"],
+                status="Generating...",
+            )
+            db.add(ds)
+            db.commit()
+            db.refresh(ds)
+
+            output_dir = DATA_ROOT / str(project.id) / str(ds.id)
+
+            gen_req = GeneratorRequest(
+                industry=proj_spec["industry"],
+                project_name=proj_spec["name"],
+                output_dir=str(output_dir),
+                **ds_spec["params"],
+            )
+
+            try:
+                generator = FPnAGenerator(gen_req, templates_dir=str(TEMPLATES_DIR))
+                files_written = generator.generate()
+
+                row_count = 0
+                for _key, path_str in (files_written or {}).items():
+                    p = Path(path_str)
+                    if p.name.startswith("fact_") and p.exists():
+                        with open(p) as f:
+                            row_count += max(0, sum(1 for _ in f) - 1)
+
+                ds.status = "Completed"
+                ds.total_row_count = row_count
+
+                for scen_name in ds_spec["params"].get("scenarios", ["Base Scenario"]):
+                    if not db.query(models.Scenario).filter_by(project_id=project.id, name=scen_name).first():
+                        db.add(models.Scenario(project_id=project.id, name=scen_name))
+
+                for _key, path_str in (files_written or {}).items():
+                    fp = Path(path_str)
+                    db.add(models.DatasetFile(
+                        dataset_id=ds.id,
+                        file_path=fp.name,
+                        file_size_kb=round(fp.stat().st_size / 1024, 2) if fp.exists() else 0,
+                    ))
+
+                db.commit()
+                datasets_created.append({"name": ds.name, "rows": row_count, "status": "Completed"})
+            except Exception as exc:
+                ds.status = "Failed"
+                db.commit()
+                datasets_created.append({"name": ds.name, "rows": 0, "status": f"Failed: {exc}"})
+
+        created_projects.append({
+            "id": project.id,
+            "name": project.name,
+            "industry": proj_spec["industry"],
+            "datasets": datasets_created,
+        })
+
+    return {
+        "status": "success",
+        "created": created_projects,
+        "skipped": skipped_projects,
+        "message": f"Created {len(created_projects)} project(s), skipped {len(skipped_projects)} existing project(s).",
+    }

@@ -8,21 +8,19 @@ import {
   CalendarCheck2,
   ChevronsLeft,
   ChevronsRight,
+  CheckCircle2,
+  ClipboardList,
   Command,
+  FolderKanban,
   FolderOpen,
-  Link,
   LogOut,
   Moon,
-  Play,
-  PlaySquare,
   Repeat,
   Scale,
   Shield,
-  ShieldCheck,
   Sun,
   ShieldAlert,
   User,
-  Workflow,
 } from 'lucide-react'
 import NotificationCenter from './NotificationCenter'
 import { useAuthStore } from '../store/authStore'
@@ -33,12 +31,15 @@ import { useProjectStore } from '../store/projectStore'
 
 const PAGE_TITLES = {
   '/command-center': 'Reconciliation Command Center',
-  '/reconciliation-runs': 'Auto Reconciliation',
   '/exception-ops': 'Transaction Matching',
-  '/reconciliation-profiles': 'Reconciliation Type & Templates',
   '/certification-workflow': 'Certification Workflow',
   '/analytics-explorer': 'Reconciliation Compliance',
   '/risk-dashboard': 'Risk & Compliance Dashboard',
+  '/admin': 'Admin Center',
+  '/workspaces': 'Workspaces',
+  '/preparer-worklist': 'Preparer Worklist',
+  '/review-queue': 'Review Queue',
+  '/my-performance': 'My Performance',
 }
 
 export default function Layout() {
@@ -52,32 +53,41 @@ export default function Layout() {
 
   const workflowMatch = matchPath('/projects/:projectId/:section', location.pathname)
   const activeProjectId = workflowMatch?.params?.projectId || null
+  const workflowSection = workflowMatch?.params?.section || null
+  const isAdminWorkflowRoute = ['ingestion', 'mapping', 'rules', 'results'].includes(workflowSection || '')
   const role = normalizeRole(user?.role)
+  const activeProject = activeProjectId
+    ? projects.find((project) => String(project.id) === String(activeProjectId))
+    : null
 
-  const navGroups = [
-    {
-      title: 'Oracle ARCS Flow',
-      items: [
-        { to: '/reconciliation-profiles', label: '1. Reconciliation Type & Templates', icon: Command, show: true },
-        { to: '/reconciliation-runs', label: '2. Run Auto Reconciliation', icon: PlaySquare, show: true },
+  const navItems = role === 'preparer'
+    ? [
+        { to: '/workspaces', label: 'Workspaces', icon: FolderOpen, show: true },
+        { to: '/preparer-worklist', label: 'Preparer Worklist', icon: ClipboardList, show: true },
+        { to: '/dashboard', label: 'Dashboards', icon: BarChart3, show: true },
+        { to: '/my-performance', label: 'My Performance', icon: Scale, show: true },
+      ]
+    : role === 'reviewer'
+    ? [
+        { to: '/workspaces', label: 'Workspaces', icon: FolderOpen, show: true },
+        { to: '/review-queue', label: 'Review Queue', icon: CheckCircle2, show: true },
+        { to: '/audit', label: 'Audit Trail', icon: ClipboardList, show: true },
+      ]
+    : [
+        { to: '/command-center', label: '1. Create & Manage Projects', icon: Command, show: true },
         { to: '/exception-ops', label: '3. Matching & Exceptions', icon: AlertTriangle, show: true },
         { to: '/certification-workflow', label: '4. Certification Workflow', icon: CalendarCheck2, show: true },
         { to: '/analytics-explorer', label: '5. Reconciliation Compliance', icon: BarChart3, show: true },
         { to: '/risk-dashboard', label: '6. Risk & Compliance Dashboard', icon: ShieldAlert, show: true },
-      ],
+        { to: '/admin', label: 'Admin Center', icon: Shield, show: true },
+      ]
+
+  const navGroups = [
+    {
+      title: role === 'preparer' ? 'Preparer Flow' : role === 'reviewer' ? 'Reviewer Flow' : 'Oracle ARCS Flow',
+      items: navItems,
     },
   ]
-
-  const workflowItems = activeProjectId
-    ? [
-        { to: `/projects/${activeProjectId}/ingestion`, label: 'Ingestion', icon: FolderOpen, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/mapping`, label: 'Auto Mapping', icon: Link, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/rules`, label: 'Matching Rules', icon: ShieldCheck, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/results`, label: 'Workbench', icon: Play, show: role === 'admin' },
-        { to: `/projects/${activeProjectId}/preparer`, label: 'Preparer Workbench', icon: User, show: role === 'preparer' },
-        { to: `/projects/${activeProjectId}/reviewer`, label: 'Reviewer Workbench', icon: User, show: role === 'reviewer' },
-      ].filter((item) => item.show)
-    : []
 
   const currentTitle = useMemo(() => {
     if (location.pathname.startsWith('/projects/')) return 'Reconciliation Process'
@@ -114,8 +124,8 @@ export default function Layout() {
     if (!import.meta.env.DEV) return
     const switchSequence = [
       { role: 'admin', username: 'admin', password: 'admin123' },
-      { role: 'preparer', username: 'preparer', password: 'preparer123' },
-      { role: 'reviewer', username: 'reviewer', password: 'reviewer123' },
+      { role: 'preparer', username: 'preparer123', password: 'preparer123' },
+      { role: 'reviewer', username: 'reviewer123', password: 'reviewer123' },
     ]
     const currentRole = (user?.role || 'admin').toLowerCase()
     const currentIndex = switchSequence.findIndex((entry) => entry.role === currentRole)
@@ -187,23 +197,6 @@ export default function Layout() {
                 </div>
               )
             })}
-
-            {activeProjectId && (
-              <div className="pt-3 mt-3 border-t border-surface-700/70 space-y-1">
-                {!sidebarCollapsed && (
-                  <p className="px-3 pb-1 text-[10px] uppercase tracking-[0.13em] text-slate-500 flex items-center gap-2">
-                    <Workflow className="w-3 h-3" />
-                    Reconciliation Process
-                  </p>
-                )}
-                {workflowItems.map(({ to, label, icon: Icon }) => (
-                  <NavLink key={to} to={to} className={({ isActive }) => getNavClasses(isActive)} title={sidebarCollapsed ? label : undefined}>
-                    <Icon className="w-4 h-4" />
-                    {!sidebarCollapsed && label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
           </nav>
 
           <div className="p-3 border-t border-surface-700/60">
@@ -248,11 +241,13 @@ export default function Layout() {
         <main className="premium-main flex-1 min-w-0 overflow-auto relative">
           <div className="relative z-10 h-full flex flex-col">
             <div className="h-[66px] px-4 border-b border-surface-700/60 flex items-center justify-between" style={{ background: 'var(--header-bg)' }}>
-              <div>
+              <div className="flex-shrink-0">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Workbench</p>
                 <p className="text-base font-semibold text-slate-100">{currentTitle}</p>
               </div>
+
               <div className="flex items-center gap-3">
+                {!isAdminWorkflowRoute && (
                 <div className="hidden md:flex items-center gap-2">
                   <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Project</span>
                   <select className="input h-9 py-1 min-w-[220px]" value={selectedProjectId || ''} onChange={(e) => setSelectedProjectId(e.target.value)}>
@@ -260,6 +255,15 @@ export default function Layout() {
                     {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name} (#{project.id})</option>)}
                   </select>
                 </div>
+                )}
+                {isAdminWorkflowRoute && activeProject && (
+                  <div className="hidden md:flex items-center gap-3 min-w-0 max-w-[360px]">
+                    <FolderKanban className="w-5 h-5 text-slate-300 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-slate-100 truncate">{activeProject.name}</p>
+                    </div>
+                  </div>
+                )}
                 <NotificationCenter floating={false} />
               </div>
             </div>

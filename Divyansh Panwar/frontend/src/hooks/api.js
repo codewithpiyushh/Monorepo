@@ -37,6 +37,15 @@ export const api = {
   /** GET /api/templates/:industry → single template JSON */
   getTemplate: (industry) => request("GET", `/templates/${industry}`),
 
+  /** POST /api/templates */
+  createTemplate: (body) => request("POST", "/templates", body),
+
+  /** PUT /api/templates/:industry */
+  updateTemplate: (industry, body) => request("PUT", `/templates/${industry}`, body),
+
+  /** DELETE /api/templates/:industry */
+  deleteTemplate: (industry) => request("DELETE", `/templates/${industry}`),
+
   // ── Projects ──────────────────────────────────────────────
   /** GET /api/projects → ProjectResponse[] */
   listProjects: () => request("GET", "/projects"),
@@ -65,6 +74,32 @@ export const api = {
   createDataset: (projectId, body) =>
     request("POST", `/projects/${projectId}/datasets`, body),
 
+  /** DELETE /api/projects/:projectId/datasets/:datasetId */
+  deleteDataset: (projectId, datasetId) =>
+    request("DELETE", `/projects/${projectId}/datasets/${datasetId}`),
+
+  // ── Analytics / Dashboard ─────────────────────────────────
+  /** GET /api/projects/:projectId/datasets/:datasetId/dashboard-stats */
+  getDashboardStats: (projectId, datasetId) =>
+    request("GET", `/projects/${projectId}/datasets/${datasetId}/dashboard-stats`),
+
+  /** POST /api/projects/:projectId/datasets/:datasetId/custom-chart */
+  getCustomChartData: (projectId, datasetId, body) =>
+    request(
+      "POST",
+      `/projects/${projectId}/datasets/${datasetId}/custom-chart`,
+      body
+    ),
+
+  // ── Custom Logic ──────────────────────────────────────────
+  /** GET /api/projects/:projectId/custom-logic */
+  getCustomLogic: (projectId) =>
+    request("GET", `/projects/${projectId}/custom-logic`),
+
+  /** POST /api/projects/:projectId/custom-logic */
+  saveCustomLogic: (projectId, code) =>
+    request("POST", `/projects/${projectId}/custom-logic`, { code }),
+
   // ── Files / Advanced Slice ─────────────────────────────────
   /**
    * GET /api/projects/:projectId/datasets/:datasetId/files/:fileName/advanced-schema
@@ -75,12 +110,6 @@ export const api = {
       "GET",
       `/projects/${projectId}/datasets/${datasetId}/files/${fileName}/advanced-schema`
     ),
-
-  /**
-   * POST .../advanced-download
-   * body: { selected_columns, filters }
-   * Returns a streaming CSV – use raw fetch, not this helper.
-   */
 
   /**
    * POST .../advanced-save
@@ -96,6 +125,10 @@ export const api = {
   /** Direct download URL (no fetch needed – just set window.location.href) */
   downloadUrl: (projectId, datasetId, fileName) =>
     `${API_BASE}/projects/${projectId}/datasets/${datasetId}/download?file=${fileName}`,
+
+  /** Bulk download all files as ZIP */
+  downloadAllUrl: (projectId, datasetId) =>
+    `${API_BASE}/projects/${projectId}/datasets/${datasetId}/download-all`,
 };
 
 export default API_BASE;

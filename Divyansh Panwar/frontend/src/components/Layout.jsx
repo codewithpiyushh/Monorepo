@@ -21,7 +21,7 @@ export default function Layout({ children, navigate, currentRoute }) {
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <span>⬡</span> Projects
             </div>
-            <span className="menu-badge">8</span>
+
           </div>
 
           <div

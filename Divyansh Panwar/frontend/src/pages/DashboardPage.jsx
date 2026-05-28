@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../hooks/api";
+import API_BASE from "../config";
 
 export default function DashboardPage({ navigate }) {
   const [projects, setProjects] = useState([]);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -44,6 +47,31 @@ export default function DashboardPage({ navigate }) {
     };
   }, []);
 
+  const handleSeedDemo = async () => {
+    if (!window.confirm('This will create 3 demo projects (CPG, SaaS, Retail) with pre-generated datasets. Continue?')) return;
+    setSeeding(true);
+    setSeedMessage('');
+    try {
+      const res = await fetch(API_BASE + '/seed-demo', { method: 'POST' });
+      const data = await res.json();
+      setSeedMessage(data.message || 'Demo data seeded!');
+      const projectList = await api.listProjects();
+      const enriched = await Promise.all(
+        (projectList || []).map(async (project) => {
+          try {
+            const datasets = await api.listDatasets(project.id);
+            return { ...project, datasets: datasets || [] };
+          } catch { return { ...project, datasets: [] }; }
+        })
+      );
+      setProjects(enriched);
+    } catch (err) {
+      setSeedMessage('Error seeding demo data: ' + err.message);
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const summary = useMemo(() => {
     const totalDatasets = projects.reduce((sum, project) => sum + (project.datasets?.length || 0), 0);
     const totalRows = projects.reduce(
@@ -76,6 +104,11 @@ export default function DashboardPage({ navigate }) {
       {error ? (
         <div style={{ padding: 20, borderRadius: 16, background: "#fff1f2", color: "#9f1239", border: "1px solid #fecdd3" }}>
           {error}
+        </div>
+      ) : null}
+      {seedMessage ? (
+        <div style={{ padding: 16, borderRadius: 16, background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", marginBottom: 16 }}>
+          ✓ {seedMessage}
         </div>
       ) : null}
 
@@ -114,7 +147,7 @@ export default function DashboardPage({ navigate }) {
               <div style={{ display: "grid", gap: 12 }}>
                 {recentProjects.length === 0 ? (
                   <div style={{ padding: 20, borderRadius: 16, background: "#f8fafc", color: "#475569" }}>
-                    No projects are available yet. Create your first workspace to begin generating synthetic FP&A data.
+                    No projects yet. Click <strong style={{cursor:'pointer',color:'#e11d48'}} onClick={handleSeedDemo}>Load Demo Projects</strong> to instantly populate 3 sample workspaces, or create your own.
                   </div>
                 ) : (
                   recentProjects.map((project) => (
@@ -140,6 +173,14 @@ export default function DashboardPage({ navigate }) {
               <div style={{ display: "grid", gap: 12 }}>
                 <button className="btn-primary" onClick={() => navigate("new-project")}>Start a new project</button>
                 <button className="btn-outline" onClick={() => navigate("templates")}>Manage templates</button>
+                <button
+                  className="btn-outline"
+                  style={{ borderColor: '#e11d48', color: '#e11d48' }}
+                  disabled={seeding}
+                  onClick={handleSeedDemo}
+                >
+                  {seeding ? 'Generating demo data...' : '🚀 Load Demo Projects'}
+                </button>
                 <button
                   className="btn-outline"
                   disabled={loading}

@@ -64,6 +64,10 @@ class ProjectOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     owner_username: Optional[str] = None
+    created_by_username: Optional[str] = None
+    updated_by_username: Optional[str] = None
+    source_dataset_name: Optional[str] = None
+    target_dataset_name: Optional[str] = None
 
     class Config:
         from_attributes = True
