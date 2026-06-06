@@ -870,3 +870,30 @@ class APIErrorLog(Base):
         Index("ix_api_error_logs_endpoint_status", "endpoint", "status_code"),
         Index("ix_api_error_logs_created", "created_at"),
     )
+
+
+class CloseTask(Base):
+    """Individual task within a financial close period."""
+    __tablename__ = "close_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    calendar_id = Column(Integer, ForeignKey("financial_close_calendar.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=True, index=True)
+    task_name = Column(String(200), nullable=False)
+    task_type = Column(String(60), nullable=False)  # BANK_RECON, AR_RECON, AP_RECON, JOURNAL_REVIEW, FX_REVIEW, PAYROLL, INTERCOMPANY, CUSTOM
+    description = Column(Text, nullable=True)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    due_date = Column(String(20), nullable=True)
+    status = Column(String(30), default="NOT_STARTED", index=True)  # NOT_STARTED, IN_PROGRESS, COMPLETE, BLOCKED, OVERDUE
+    completion_pct = Column(Float, default=0.0)
+    depends_on_task_id = Column(Integer, ForeignKey("close_tasks.id"), nullable=True)
+    sort_order = Column(Integer, default=0)
+    completed_at = Column(DateTime, nullable=True)
+    completed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_close_tasks_calendar_status", "calendar_id", "status"),
+    )

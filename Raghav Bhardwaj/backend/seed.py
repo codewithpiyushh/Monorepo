@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Initialize database tables and seed demo users.
+Initialize database tables and ensure the local access users exist.
 Usage: python seed.py
 """
 import os
@@ -32,12 +32,12 @@ def main() -> None:
 
     db = SessionLocal()
     try:
-        _ensure_user(db, "admin", "admin@drms.local", "admin123", "admin")
-        _ensure_user(db, "preparer", "preparer@drms.local", "preparer123", "preparer")
-        _ensure_user(db, "reviewer", "reviewer@drms.local", "reviewer123", "reviewer")
+        _ensure_user(db, "admin", "admin@drms.com", "admin123", "admin")
+        _ensure_user(db, "preparer", "preparer@drms.com", "preparer123", "preparer")
+        _ensure_user(db, "reviewer", "reviewer@drms.com", "reviewer123", "reviewer")
 
         print("\nDatabase initialization completed.")
-        print("Default credentials:")
+        print("Local access credentials:")
         print("  admin    / admin123")
         print("  preparer / preparer123")
         print("  reviewer / reviewer123")

@@ -85,12 +85,12 @@ def load_batch(batch_id: str, profile_id: int, db: Session = Depends(get_db), cu
 
 
 @router.get("/ingestion/summary")
-def ingestion_summary(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+def ingestion_summary(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
     return service.get_ingestion_summary(db)
 
 
 @router.post("/profiles")
-def create_profile(payload: ProfileCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+def create_profile(payload: ProfileCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
     return repository.create_profile(db, payload)
 
 
@@ -108,7 +108,7 @@ def list_profile_transactions(profile_id: int, db: Session = Depends(get_db), cu
 
 
 @router.patch("/profiles/{profile_id}")
-def update_profile(profile_id: int, payload: ProfileUpdate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+def update_profile(profile_id: int, payload: ProfileUpdate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
     try:
         raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
         update_payload = {k: v for k, v in raw.items() if v is not None}
@@ -349,7 +349,7 @@ def delete_rule_definition(rule_id: int, db: Session = Depends(get_db), current_
 
 
 @router.get("/dashboard/executive")
-def executive_dashboard(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+def executive_dashboard(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER]))):
     return service.get_dashboard_metrics(db, "admin", current_user.id)
 
 
@@ -378,7 +378,7 @@ def generate_reminders(db: Session = Depends(get_db), current_user=Depends(role_
 
 
 @router.get("/risk-score/{profile_id}")
-def risk_score(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER]))):
+def risk_score(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, PREPARER, CERTIFIER]))):
     try:
         return service.calculate_risk_score(db, profile_id)
     except Exception as exc:
@@ -539,6 +539,34 @@ def fx_reconciliation(profile_id: int, reporting_currency: str, db: Session = De
     return service.fx_reconciliation(db, profile_id, reporting_currency)
 
 
+@router.get("/journals")
+def list_journals(
+    profile_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER])),
+):
+    """List journal adjustments, optionally filtered by profile."""
+    from ..models.models import JournalAdjustment, User
+    q = db.query(JournalAdjustment)
+    if profile_id:
+        q = q.filter(JournalAdjustment.profile_id == profile_id)
+    adjustments = q.order_by(JournalAdjustment.id.desc()).limit(200).all()
+    result = []
+    for adj in adjustments:
+        creator = db.query(User).filter(User.id == adj.created_by).first() if adj.created_by else None
+        result.append({
+            "id": adj.id, "profile_id": adj.profile_id,
+            "account": adj.account, "period_key": adj.period_key,
+            "amount": adj.amount, "currency": adj.currency,
+            "reason": adj.reason, "status": adj.status,
+            "created_by": adj.created_by,
+            "created_by_username": creator.username if creator else None,
+            "created_at": adj.created_at.isoformat() if adj.created_at else None,
+            "erp_posting_reference": adj.erp_posting_reference,
+        })
+    return result
+
+
 @router.post("/journals")
 def create_journal(payload: JournalAdjustmentCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
     raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
@@ -650,7 +678,7 @@ def create_backup(db: Session = Depends(get_db), current_user=Depends(role_requi
 
 
 @router.get("/metrics/jobs")
-def job_metrics(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+def job_metrics(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER]))):
     return service.get_job_metrics(db, 100)
 
 
@@ -668,19 +696,19 @@ def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: in
 
 
 @router.post("/risk/calculate")
-def calculate_risk(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+def calculate_risk(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER]))):
     """Trigger risk scoring batch run (async/cron in prod)"""
     return service.calculate_risk_scores(db, actor_id=current_user.id)
 
 
 @router.get("/risk/heatmap")
-def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
     """Return a heatmap summary for risk dashboard"""
     return service.list_risk_heatmap(db, entity)
 
 
 @router.get("/governance/policies")
-def get_governance_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
+def get_governance_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
     return service.get_governance_policies(db)
 
 
@@ -694,3 +722,607 @@ def upsert_governance_policy(payload: dict, db: Session = Depends(get_db), curre
 def enforce_approval_policy(action: dict, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
     """Enforce approval policy for high/critical risk items"""
     return service.enforce_approval_policy(db, action, actor_id=current_user.id)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  PHASE 1 — Profile self-service: clone, rollover
+#  PHASE 2 — Close task management
+#  PHASE 3 — Enhanced analytics
+# ═══════════════════════════════════════════════════════════════
+
+from ..models.models import CloseTask as CloseTaskModel, User as UserModel, FinancialCloseCalendar
+
+# ── Profile Clone ─────────────────────────────────────────────
+@router.post("/profiles/{profile_id}/clone")
+def clone_profile(
+    profile_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER])),
+):
+    """Duplicate an existing profile with a new name and optionally a new period."""
+    import json as _json
+    from ..models.models import ReconciliationProfile, ReconciliationOwnership
+    src = db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    new_name = payload.get("name") or f"{src.name} (Copy)"
+    new_profile = ReconciliationProfile(
+        name=new_name,
+        reconciliation_type=src.reconciliation_type,
+        frequency=src.frequency,
+        tolerance_threshold=src.tolerance_threshold,
+        date_window_days=src.date_window_days,
+        workflow_config_json=src.workflow_config_json,
+        matching_rules_json=src.matching_rules_json,
+        assigned_preparer=payload.get("assigned_preparer") or src.assigned_preparer,
+        assigned_reviewer=payload.get("assigned_reviewer") or src.assigned_reviewer,
+        assigned_approver=payload.get("assigned_approver") or src.assigned_approver,
+        assigned_certifier=payload.get("assigned_certifier") or src.assigned_certifier,
+        risk_classification=src.risk_classification,
+        due_days=src.due_days,
+        auto_approve_threshold=src.auto_approve_threshold,
+        materiality_limit=src.materiality_limit,
+        lifecycle_state="OPEN",
+        active=True,
+    )
+    db.add(new_profile)
+    db.flush()
+
+    for uid, orole in [
+        (new_profile.assigned_preparer, "PREPARER"),
+        (new_profile.assigned_reviewer, "REVIEWER"),
+        (new_profile.assigned_approver, "APPROVER"),
+        (new_profile.assigned_certifier, "CERTIFIER"),
+    ]:
+        if uid:
+            db.add(ReconciliationOwnership(profile_id=new_profile.id, owner_user_id=uid, owner_role=orole))
+
+    db.commit()
+    audit_service.log_action(db, "PROFILE_CLONED", user_id=current_user.id,
+        entity_type="reconciliation_profile", entity_id=new_profile.id,
+        metadata={"cloned_from": profile_id, "new_name": new_name})
+    return {"id": new_profile.id, "name": new_profile.name, "cloned_from": profile_id}
+
+
+# ── Profile Rollover ──────────────────────────────────────────
+@router.post("/profiles/{profile_id}/rollover")
+def rollover_profile(
+    profile_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER])),
+):
+    """Clone a profile for the next period and create its close calendar + close tasks."""
+    import json as _json, calendar as cal_mod
+    from datetime import datetime as _dt, date as _date
+    from ..models.models import ReconciliationProfile, ReconciliationOwnership, FinancialCloseCalendar
+
+    src = db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # Determine next period
+    next_period = payload.get("next_period")
+    if not next_period:
+        last_cal = (db.query(FinancialCloseCalendar)
+            .filter(FinancialCloseCalendar.profile_id == profile_id)
+            .order_by(FinancialCloseCalendar.period_key.desc()).first())
+        if last_cal and last_cal.period_key:
+            try:
+                y, m = [int(x) for x in last_cal.period_key.split("-")]
+                m += 1
+                if m > 12:
+                    m = 1; y += 1
+                next_period = f"{y}-{m:02d}"
+            except Exception:
+                next_period = _dt.utcnow().strftime("%Y-%m")
+        else:
+            next_period = _dt.utcnow().strftime("%Y-%m")
+
+    # Clone name for new period
+    base_name = src.name.split(" – ")[0] if " – " in src.name else src.name
+    new_name = f"{base_name} – {next_period}"
+
+    new_profile = ReconciliationProfile(
+        name=new_name,
+        reconciliation_type=src.reconciliation_type,
+        frequency=src.frequency,
+        tolerance_threshold=src.tolerance_threshold,
+        date_window_days=src.date_window_days,
+        workflow_config_json=src.workflow_config_json,
+        matching_rules_json=src.matching_rules_json,
+        assigned_preparer=src.assigned_preparer,
+        assigned_reviewer=src.assigned_reviewer,
+        assigned_approver=src.assigned_approver,
+        assigned_certifier=src.assigned_certifier,
+        risk_classification=src.risk_classification,
+        due_days=src.due_days,
+        auto_approve_threshold=src.auto_approve_threshold,
+        materiality_limit=src.materiality_limit,
+        lifecycle_state="OPEN",
+        active=True,
+    )
+    db.add(new_profile)
+    db.flush()
+
+    for uid, orole in [
+        (new_profile.assigned_preparer, "PREPARER"),
+        (new_profile.assigned_reviewer, "REVIEWER"),
+        (new_profile.assigned_approver, "APPROVER"),
+        (new_profile.assigned_certifier, "CERTIFIER"),
+    ]:
+        if uid:
+            db.add(ReconciliationOwnership(profile_id=new_profile.id, owner_user_id=uid, owner_role=orole))
+
+    # Create close calendar entry
+    try:
+        y, m = [int(x) for x in next_period.split("-")]
+        last_day = cal_mod.monthrange(y, m)[1]
+        start_d = _date(y, m, 1)
+        end_d = _date(y, m, last_day)
+        due_m, due_y = (m + 1, y) if m < 12 else (1, y + 1)
+        due_d = _date(due_y, due_m, src.due_days or 5)
+    except Exception:
+        today = _date.today()
+        start_d = today.replace(day=1); end_d = today; due_d = today
+
+    new_cal = FinancialCloseCalendar(
+        profile_id=new_profile.id,
+        cycle_type="MONTHLY",
+        period_key=next_period,
+        start_date=start_d.isoformat(),
+        end_date=end_d.isoformat(),
+        due_date=due_d.isoformat(),
+        status="OPEN",
+        is_locked=False,
+    )
+    db.add(new_cal)
+    db.flush()
+
+    # Seed default close tasks from previous period's tasks (or defaults)
+    prev_tasks = db.query(CloseTaskModel).join(
+        FinancialCloseCalendar, CloseTaskModel.calendar_id == FinancialCloseCalendar.id
+    ).filter(FinancialCloseCalendar.profile_id == profile_id).all()
+
+    TASK_DEFAULTS = [
+        ("Upload Source Data", "DATA_UPLOAD", 0),
+        ("Upload Target Data", "DATA_UPLOAD", 1),
+        ("Run Matching Engine", "MATCHING", 2),
+        ("Investigate Exceptions", "EXCEPTION_REVIEW", 3),
+        ("Prepare Reconciliation", "BANK_RECON", 4),
+        ("Submit for Review", "SUBMIT", 5),
+        ("Reviewer Sign-off", "REVIEW", 6),
+        ("Approver Sign-off", "APPROVAL", 7),
+        ("Certify Period", "CERTIFICATION", 8),
+        ("Lock Period", "PERIOD_LOCK", 9),
+    ]
+
+    if prev_tasks:
+        for t in prev_tasks:
+            db.add(CloseTaskModel(
+                calendar_id=new_cal.id,
+                profile_id=new_profile.id,
+                task_name=t.task_name,
+                task_type=t.task_type,
+                description=t.description,
+                assigned_to=t.assigned_to,
+                due_date=due_d.isoformat(),
+                status="NOT_STARTED",
+                completion_pct=0.0,
+                sort_order=t.sort_order,
+            ))
+    else:
+        for task_name, task_type, order in TASK_DEFAULTS:
+            db.add(CloseTaskModel(
+                calendar_id=new_cal.id,
+                profile_id=new_profile.id,
+                task_name=task_name,
+                task_type=task_type,
+                assigned_to=new_profile.assigned_preparer,
+                due_date=due_d.isoformat(),
+                status="NOT_STARTED",
+                completion_pct=0.0,
+                sort_order=order,
+            ))
+
+    db.commit()
+    audit_service.log_action(db, "PROFILE_ROLLED_OVER", user_id=current_user.id,
+        entity_type="reconciliation_profile", entity_id=new_profile.id,
+        metadata={"rolled_from": profile_id, "next_period": next_period})
+    return {"id": new_profile.id, "name": new_name, "period": next_period,
+            "calendar_id": new_cal.id, "tasks_created": len(prev_tasks) or len(TASK_DEFAULTS)}
+
+
+# ── Close Tasks CRUD ──────────────────────────────────────────
+@router.get("/close-tasks")
+def list_close_tasks(
+    calendar_id: int | None = None,
+    profile_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER])),
+):
+    q = db.query(CloseTaskModel)
+    if calendar_id:
+        q = q.filter(CloseTaskModel.calendar_id == calendar_id)
+    if profile_id:
+        q = q.filter(CloseTaskModel.profile_id == profile_id)
+    tasks = q.order_by(CloseTaskModel.sort_order).all()
+    result = []
+    for t in tasks:
+        assignee = db.query(UserModel).filter(UserModel.id == t.assigned_to).first() if t.assigned_to else None
+        result.append({
+            "id": t.id, "calendar_id": t.calendar_id, "profile_id": t.profile_id,
+            "task_name": t.task_name, "task_type": t.task_type,
+            "description": t.description,
+            "assigned_to": t.assigned_to,
+            "assigned_username": assignee.username if assignee else None,
+            "due_date": t.due_date, "status": t.status,
+            "completion_pct": t.completion_pct,
+            "depends_on_task_id": t.depends_on_task_id,
+            "sort_order": t.sort_order, "notes": t.notes,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+    return result
+
+
+@router.post("/close-tasks", status_code=201)
+def create_close_task(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER])),
+):
+    from datetime import datetime as _dt
+    task = CloseTaskModel(
+        calendar_id=payload["calendar_id"],
+        profile_id=payload.get("profile_id"),
+        task_name=payload["task_name"],
+        task_type=payload.get("task_type", "CUSTOM"),
+        description=payload.get("description"),
+        assigned_to=payload.get("assigned_to"),
+        due_date=payload.get("due_date"),
+        status="NOT_STARTED",
+        completion_pct=0.0,
+        sort_order=payload.get("sort_order", 99),
+        notes=payload.get("notes"),
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return {"id": task.id, "task_name": task.task_name, "status": task.status}
+
+
+@router.patch("/close-tasks/{task_id}")
+def update_close_task(
+    task_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER])),
+):
+    from datetime import datetime as _dt
+    task = db.query(CloseTaskModel).filter(CloseTaskModel.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    for field in ["task_name", "task_type", "description", "assigned_to", "due_date",
+                  "status", "completion_pct", "notes", "sort_order"]:
+        if field in payload:
+            setattr(task, field, payload[field])
+    if payload.get("status") == "COMPLETE" and not task.completed_at:
+        task.completed_at = _dt.utcnow()
+        task.completed_by = current_user.id
+        task.completion_pct = 100.0
+    task.updated_at = _dt.utcnow()
+    db.commit()
+    audit_service.log_action(db, "CLOSE_TASK_UPDATED", user_id=current_user.id,
+        entity_type="close_task", entity_id=task_id, metadata=payload)
+    return {"id": task.id, "status": task.status, "completion_pct": task.completion_pct}
+
+
+# ── Enhanced Analytics ────────────────────────────────────────
+@router.get("/analytics/enhanced")
+def enhanced_analytics(
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER])),
+):
+    """
+    Real analytics from enterprise profile data:
+    - Completion % trend by period
+    - Exception aging buckets
+    - Entity performance
+    - User throughput
+    - Variance trends
+    """
+    from datetime import datetime as _dt, date as _date
+    from ..models.models import (
+        ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
+        CertificationWorkflow, CertificationWorkflowHistory,
+        FinancialCloseCalendar, ReconciliationRecord,
+    )
+    from sqlalchemy import func as sqlfunc
+
+    today = _date.today()
+
+    # ── 1. Profile completion by period ──────────────────────
+    profiles = db.query(ReconciliationProfile).filter(ReconciliationProfile.active == True).all()
+    period_stats: dict = {}
+    for p in profiles:
+        cal = db.query(FinancialCloseCalendar).filter(
+            FinancialCloseCalendar.profile_id == p.id
+        ).order_by(FinancialCloseCalendar.period_key.desc()).first()
+        period = cal.period_key if cal else _dt.utcnow().strftime("%Y-%m")
+        ps = period_stats.setdefault(period, {"period": period, "total": 0, "complete": 0, "open": 0, "overdue": 0})
+        ps["total"] += 1
+        state = (p.lifecycle_state or "").upper()
+        if state in ("CLOSED", "CERTIFIED", "FORCE_CLOSED"):
+            ps["complete"] += 1
+        else:
+            ps["open"] += 1
+            if cal:
+                due = None
+                try:
+                    from datetime import date as _ddate
+                    due = _ddate.fromisoformat(cal.due_date)
+                except Exception:
+                    pass
+                if due and today > due and not cal.is_locked:
+                    ps["overdue"] += 1
+
+    completion_trend = sorted(period_stats.values(), key=lambda x: x["period"])
+    for row in completion_trend:
+        row["completion_pct"] = round(row["complete"] / row["total"] * 100, 1) if row["total"] else 0.0
+
+    # ── 2. Exception aging ────────────────────────────────────
+    exceptions = db.query(ExceptionQueueRecord).filter(
+        ExceptionQueueRecord.status.notin_(["RESOLVED", "CLOSED"])
+    ).all()
+    aging = {"0-3d": 0, "4-7d": 0, "8-14d": 0, "15-30d": 0, "30+d": 0}
+    for exc in exceptions:
+        created = exc.created_at
+        if not created:
+            aging["0-3d"] += 1
+            continue
+        days = (today - created.date()).days
+        if days <= 3:   aging["0-3d"] += 1
+        elif days <= 7:  aging["4-7d"] += 1
+        elif days <= 14: aging["8-14d"] += 1
+        elif days <= 30: aging["15-30d"] += 1
+        else:            aging["30+d"] += 1
+
+    # ── 3. Match rate by entity ───────────────────────────────
+    records = db.query(ReconciliationRecord).all()
+    entity_stats: dict = {}
+    for r in records:
+        entity = r.entity or "Unknown"
+        es = entity_stats.setdefault(entity, {"entity": entity, "total": 0, "matched": 0, "variance": 0.0})
+        es["total"] += 1
+        if (r.status or "").upper() in ("MATCHED", "RECONCILED", "FINALIZED"):
+            es["matched"] += 1
+    entity_perf = []
+    for es in entity_stats.values():
+        es["match_rate"] = round(es["matched"] / es["total"] * 100, 1) if es["total"] else 0.0
+        entity_perf.append(es)
+    entity_perf.sort(key=lambda x: -x["total"])
+
+    # ── 4. User throughput ────────────────────────────────────
+    hist = db.query(CertificationWorkflowHistory).all()
+    user_stats: dict = {}
+    for h in hist:
+        if not h.actor_id:
+            continue
+        us = user_stats.setdefault(h.actor_id, {"user_id": h.actor_id, "prepared": 0, "reviewed": 0, "approved": 0, "certified": 0})
+        action = (h.action or "").upper()
+        if action == "PREPARE":   us["prepared"] += 1
+        elif action in ("SUBMIT", "REVIEW"): us["reviewed"] += 1
+        elif action == "APPROVE": us["approved"] += 1
+        elif action == "CERTIFY": us["certified"] += 1
+
+    user_throughput = []
+    for uid, us in user_stats.items():
+        user = db.query(UserModel).filter(UserModel.id == uid).first()
+        us["username"] = user.username if user else f"User {uid}"
+        us["total_actions"] = us["prepared"] + us["reviewed"] + us["approved"] + us["certified"]
+        user_throughput.append(us)
+    user_throughput.sort(key=lambda x: -x["total_actions"])
+
+    # ── 5. Variance trends by period ─────────────────────────
+    match_groups = db.query(MatchGroup).all()
+    variance_by_period: dict = {}
+    for mg in match_groups:
+        cal = db.query(FinancialCloseCalendar).filter(
+            FinancialCloseCalendar.profile_id == mg.profile_id
+        ).order_by(FinancialCloseCalendar.period_key.desc()).first()
+        period = cal.period_key if cal else "Unknown"
+        vp = variance_by_period.setdefault(period, {"period": period, "total_variance": 0.0, "exception_count": 0, "match_groups": 0})
+        vp["total_variance"] += float(mg.variance_amount or 0)
+        vp["match_groups"] += 1
+        if (mg.classification or "") == "UNMATCHED":
+            vp["exception_count"] += 1
+    variance_trend = sorted(variance_by_period.values(), key=lambda x: x["period"])
+
+    # ── 6. Summary KPIs ──────────────────────────────────────
+    total_profiles = len(profiles)
+    certified_count = len([p for p in profiles if (p.lifecycle_state or "").upper() in ("CERTIFIED", "CLOSED")])
+    total_exceptions = db.query(ExceptionQueueRecord).count()
+    open_exceptions = db.query(ExceptionQueueRecord).filter(
+        ExceptionQueueRecord.status.notin_(["RESOLVED", "CLOSED"])
+    ).count()
+    total_mg = db.query(MatchGroup).count()
+    full_matches = db.query(MatchGroup).filter(MatchGroup.classification == "FULL_MATCH").count()
+    auto_match_rate = round(full_matches / total_mg * 100, 1) if total_mg else 0.0
+
+    return {
+        "summary": {
+            "total_profiles": total_profiles,
+            "certified_profiles": certified_count,
+            "certification_pct": round(certified_count / total_profiles * 100, 1) if total_profiles else 0.0,
+            "total_exceptions": total_exceptions,
+            "open_exceptions": open_exceptions,
+            "auto_match_rate": auto_match_rate,
+            "overdue_periods": sum(r.get("overdue", 0) for r in period_stats.values()),
+        },
+        "completion_trend": completion_trend[-12:],
+        "exception_aging": [{"bucket": k, "count": v} for k, v in aging.items()],
+        "entity_performance": entity_perf[:20],
+        "user_throughput": user_throughput[:15],
+        "variance_trend": variance_trend[-12:],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ADVANCED MATCHING + PERIOD LOCK + REAL DASHBOARDS
+# ═══════════════════════════════════════════════════════════════
+
+# ── Advanced matching ─────────────────────────────────────────
+@router.post("/matching/run-advanced")
+def run_advanced_matching(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER])),
+):
+    """4-phase advanced matching: holistic scoring + many-to-one + one-to-many + cross-period."""
+    try:
+        result = service.run_advanced_matching(
+            db,
+            profile_id=int(payload["profile_id"]),
+            auto_match_threshold=float(payload.get("auto_match_threshold", 0.92)),
+            cross_period_days=int(payload.get("cross_period_days", 90)),
+            user_id=current_user.id,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/matching/suggestions-advanced/{profile_id}")
+def get_match_suggestions_advanced(
+    profile_id: int,
+    top_k: int = 25,
+    min_confidence: float = 0.50,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER])),
+):
+    try:
+        return service.get_match_suggestions_advanced(db, profile_id, top_k, min_confidence)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Period lock / unlock ──────────────────────────────────────
+@router.post("/close-calendar/{calendar_id}/lock")
+def lock_period(
+    calendar_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, CERTIFIER, APPROVER])),
+):
+    try:
+        result = service.lock_period(db, calendar_id, current_user.id)
+        audit_service.log_action(db, "PERIOD_LOCKED", user_id=current_user.id,
+            entity_type="close_calendar", entity_id=calendar_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/close-calendar/{calendar_id}/unlock")
+def unlock_period(
+    calendar_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN])),
+):
+    try:
+        reason = payload.get("reason") or "No reason provided"
+        result = service.unlock_period(db, calendar_id, current_user.id, reason)
+        audit_service.log_action(db, "PERIOD_UNLOCKED", user_id=current_user.id,
+            entity_type="close_calendar", entity_id=calendar_id,
+            metadata={"reason": reason})
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Real executive dashboard ──────────────────────────────────
+@router.get("/dashboard/executive-real")
+def executive_dashboard_real(
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, CERTIFIER, APPROVER, REVIEWER, PREPARER])),
+):
+    return service.get_executive_dashboard_real(db)
+
+
+# ── Real risk dashboard ───────────────────────────────────────
+@router.get("/dashboard/risk-real")
+def risk_dashboard_real(
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER])),
+):
+    return service.get_risk_dashboard_real(db)
+
+
+# ── Profile transactions (match groups + items) ───────────────
+@router.get("/profiles/{profile_id}/transactions")
+def list_profile_transactions(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER])),
+):
+    """Return match groups with items for a profile — used by Preparer/Reviewer Workbench."""
+    from ..models.models import MatchGroup as MG, MatchGroupItem as MGI, ReconciliationRecord as RR
+    mgs = db.query(MG).filter(MG.profile_id == profile_id).order_by(MG.id.desc()).limit(500).all()
+    result = []
+    for mg in mgs:
+        items = db.query(MGI).filter(MGI.match_group_id == mg.id).all()
+        rec_ids = [i.reconciliation_record_id for i in items]
+        result.append({
+            "id": mg.id, "strategy": mg.strategy, "classification": mg.classification,
+            "confidence": mg.confidence, "variance_amount": mg.variance_amount,
+            "reconciled": mg.reconciled, "finalized": mg.finalized,
+            "record_ids": rec_ids, "item_count": len(rec_ids),
+            "created_at": mg.created_at.isoformat() if mg.created_at else None,
+        })
+    return result
+
+
+# ── Exceptions list with profile context ─────────────────────
+@router.get("/exceptions/with-profile")
+def list_exceptions_with_profile(
+    profile_id: int | None = None,
+    status: str | None = None,
+    queue_type: str | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER])),
+):
+    """Return exceptions enriched with profile name and match group classification."""
+    from ..models.models import ExceptionQueueRecord as EQR, MatchGroup as MG, ReconciliationProfile as RP
+    q = db.query(EQR)
+    if status:
+        q = q.filter(EQR.status == status.upper())
+    if queue_type:
+        q = q.filter(EQR.queue_type == queue_type)
+    excs = q.order_by(EQR.id.desc()).limit(500).all()
+
+    result = []
+    for exc in excs:
+        mg = db.query(MG).filter(MG.id == exc.match_group_id).first() if exc.match_group_id else None
+        prof = db.query(RP).filter(RP.id == mg.profile_id).first() if mg else None
+        if profile_id and (not prof or prof.id != profile_id):
+            continue
+        result.append({
+            "id": exc.id,
+            "match_group_id": exc.match_group_id,
+            "profile_id": prof.id if prof else None,
+            "profile_name": prof.name if prof else None,
+            "queue_type": exc.queue_type,
+            "assigned_to": exc.assigned_to,
+            "status": exc.status,
+            "comments": exc.comments,
+            "classification": exc.classification,
+            "resolution_notes": exc.resolution_notes,
+            "escalated_at": exc.escalated_at.isoformat() if exc.escalated_at else None,
+            "created_at": exc.created_at.isoformat() if exc.created_at else None,
+            "mg_classification": mg.classification if mg else None,
+            "mg_variance": mg.variance_amount if mg else None,
+        })
+    return result

@@ -1,11 +1,194 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { authAPI, executionsAPI, exportsAPI, mappingsAPI, workflowAPI } from '../api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
-import { Download, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { Download, ChevronDown, ChevronRight, Trash2, Rocket, X, ChevronRight as ArrowRight } from 'lucide-react'
 import TransactionTable from './results/TransactionTable'
 import DetailDrawer from './results/DetailDrawer'
 import { normalizeRole } from '../utils/roles'
+
+const RECON_TYPES = [
+  { value: 'BANK_RECONCILIATION',         label: 'Bank Reconciliation' },
+  { value: 'AP_RECONCILIATION',           label: 'AP Reconciliation' },
+  { value: 'AR_RECONCILIATION',           label: 'AR Reconciliation' },
+  { value: 'INTERCOMPANY_RECONCILIATION', label: 'Intercompany Reconciliation' },
+  { value: 'PAYROLL_RECONCILIATION',      label: 'Payroll Reconciliation' },
+  { value: 'CASH_RECONCILIATION',         label: 'Cash Reconciliation' },
+  { value: 'INVENTORY_RECONCILIATION',    label: 'Inventory Reconciliation' },
+  { value: 'FX_RECONCILIATION',           label: 'FX Reconciliation' },
+]
+const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+
+function PromoteModal({ execution, users, onClose, onSuccess }) {
+  const [reconType, setReconType] = useState('BANK_RECONCILIATION')
+  const [risk, setRisk] = useState('MEDIUM')
+  const [reviewerId, setReviewerId] = useState('')
+  const [approverId, setApproverId] = useState('')
+  const [certifierId, setCertifierId] = useState('')
+  const [promoting, setPromoting] = useState(false)
+
+  const reviewers  = users.filter((u) => u.role === 'reviewer')
+  const approvers  = users.filter((u) => u.role === 'approver')
+  const certifiers = users.filter((u) => u.role === 'certifier')
+
+  const handlePromote = async () => {
+    setPromoting(true)
+    try {
+      const result = await executionsAPI.promote(execution.project_id, execution.id, {
+        recon_type: reconType,
+        risk_classification: risk,
+        reviewer_id: reviewerId ? Number(reviewerId) : undefined,
+        approver_id: approverId ? Number(approverId) : undefined,
+        certifier_id: certifierId ? Number(certifierId) : undefined,
+      })
+      toast.success(`Profile created: "${result.profile_name}"`)
+      onSuccess(result)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Promote failed')
+    } finally {
+      setPromoting(false)
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 60,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16,
+    }}>
+      <div style={{
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border-1)',
+        borderRadius: 12,
+        width: '100%', maxWidth: 480,
+        padding: 24,
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <p style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'var(--text-tertiary)' }}>
+              Promote to Enterprise
+            </p>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
+              Create Reconciliation Profile
+            </h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <X style={{ width: 18, height: 18 }} />
+          </button>
+        </div>
+
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.6 }}>
+          This will create a full enterprise reconciliation profile from Run #{execution.id},
+          including match groups, exception queue, certification workflow, and close calendar — 
+          visible across all DRMS pages.
+        </p>
+
+        {/* Stats banner */}
+        {execution.stats && (() => {
+          try {
+            const s = typeof execution.stats === 'string' ? JSON.parse(execution.stats) : execution.stats
+            return (
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
+                background: 'var(--surface-2)', borderRadius: 8, padding: 12, marginBottom: 20,
+              }}>
+                {[['Matched', s.matched, 'var(--ok)'], ['Unmatched', s.unmatched, 'var(--bad)'], ['Match Rate', `${s.match_rate}%`, 'var(--accent)']].map(([label, val, color]) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color }}>{val}</p>
+                  </div>
+                ))}
+              </div>
+            )
+          } catch { return null }
+        })()}
+
+        {/* Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label className="label">Reconciliation Type</label>
+              <select className="input text-xs" value={reconType} onChange={(e) => setReconType(e.target.value)}>
+                {RECON_TYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Risk Classification</label>
+              <select className="input text-xs" value={risk} onChange={(e) => setRisk(e.target.value)}>
+                {RISK_LEVELS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div>
+              <label className="label">Reviewer</label>
+              <select className="input text-xs" value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
+                <option value="">Auto-assign</option>
+                {reviewers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Approver</label>
+              <select className="input text-xs" value={approverId} onChange={(e) => setApproverId(e.target.value)}>
+                <option value="">Auto-assign</option>
+                {approvers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Certifier</label>
+              <select className="input text-xs" value={certifierId} onChange={(e) => setCertifierId(e.target.value)}>
+                <option value="">Auto-assign</option>
+                {certifiers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button className="btn-secondary text-xs" onClick={onClose} disabled={promoting}>Cancel</button>
+          <button className="btn-primary text-xs" onClick={handlePromote} disabled={promoting}>
+            {promoting
+              ? <><span className="animate-spin rounded-full h-3 w-3 border-2 border-slate-700 border-t-transparent" />Promoting...</>
+              : <><Rocket style={{ width: 13, height: 13 }} />Promote to Enterprise</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PromoteSuccessBanner({ result, onNavigate, onDismiss }) {
+  return (
+    <div style={{
+      background: 'rgba(34,197,94,0.08)',
+      border: '1px solid rgba(34,197,94,0.30)',
+      borderRadius: 10,
+      padding: '12px 16px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+    }}>
+      <div>
+        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--ok)' }}>
+          ✓ Promoted to Enterprise Profile
+        </p>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+          "{result.profile_name}" — {result.loaded_count} records · {result.match_groups} match groups · {result.exceptions} exceptions
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button className="btn-primary text-xs py-1 h-7" onClick={onNavigate}>
+          View in DRMS <ArrowRight style={{ width: 11, height: 11 }} />
+        </button>
+        <button className="btn-ghost text-xs py-1 h-7" onClick={onDismiss}>
+          <X style={{ width: 11, height: 11 }} />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_POLL_MS = 1500
 
@@ -20,6 +203,7 @@ const safeParse = (value) => {
 }
 
 export default function ExecuteStep({ project, onTopbarStateChange }) {
+  const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const role = normalizeRole(user?.role)
   const [activeExec, setActiveExec] = useState(null)
@@ -49,6 +233,8 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
   const [groupDrilled, setGroupDrilled] = useState(false)
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [users, setUsers] = useState([])
+  const [showPromoteModal, setShowPromoteModal] = useState(false)
+  const [promoteResult, setPromoteResult] = useState(null)
   const pollRef = useRef(null)
 
   const getUnitKey = (unit, idx = 0) => `${unit.entity}::${unit.account}::${idx}`
@@ -371,6 +557,29 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
 
   return (
     <div className="px-4 lg:px-6 py-3 space-y-3 w-full min-w-0">
+
+      {/* ── Promote success banner ── */}
+      {promoteResult && (
+        <PromoteSuccessBanner
+          result={promoteResult}
+          onNavigate={() => navigate('/reconciliations')}
+          onDismiss={() => setPromoteResult(null)}
+        />
+      )}
+
+      {/* ── Promote modal ── */}
+      {showPromoteModal && activeExec && (
+        <PromoteModal
+          execution={{ ...activeExec, project_id: project.id }}
+          users={users}
+          onClose={() => setShowPromoteModal(false)}
+          onSuccess={(result) => {
+            setShowPromoteModal(false)
+            setPromoteResult(result)
+          }}
+        />
+      )}
+
       <div className="card px-3 py-3">
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Entity</p><p className="text-slate-100 font-medium">{pov.entity}</p></div>
@@ -457,6 +666,16 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
               <button className={`px-2 py-1 text-xs rounded ${resultView === 'exceptions' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setResultView('exceptions')}>Exceptions</button>
             </div>
             <div className="ml-auto flex items-center gap-2">
+              {activeExec?.status === 'completed' && (
+                <button
+                  className="btn-primary py-1 h-8 text-xs"
+                  onClick={() => setShowPromoteModal(true)}
+                  title="Promote this run to a full enterprise reconciliation profile"
+                >
+                  <Rocket className="w-3.5 h-3.5" />
+                  Promote to Enterprise
+                </button>
+              )}
               <button className="btn-secondary py-1 h-8 text-xs" onClick={() => setShowAdvancedFilters((v) => !v)}>{showAdvancedFilters ? 'Hide Filters' : 'More Filters'}</button>
               <select className="input py-1 h-8 w-28 text-xs" value={exportStatus} onChange={(e) => setExportStatus(e.target.value)}>
                 <option value="all">All</option><option value="matched">Matched</option><option value="unmatched">Unmatched</option><option value="exceptions">Exceptions</option>

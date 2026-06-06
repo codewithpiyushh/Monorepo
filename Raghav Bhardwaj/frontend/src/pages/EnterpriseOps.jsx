@@ -33,6 +33,15 @@ export default function EnterpriseOps() {
   const [strategy, setStrategy] = useState('rule_based')
   const [threshold, setThreshold] = useState('1.0')
   const [queueType, setQueueType] = useState('')
+  const [suggestionMinConfidence, setSuggestionMinConfidence] = useState('0.70')
+  const [suggestionTopK, setSuggestionTopK] = useState('25')
+  const [fxAmount, setFxAmount] = useState('1000')
+  const [fxFrom, setFxFrom] = useState('USD')
+  const [fxTo, setFxTo] = useState('INR')
+  const [fxDate, setFxDate] = useState('')
+  const [journalPeriod, setJournalPeriod] = useState('')
+  const [journalMinAmount, setJournalMinAmount] = useState('0')
+  const [journalReportingCurrency, setJournalReportingCurrency] = useState('USD')
 
   const [exceptionAction, setExceptionAction] = useState({
     exception_id: '',
@@ -93,6 +102,19 @@ export default function EnterpriseOps() {
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Matching failed'),
   })
+  const suggestionsMutation = useMutation({
+    mutationFn: enterpriseAPI.matchSuggestions,
+    onError: (err) => toast.error(err.response?.data?.detail || 'Unable to fetch suggestions'),
+  })
+  const autoJournalMutation = useMutation({
+    mutationFn: enterpriseAPI.autoJournal,
+    onSuccess: (data) => toast.success(`Auto journal created: ${data.created_count}`),
+    onError: (err) => toast.error(err.response?.data?.detail || 'Auto journal failed'),
+  })
+  const fxMutation = useMutation({
+    mutationFn: enterpriseAPI.convertFx,
+    onError: (err) => toast.error(err.response?.data?.detail || 'FX conversion failed'),
+  })
 
   const assignMutation = useMutation({
     mutationFn: enterpriseAPI.assignException,
@@ -142,15 +164,31 @@ export default function EnterpriseOps() {
     () => profiles.map((p) => ({ id: p.id, label: `${p.id} - ${p.name}` })),
     [profiles]
   )
+  const selectedProfile = useMemo(
+    () => profiles.find((p) => String(p.id) === String(selectedProfileId)) || null,
+    [profiles, selectedProfileId],
+  )
+  const suggestionItems = suggestionsMutation.data?.items || []
+  const effectiveReportingCurrency = (journalReportingCurrency || 'USD').toUpperCase()
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="section-header">
-        <h1 className="text-base font-semibold text-white">Enterprise Reconciliation Ops</h1>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif' }}>
+      {/* EY Page Header */}
+      <div style={{
+        height: 52, padding: '0 20px', flexShrink: 0,
+        background: 'var(--header-bg)',
+        borderBottom: '1px solid var(--border-1)',
+        borderTop: '3px solid #FFE600',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Operations</p>
+          <h1 style={{ margin: 0, fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Enterprise Reconciliation Ops</h1>
+        </div>
       </div>
-      <div className="p-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-200">1) Ingestion & Pipeline</h2>
+      <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: 16, alignContent: 'start', background: 'var(--surface-0)' }}>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>1) Ingestion &amp; Pipeline</h2>
           <input className="input" value={sourceSystem} onChange={(e) => setSourceSystem(e.target.value)} placeholder="Source System" />
           <textarea className="input min-h-[80px]" value={metadataText} onChange={(e) => setMetadataText(e.target.value)} placeholder="Batch metadata JSON" />
           <textarea className="input min-h-[120px]" value={recordsText} onChange={(e) => setRecordsText(e.target.value)} placeholder="Records JSON array" />
@@ -185,8 +223,8 @@ export default function EnterpriseOps() {
           </div>
         </div>
 
-        <div className="card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-200">2) Reconciliation Profiles</h2>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>2) Reconciliation Profiles</h2>
           <input className="input" value={profileForm.name} onChange={(e) => setProfileForm((p) => ({ ...p, name: e.target.value }))} placeholder="Profile Name" />
           <div className="grid grid-cols-2 gap-2">
             <input className="input" value={profileForm.reconciliation_type} onChange={(e) => setProfileForm((p) => ({ ...p, reconciliation_type: e.target.value }))} placeholder="Type" />
@@ -225,8 +263,8 @@ export default function EnterpriseOps() {
           </button>
         </div>
 
-        <div className="card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-200">3) Matching Engine / Auto-Match</h2>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>3) Matching Engine / Auto-Match</h2>
           <select className="input" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
             <option value="">Select Profile</option>
             {profileOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
@@ -248,10 +286,105 @@ export default function EnterpriseOps() {
           >
             Run Matching
           </button>
+          <p className="text-xs text-slate-500">
+            {selectedProfile
+              ? `Profile config: tolerance ${selectedProfile.tolerance_threshold}, date window ${selectedProfile.date_window_days}, risk ${selectedProfile.risk_classification}`
+              : 'Pick a profile to enable matching and enterprise tools.'}
+          </p>
         </div>
 
-        <div className="card p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-slate-200">4) Exception Queue Workflow</h2>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, gridColumn: 'span 1' }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>4) Suggestions, Journals &amp; FX Utilities</h2>
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="space-y-3">
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Auto-Match Suggestions</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input className="input" value={suggestionMinConfidence} onChange={(e) => setSuggestionMinConfidence(e.target.value)} placeholder="Min confidence" />
+                <input className="input" value={suggestionTopK} onChange={(e) => setSuggestionTopK(e.target.value)} placeholder="Top K" />
+                <button
+                  className="btn-secondary col-span-2"
+                  disabled={!selectedProfileId || suggestionsMutation.isPending}
+                  onClick={() =>
+                    suggestionsMutation.mutate({
+                      profile_id: Number(selectedProfileId),
+                      top_k: Number(suggestionTopK) || 25,
+                      min_confidence: Number(suggestionMinConfidence) || 0.7,
+                    })
+                  }
+                >
+                  {suggestionsMutation.isPending ? 'Loading...' : 'Get Suggestions'}
+                </button>
+              </div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--border-1)', borderRadius: 6, padding: 8 }}>
+                {!suggestionItems.length ? <p className="text-xs text-slate-500">No suggestions yet.</p> : null}
+                {suggestionItems.map((s) => (
+                  <div key={`${s.left_record_id}-${s.right_record_id}`} style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', borderRadius: 6, padding: '6px 10px' }}>
+                    <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-primary)' }}>{s.left_reference} → {s.right_reference}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>confidence {Math.round((s.confidence || 0) * 100)}% | delta {s.amount_delta}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Journal Automation</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input className="input" value={journalPeriod} onChange={(e) => setJournalPeriod(e.target.value)} placeholder="Period key" />
+                <input className="input" value={journalMinAmount} onChange={(e) => setJournalMinAmount(e.target.value)} placeholder="Min abs amount" />
+                <input className="input col-span-2" value={journalReportingCurrency} onChange={(e) => setJournalReportingCurrency(e.target.value.toUpperCase())} placeholder="Reporting currency" />
+                <button
+                  className="btn-secondary col-span-2"
+                  disabled={!selectedProfileId || autoJournalMutation.isPending}
+                  onClick={() =>
+                    autoJournalMutation.mutate({
+                      profile_id: Number(selectedProfileId),
+                      period_key: journalPeriod || undefined,
+                      min_amount: Number(journalMinAmount) || 0,
+                      reporting_currency: effectiveReportingCurrency,
+                    })
+                  }
+                >
+                  {autoJournalMutation.isPending ? 'Generating...' : 'Auto Generate Journals'}
+                </button>
+              </div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--border-1)', borderRadius: 6, padding: 8 }}>
+                {(autoJournalMutation.data?.items || []).map((j) => (
+                  <div key={j.adjustment_id} style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', borderRadius: 6, padding: '6px 10px', fontSize: 11.5, color: 'var(--text-primary)' }}>
+                    #{j.adjustment_id} {j.account} {j.currency} {j.amount}
+                    {j.converted_amount != null ? ` | converted ${j.converted_amount}` : ''}
+                  </div>
+                ))}
+                {!autoJournalMutation.data?.items?.length ? <p className="text-xs text-slate-500">No journals generated yet.</p> : null}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>FX Conversion</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input className="input" value={fxAmount} onChange={(e) => setFxAmount(e.target.value)} placeholder="Amount" />
+                <input className="input" value={fxFrom} onChange={(e) => setFxFrom(e.target.value.toUpperCase())} placeholder="From" />
+                <input className="input" value={fxTo} onChange={(e) => setFxTo(e.target.value.toUpperCase())} placeholder="To" />
+                <input className="input" type="date" value={fxDate} onChange={(e) => setFxDate(e.target.value)} />
+                <button
+                  className="btn-secondary col-span-2"
+                  onClick={() => fxMutation.mutate({ amount: Number(fxAmount) || 0, from_currency: fxFrom, to_currency: fxTo, conversion_date: fxDate || undefined })}
+                >
+                  Convert
+                </button>
+              </div>
+              {fxMutation.data ? (
+                <div style={{ background: 'var(--surface-3)', border: '1px solid var(--border-1)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--text-primary)' }}>
+                  Converted: {fxMutation.data.converted_amount} | Rate: {fxMutation.data.rate} | FX Variance: {fxMutation.data.fx_variance}
+                </div>
+              ) : (
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Run a conversion to view the result here.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>5) Exception Queue Workflow</h2>
           <div className="flex gap-2">
             <select className="input max-w-xs" value={queueType} onChange={(e) => setQueueType(e.target.value)}>
               <option value="">All</option>
@@ -261,13 +394,13 @@ export default function EnterpriseOps() {
               <option value="escalated">escalated</option>
             </select>
           </div>
-          <div className="max-h-48 overflow-auto border border-surface-700 rounded-md p-2">
+          <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border-1)', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {exceptions.map((e) => (
-              <div key={e.id} className="text-xs text-slate-300 py-1 border-b border-surface-700/40 last:border-b-0">
+              <div key={e.id} style={{ fontSize: 11.5, color: 'var(--text-secondary)', padding: '4px 0', borderBottom: '1px solid var(--border-0)' }}>
                 #{e.id} | {e.queue_type} | {e.status} | assigned:{e.assigned_to ?? '-'}
               </div>
             ))}
-            {exceptions.length === 0 && <p className="text-xs text-slate-500">No exceptions</p>}
+            {exceptions.length === 0 && <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>No exceptions</p>}
           </div>
           <div className="grid grid-cols-3 gap-2">
             <input className="input" value={exceptionAction.exception_id} onChange={(e) => setExceptionAction((p) => ({ ...p, exception_id: e.target.value }))} placeholder="Exception ID" />
@@ -282,8 +415,8 @@ export default function EnterpriseOps() {
           </div>
         </div>
 
-        <div className="card p-4 space-y-3 xl:col-span-2">
-          <h2 className="text-sm font-semibold text-slate-200">5) Finalization & Attachment Metadata</h2>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>6) Finalization &amp; Attachment Metadata</h2>
           <div className="grid grid-cols-2 gap-2">
             <input className="input" value={attachment.record_id} onChange={(e) => setAttachment((p) => ({ ...p, record_id: e.target.value }))} placeholder="Reconciliation Record ID" />
             <button className="btn-secondary" onClick={() => finalizeMutation.mutate(Number(attachment.record_id))}>Finalize Record</button>
@@ -313,4 +446,3 @@ export default function EnterpriseOps() {
     </div>
   )
 }
-

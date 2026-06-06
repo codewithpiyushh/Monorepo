@@ -1,44 +1,64 @@
-import { AlertTriangle, Inbox, Loader2 } from 'lucide-react'
+import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react'
 
-export function LoadingState({ label = 'Loading...' }) {
+export function LoadingState({ message = 'Loading data…' }) {
   return (
-    <div className="min-h-[260px] rounded-xl border border-surface-700 bg-surface-800/40 p-5">
-      <div className="mb-4 flex items-center gap-3 text-sm text-slate-300">
-        <Loader2 className="h-4 w-4 animate-spin text-brand-400" />
-        {label}
+    <div className="flex flex-col items-center justify-center gap-3 flex-1 py-16"
+      style={{ color: 'var(--text-tertiary)' }}>
+      <div style={{ position: 'relative', width: 32, height: 32 }}>
+        <div className="animate-spin rounded-full"
+          style={{ width: 32, height: 32, border: '2px solid var(--border-2)', borderTopColor: 'var(--accent)' }} />
       </div>
-      <div className="space-y-2">
-        <div className="h-8 animate-pulse rounded-md bg-surface-700/40" />
-        <div className="h-8 animate-pulse rounded-md bg-surface-700/30" />
-        <div className="h-8 animate-pulse rounded-md bg-surface-700/40" />
-        <div className="h-8 animate-pulse rounded-md bg-surface-700/30" />
-      </div>
+      <p style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>{message}</p>
     </div>
   )
 }
 
-export function EmptyState({ title, description, action }) {
+export function EmptyState({ title = 'No data', description, action }) {
   return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-surface-600 bg-surface-800/40 p-8 text-center">
-      <div className="mb-4 rounded-2xl border border-surface-600 bg-surface-800 p-4">
-        <Inbox className="h-7 w-7 text-slate-500" />
+    <div className="flex flex-col items-center justify-center gap-3 flex-1 py-16">
+      <div style={{
+        width: 40, height: 40, borderRadius: 'var(--r-lg)',
+        background: 'var(--surface-3)', border: '1px solid var(--border-1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Inbox style={{ width: 18, height: 18, color: 'var(--text-tertiary)' }} />
       </div>
-      <h3 className="text-base font-semibold text-slate-100">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-slate-400">{description}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>{title}</p>
+        {description && (
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 320 }}>{description}</p>
+        )}
+      </div>
+      {action}
     </div>
   )
 }
 
-export function ErrorState({ title = 'Something went wrong', description = 'Please retry in a moment.', action }) {
+export function ErrorState({ message = 'Something went wrong', onRetry }) {
   return (
-    <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-red-900/40 bg-red-950/10 p-8 text-center">
-      <div className="mb-4 rounded-2xl border border-red-800/40 bg-red-900/20 p-4">
-        <AlertTriangle className="h-7 w-7 text-red-300" />
+    <div className="flex flex-col items-center justify-center gap-3 flex-1 py-16">
+      <div style={{
+        width: 40, height: 40, borderRadius: 'var(--r-lg)',
+        background: 'var(--bad-bg)', border: '1px solid var(--bad-bdr)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <AlertTriangle style={{ width: 18, height: 18, color: 'var(--bad)' }} />
       </div>
-      <h3 className="text-base font-semibold text-slate-100">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-slate-400">{description}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{message}</p>
+      {onRetry && (
+        <button className="btn-secondary btn-sm" onClick={onRetry}>
+          <RefreshCw style={{ width: 12, height: 12 }} />
+          Retry
+        </button>
+      )}
     </div>
   )
+}
+
+// Legacy compat
+export default function PageState({ loading, empty, emptyTitle, emptyDesc, error, onRetry, children }) {
+  if (loading) return <LoadingState />
+  if (error)   return <ErrorState message={error} onRetry={onRetry} />
+  if (empty)   return <EmptyState title={emptyTitle} description={emptyDesc} />
+  return children || null
 }

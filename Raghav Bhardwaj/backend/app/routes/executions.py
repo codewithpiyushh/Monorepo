@@ -97,3 +97,51 @@ def get_results(
         page_size=page_size,
         stats=stats,
     )
+
+
+# ─── Promote execution → enterprise profile ───────────────────────────────────
+from pydantic import BaseModel as _BaseModel
+from typing import Optional as _Optional
+
+class PromotePayload(_BaseModel):
+    recon_type: _Optional[str] = "BANK_RECONCILIATION"
+    risk_classification: _Optional[str] = "MEDIUM"
+    reviewer_id: _Optional[int] = None
+    approver_id: _Optional[int] = None
+    certifier_id: _Optional[int] = None
+
+
+@router.post("/{execution_id}/promote", status_code=200)
+def promote_execution(
+    project_id: int,
+    execution_id: int,
+    payload: PromotePayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([PREPARER, ADMIN])),
+):
+    """
+    Promote a completed execution into the enterprise reconciliation layer.
+    Creates: ReconciliationProfile, ReconciliationRecords, MatchGroups,
+             ExceptionQueueRecords, CertificationWorkflow, FinancialCloseCalendar.
+    """
+    result = execution_service.promote_execution_to_profile(
+        db=db,
+        execution_id=execution_id,
+        project_id=project_id,
+        actor_id=current_user.id,
+        recon_type=payload.recon_type or "BANK_RECONCILIATION",
+        risk_classification=payload.risk_classification or "MEDIUM",
+        reviewer_id=payload.reviewer_id,
+        approver_id=payload.approver_id,
+        certifier_id=payload.certifier_id,
+    )
+    audit_service.log_action(
+        db, "EXECUTION_PROMOTED",
+        user_id=current_user.id,
+        entity_type="execution",
+        entity_id=execution_id,
+        metadata=result,
+        ip_address=request.client.host if request.client else None,
+    )
+    return result

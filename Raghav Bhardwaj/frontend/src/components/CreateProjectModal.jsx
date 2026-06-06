@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Modal from './Modal'
 import { projectsAPI } from '../api'
 import toast from 'react-hot-toast'
+import { useProjectStore } from '../store/projectStore'
 
 export default function CreateProjectModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
+  const navigate = useNavigate()
+  const setSelectedProjectId = useProjectStore((s) => s.setSelectedProjectId)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -14,9 +18,11 @@ export default function CreateProjectModal({ open, onClose, onCreated }) {
     try {
       const project = await projectsAPI.create(form)
       toast.success('Project created')
+      setSelectedProjectId(String(project.id))
       onCreated(project)
       setForm({ name: '', description: '' })
       onClose()
+      navigate(`/projects/${project.id}/ingestion`)
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to create project')
     } finally {

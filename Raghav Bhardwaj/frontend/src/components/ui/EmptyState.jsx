@@ -1,38 +1,20 @@
-import { Inbox, AlertTriangle, Search } from 'lucide-react'
+import { Inbox } from 'lucide-react'
 
-export default function EmptyState({ 
-  icon: Icon = Inbox,
-  title = 'No data found',
-  description = 'There are no items to display',
-  action: Action = null,
-  variant = 'default' // default | no-results | no-search
-}) {
-  const variants = {
-    default: {
-      bgColor: 'bg-slate-50',
-      textColor: 'text-slate-600',
-      descColor: 'text-slate-500'
-    },
-    'no-results': {
-      bgColor: 'bg-amber-50',
-      textColor: 'text-amber-700',
-      descColor: 'text-amber-600'
-    },
-    'no-search': {
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-700',
-      descColor: 'text-blue-600'
-    }
-  }
-
-  const config = variants[variant] || variants.default
-
+export default function EmptyState({ title = 'No data', description, icon: Icon = Inbox, action }) {
   return (
-    <div className={`${config.bgColor} rounded-lg p-12 flex flex-col items-center justify-center min-h-[300px]`}>
-      <Icon className={`w-12 h-12 ${config.textColor} mb-4 opacity-40`} />
-      <h3 className={`text-lg font-semibold ${config.textColor} mb-2`}>{title}</h3>
-      <p className={`text-sm ${config.descColor} mb-6 max-w-sm text-center`}>{description}</p>
-      {Action && <Action />}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '40px 20px', flex: 1 }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: 'var(--r-lg)',
+        background: 'var(--surface-3)', border: '1px solid var(--border-1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon style={{ width: 18, height: 18, color: 'var(--text-tertiary)' }} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>{title}</p>
+        {description && <p style={{ fontSize: 12, color: 'var(--text-tertiary)', maxWidth: 320 }}>{description}</p>}
+      </div>
+      {action}
     </div>
   )
 }

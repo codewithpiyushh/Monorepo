@@ -1,8 +1,0 @@
-﻿{
-  "name": "Reference Exact Rule",
-  "rule_type": "exact",
-  "config": {
-    "source_column": "reference"
-  },
-  "is_active": true
-}

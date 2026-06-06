@@ -1,194 +1,264 @@
-import { useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+/**
+ * ExecutiveDashboard — wired to /enterprise/dashboard/executive-real
+ * All KPIs, charts and tables come from live enterprise data.
+ */
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
-import { executionsAPI, projectsAPI } from '../api'
+import { advancedAPI } from '../api'
 import PageHeader from '../components/ui/PageHeader'
-import { EmptyState, LoadingState } from '../components/ui/PageState'
-import { useProjectStore } from '../store/projectStore'
+import { LoadingState } from '../components/ui/PageState'
+import {
+  Layers, CheckCircle2, AlertTriangle, TrendingUp,
+  Clock, ShieldAlert, BarChart3, Users,
+} from 'lucide-react'
 
-function formatCurrency(amount, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(amount || 0))
+// ── Theme ─────────────────────────────────────────────────────
+const ACCENT = '#6366f1'
+const OK     = '#22c55e'
+const WARN   = '#f59e0b'
+const BAD    = '#ef4444'
+const INFO   = '#38bdf8'
+const PURPLE = '#a855f7'
+
+const ECHART_BASE = {
+  backgroundColor: 'transparent',
+  textStyle: { color: '#94a3b8', fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11 },
 }
 
-function flattenExecution(executionResults) {
-  const rows = []
-  let i = 1
-  ;(executionResults?.units || []).forEach((unit) => {
-    ;(unit.transactions || []).forEach((transaction) => {
-      const mismatch = String(transaction.match_status || '').toLowerCase() !== 'matched'
-      rows.push({
-        id: i,
-        entity: unit.entity || 'Unassigned',
-        account: unit.account || 'Unassigned',
-        status: transaction.match_status || 'OPEN',
-        exception: mismatch,
-        variance: mismatch ? 100 : 0,
-      })
-      i += 1
-    })
-  })
-  return rows
-}
-
-function parseStats(raw) {
-  if (!raw) return {}
-  if (typeof raw === 'object') return raw
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return {}
-  }
-}
-
-function KpiButton({ title, value, subtext, tone = 'default', onClick }) {
-  const toneClass = tone === 'danger'
-    ? 'border-red-800/50 bg-red-950/20'
-    : tone === 'warning'
-      ? 'border-amber-800/50 bg-amber-950/20'
-      : 'border-surface-700 bg-surface-900/40'
-
+// ── KPI Card ──────────────────────────────────────────────────
+function KpiCard({ label, value, sub, icon: Icon, color, onClick }) {
   return (
-    <button className={`card p-4 text-left transition hover:-translate-y-0.5 ${toneClass}`} onClick={onClick}>
-      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-100">{value}</p>
-      <p className="mt-1 text-xs text-slate-400">{subtext}</p>
-    </button>
+    <div onClick={onClick} style={{
+      background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+      borderRadius: 12, padding: '16px 18px',
+      display: 'flex', alignItems: 'center', gap: 14,
+      cursor: onClick ? 'pointer' : 'default',
+      transition: 'border-color 200ms',
+    }}
+    onMouseEnter={(e) => { if (onClick) e.currentTarget.style.borderColor = color }}
+    onMouseLeave={(e) => { if (onClick) e.currentTarget.style.borderColor = 'var(--border-1)' }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 10,
+        background: `${color}18`, border: `1px solid ${color}33`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <Icon style={{ width: 17, height: 17, color }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 1 }}>{label}</p>
+        <p style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.0 }}>{value}</p>
+        {sub && <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</p>}
+      </div>
+    </div>
   )
 }
 
+// ── Section card wrapper ──────────────────────────────────────
+function Card({ title, subtitle, children, style = {} }) {
+  return (
+    <div style={{
+      background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+      borderRadius: 12, padding: '16px 18px', ...style,
+    }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: subtitle ? 2 : 12 }}>{title}</p>
+      {subtitle && <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 12 }}>{subtitle}</p>}
+      {children}
+    </div>
+  )
+}
+
+// ── Certification trend chart ─────────────────────────────────
+function CertTrendChart({ data }) {
+  if (!data?.length) return <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: 20 }}>No period data yet</p>
+  const option = {
+    ...ECHART_BASE,
+    grid: { left: 44, right: 16, top: 12, bottom: 36 },
+    tooltip: { trigger: 'axis', backgroundColor: '#1e293b', borderColor: '#334155' },
+    xAxis: { type: 'category', data: data.map((d) => d.period), axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
+    yAxis: { type: 'value', max: 100, axisLabel: { color: '#64748b', fontSize: 10, formatter: '{value}%' }, splitLine: { lineStyle: { color: '#1e293b' } } },
+    series: [{
+      type: 'line', smooth: true, data: data.map((d) => d.pct),
+      lineStyle: { color: OK, width: 2 },
+      areaStyle: { color: `${OK}22` },
+      itemStyle: { color: OK }, symbol: 'circle', symbolSize: 5,
+    }],
+  }
+  return <ReactECharts option={option} style={{ height: 180 }} notMerge />
+}
+
+// ── Risk donut chart ──────────────────────────────────────────
+function RiskDonut({ data }) {
+  const total = Object.values(data || {}).reduce((s, v) => s + v, 0)
+  if (!total) return <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: 20 }}>No profiles</p>
+  const colors = { LOW: OK, MEDIUM: WARN, HIGH: '#f97316', CRITICAL: BAD }
+  const option = {
+    ...ECHART_BASE,
+    tooltip: { trigger: 'item', backgroundColor: '#1e293b', borderColor: '#334155' },
+    series: [{
+      type: 'pie', radius: ['45%', '70%'], center: ['50%', '50%'],
+      data: Object.entries(data).map(([k, v]) => ({ name: k, value: v, itemStyle: { color: colors[k] || ACCENT } })),
+      label: { color: '#94a3b8', fontSize: 10 },
+    }],
+  }
+  return <ReactECharts option={option} style={{ height: 180 }} notMerge />
+}
+
+// ── Pending by stage bar ──────────────────────────────────────
+function PendingStageChart({ data }) {
+  const entries = Object.entries(data || {})
+  if (!entries.length) return <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', padding: 20 }}>No pending items</p>
+  const stageColors = { PREPARER: ACCENT, REVIEWER: INFO, APPROVER: WARN, CERTIFIER: OK, UNKNOWN: 'var(--text-tertiary)' }
+  const option = {
+    ...ECHART_BASE,
+    grid: { left: 90, right: 40, top: 8, bottom: 16 },
+    xAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#1e293b' } } },
+    yAxis: { type: 'category', data: entries.map(([k]) => k), axisLabel: { color: '#94a3b8', fontSize: 10 } },
+    series: [{
+      type: 'bar',
+      data: entries.map(([k, v]) => ({ value: v, itemStyle: { color: stageColors[k] || ACCENT, borderRadius: [0, 4, 4, 0] } })),
+      label: { show: true, position: 'right', color: '#94a3b8', fontSize: 10 },
+    }],
+  }
+  return <ReactECharts option={option} style={{ height: Math.max(entries.length * 36, 100) }} notMerge />
+}
+
+// ── Main ──────────────────────────────────────────────────────
 export default function ExecutiveDashboard() {
   const navigate = useNavigate()
-  const { selectedProjectId, setSelectedProjectId } = useProjectStore()
 
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
-  useEffect(() => {
-    if (!selectedProjectId && projects.length) setSelectedProjectId(String(projects[0].id))
-  }, [projects, selectedProjectId, setSelectedProjectId])
-
-  const { data: executions = [] } = useQuery({
-    queryKey: ['executive-executions', selectedProjectId],
-    queryFn: () => executionsAPI.list(Number(selectedProjectId)),
-    enabled: !!selectedProjectId,
+  const { data, isLoading } = useQuery({
+    queryKey: ['executive-dashboard-real'],
+    queryFn: advancedAPI.executiveDashboard,
+    refetchInterval: 60000,
   })
 
-  const latestExecution = useMemo(() => executions.find((row) => String(row.status || '').toLowerCase() === 'completed') || executions[0], [executions])
-  const completedExecutions = useMemo(
-    () => executions.filter((row) => String(row.status || '').toLowerCase() === 'completed'),
-    [executions]
+  if (isLoading) return (
+    <div className="h-full flex flex-col">
+      <PageHeader title="Executive Dashboard" subtitle="Real-time enterprise reconciliation overview." />
+      <LoadingState />
+    </div>
   )
 
-  const { data: executionResults } = useQuery({
-    queryKey: ['executive-results', selectedProjectId, latestExecution?.id],
-    queryFn: () => executionsAPI.results(Number(selectedProjectId), latestExecution.id, { page: 1, page_size: 1000 }),
-    enabled: !!selectedProjectId && !!latestExecution?.id,
-  })
-
-  const transactions = useMemo(() => flattenExecution(executionResults), [executionResults])
-  const summary = useMemo(() => {
-    const total = transactions.length
-    const matched = transactions.filter((row) => String(row.status || '').toLowerCase() === 'matched').length
-    const openExceptions = transactions.filter((row) => row.exception).length
-    const varianceAmount = transactions.reduce((sum, row) => sum + Math.abs(Number(row.variance || 0)), 0)
-
-    const accountMap = new Map()
-    transactions.forEach((row) => {
-      const data = accountMap.get(row.account) || { account: row.account, exception_count: 0, variance_amount: 0, risk_level: 'LOW' }
-      if (row.exception) data.exception_count += 1
-      data.variance_amount += Math.abs(Number(row.variance || 0))
-      if (data.exception_count >= 5) data.risk_level = 'HIGH'
-      else if (data.exception_count >= 2) data.risk_level = 'MEDIUM'
-      accountMap.set(row.account, data)
-    })
-
-    return {
-      match_rate: total ? Number(((matched / total) * 100).toFixed(2)) : 0,
-      open_exceptions: openExceptions,
-      pending_approvals: openExceptions,
-      certification_pct: total ? Number((((total - openExceptions) / total) * 100).toFixed(2)) : 0,
-      variance_amount: varianceAmount,
-      high_risk_accounts: Array.from(accountMap.values()).sort((a, b) => b.exception_count - a.exception_count).slice(0, 6),
-      total_reconciliations: executionResults?.units?.length || 0,
-    }
-  }, [transactions, executionResults])
-
-  const trendRows = useMemo(() => {
-    const rows = completedExecutions
-      .slice(0, 6)
-      .reverse()
-      .map((run, index) => {
-        const stats = parseStats(run.stats)
-        const matched = Number(stats.matched || 0)
-        const unmatched = Number(stats.unmatched || 0)
-        const partial = Number(stats.partial || 0)
-        const total = Math.max(1, Number(stats.total_source || (matched + unmatched + partial)))
-        return {
-          label: `Run ${index + 1}`,
-          matchRate: Number(stats.match_rate || ((matched / total) * 100).toFixed(2)),
-          exceptions: unmatched + partial,
-          variance: unmatched * 100 + partial * 50,
-          certification: Number((((matched) / total) * 100).toFixed(2)),
-        }
-      })
-    if (!rows.length) {
-      return [{
-        label: 'Latest Run',
-        matchRate: Number(summary.match_rate || 0),
-        exceptions: Number(summary.open_exceptions || 0),
-        variance: Number(summary.variance_amount || 0),
-        certification: Number(summary.certification_pct || 0),
-      }]
-    }
-    return rows
-  }, [completedExecutions, summary])
-
-  const trendLabels = trendRows.map((row) => row.label)
-  const matchRateOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } }, series: [{ data: trendRows.map((row) => row.matchRate), type: 'line', smooth: true, lineStyle: { color: '#4f9cf9', width: 3 }, itemStyle: { color: '#4f9cf9' }, areaStyle: { color: 'rgba(79,156,249,0.16)' } }] }
-  const exceptionTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } }, series: [{ data: trendRows.map((row) => row.exceptions), type: 'bar', itemStyle: { color: '#f59e0b' }, barMaxWidth: 28 }] }
-  const varianceTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8' } }, series: [{ data: trendRows.map((row) => row.variance), type: 'line', smooth: true, lineStyle: { color: '#ef4444', width: 3 }, itemStyle: { color: '#ef4444' } }] }
-  const certificationTrendOption = { xAxis: { type: 'category', data: trendLabels, axisLabel: { color: '#94a3b8' } }, yAxis: { type: 'value', axisLabel: { color: '#94a3b8', formatter: '{value}%' } }, series: [{ data: trendRows.map((row) => row.certification), type: 'line', smooth: true, lineStyle: { color: '#22c55e', width: 3 }, itemStyle: { color: '#22c55e' } }] }
-
-  const loading = !!selectedProjectId && !executionResults
+  const ps  = data?.profile_summary      || {}
+  const mt  = data?.matching             || {}
+  const exc = data?.exceptions           || {}
+  const cm  = data?.close_management     || {}
+  const rb  = data?.risk_breakdown       || {}
+  const ct  = data?.certification_trend  || []
+  const hr  = data?.high_risk_profiles   || []
+  const pbs = cm.pending_by_stage        || {}
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader title="Executive Overview" subtitle="Business KPIs from the selected project's latest reconciliation run." badge={`${summary.total_reconciliations || 0} reconciliations`} />
+      <PageHeader
+        title="Executive Dashboard"
+        subtitle="Live reconciliation status across all profiles, periods and entities."
+        badge="Live"
+      />
 
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        <div className="card p-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400">Project Source</span>
-          <select className="input max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-            {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name}</option>)}
-          </select>
-          <span className="text-xs text-slate-500">KPIs are scoped to this project only</span>
+      <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
+
+        {/* ── Primary KPIs ────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <KpiCard label="Total Profiles"       value={ps.total          ?? '—'} sub={`${ps.in_progress ?? 0} in progress`}     icon={Layers}       color={ACCENT}  onClick={() => navigate('/reconciliation-profiles')} />
+          <KpiCard label="Certification Rate"   value={`${ps.certification_pct ?? 0}%`} sub={`${ps.certified ?? 0} certified`}   icon={CheckCircle2} color={OK}      onClick={() => navigate('/close-certification')} />
+          <KpiCard label="Open Exceptions"      value={exc.open          ?? '—'} sub={`${exc.escalated ?? 0} escalated`}         icon={AlertTriangle} color={BAD}    onClick={() => navigate('/exception-workbench')} />
+          <KpiCard label="Auto-Match Rate"      value={`${mt.auto_match_rate ?? 0}%`} sub={`${mt.full_matches ?? 0} full matches`} icon={TrendingUp}  color={INFO}   onClick={() => navigate('/transaction-matching')} />
         </div>
 
-        {loading ? <LoadingState label="Loading executive dashboard..." /> : null}
-        {!loading && !transactions.length ? <EmptyState title="No executive data" description="Run reconciliation for this project to populate KPI and trend views." /> : null}
+        {/* ── Secondary KPIs ──────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          <KpiCard label="Overdue Periods"      value={cm.overdue_periods  ?? '—'} sub="past due date"           icon={Clock}       color={WARN}   onClick={() => navigate('/close-certification')} />
+          <KpiCard label="Certs Overdue SLA"    value={cm.certs_overdue    ?? '—'} sub="past due date"           icon={Clock}       color={WARN}   />
+          <KpiCard label="Total Match Groups"   value={mt.total_groups     ?? '—'} sub={`${mt.full_matches ?? 0} full matches`} icon={BarChart3} color={ACCENT} onClick={() => navigate('/transaction-matching')} />
+          <KpiCard label="High / Critical Risk" value={(rb.HIGH ?? 0) + (rb.CRITICAL ?? 0)} sub="profiles"       icon={ShieldAlert} color={PURPLE} onClick={() => navigate('/risk-dashboard')} />
+        </div>
 
-        {!loading && transactions.length ? (
-          <>
-            <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
-              <KpiButton title="Match Rate" value={`${Math.round(summary.match_rate || 0)}%`} subtext="Click into reconciliation analytics" onClick={() => navigate('/analytics-explorer')} />
-              <KpiButton title="Open Exceptions" value={summary.open_exceptions || 0} subtext="Investigate unresolved breaks" tone="danger" onClick={() => navigate('/exception-ops')} />
-              <KpiButton title="Pending Approvals" value={summary.pending_approvals || 0} subtext="Certification workflow bottlenecks" tone="warning" onClick={() => navigate('/close-certification')} />
-              <KpiButton title="Certification %" value={`${Math.round(summary.certification_pct || 0)}%`} subtext="Close-cycle completion health" onClick={() => navigate('/close-certification')} />
-              <KpiButton title="Variance Amount" value={formatCurrency(summary.variance_amount, 'INR')} subtext="Net unresolved variance in scope" tone="danger" onClick={() => navigate('/analytics-explorer')} />
-              <KpiButton title="High Risk Accounts" value={summary.high_risk_accounts?.length || 0} subtext="Open risk dashboard" tone="warning" onClick={() => navigate('/risk-dashboard')} />
-            </div>
+        {/* ── Charts row ──────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <Card title="Certification Trend" subtitle="Period completion %">
+            <CertTrendChart data={ct} />
+          </Card>
+          <Card title="Risk Distribution" subtitle="Profiles by risk level">
+            <RiskDonut data={rb} />
+          </Card>
+          <Card title="Pending Certification by Stage" subtitle="Workflows awaiting action">
+            <PendingStageChart data={pbs} />
+          </Card>
+        </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Match Rate Trend</p><ReactECharts style={{ height: 260 }} option={matchRateOption} /></div>
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Exception Trend</p><ReactECharts style={{ height: 260 }} option={exceptionTrendOption} /></div>
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Variance Trend</p><ReactECharts style={{ height: 260 }} option={varianceTrendOption} /></div>
-              <div className="card p-4"><p className="text-sm font-semibold text-slate-100 mb-3">Certification Trend</p><ReactECharts style={{ height: 260 }} option={certificationTrendOption} /></div>
+        {/* ── Exception + matching summary ────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Card title="Exception Summary">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              {[
+                ['Total', exc.total ?? 0, 'var(--text-primary)'],
+                ['Open',  exc.open  ?? 0, BAD],
+                ['Escalated', exc.escalated ?? 0, PURPLE],
+              ].map(([label, val, color]) => (
+                <div key={label} style={{ textAlign: 'center', padding: '10px 6px', background: 'var(--surface-1)', borderRadius: 8 }}>
+                  <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 4 }}>{label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 700, color }}>{val}</p>
+                </div>
+              ))}
             </div>
-          </>
-        ) : null}
+          </Card>
+
+          <Card title="Matching Summary">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              {[
+                ['Total Groups',  mt.total_groups  ?? 0, 'var(--text-primary)'],
+                ['Full Matches',  mt.full_matches  ?? 0, OK],
+                ['Auto-Match %',  `${mt.auto_match_rate ?? 0}%`, mt.auto_match_rate >= 85 ? OK : mt.auto_match_rate >= 60 ? WARN : BAD],
+              ].map(([label, val, color]) => (
+                <div key={label} style={{ textAlign: 'center', padding: '10px 6px', background: 'var(--surface-1)', borderRadius: 8 }}>
+                  <p style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 4 }}>{label}</p>
+                  <p style={{ fontSize: 24, fontWeight: 700, color }}>{val}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* ── High risk profiles ───────────────────────── */}
+        {hr.length > 0 && (
+          <Card title="High & Critical Risk Profiles" subtitle="Profiles requiring immediate attention">
+            <table className="data-table" style={{ borderRadius: 0 }}>
+              <thead>
+                <tr><th>Profile</th><th>Type</th><th>Risk</th><th>State</th><th></th></tr>
+              </thead>
+              <tbody>
+                {hr.map((p) => {
+                  const rcolor = { HIGH: WARN, CRITICAL: BAD }[p.risk] || ACCENT
+                  const scolor = { CERTIFIED: OK, CLOSED: 'var(--text-disabled)', IN_PROGRESS: ACCENT }[p.state] || 'var(--text-tertiary)'
+                  return (
+                    <tr key={p.id}>
+                      <td style={{ fontSize: 12, fontWeight: 600, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{(p.type || '').replace(/_/g, ' ')}</td>
+                      <td>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+                          background: `${rcolor}14`, border: `1px solid ${rcolor}33`, color: rcolor }}>
+                          {p.risk}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 11, color: scolor, fontWeight: 600 }}>{p.state}</td>
+                      <td>
+                        <button className="btn-ghost text-xs py-0.5 h-6"
+                          onClick={() => navigate('/reconciliation-profiles')}>
+                          View →
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </Card>
+        )}
+
       </div>
     </div>
   )

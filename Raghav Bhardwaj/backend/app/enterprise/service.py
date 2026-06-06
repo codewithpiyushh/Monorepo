@@ -2465,3 +2465,432 @@ def get_job_metrics(db: Session, limit: int = 100):
             prev_sum = stats["avg_duration_ms"] * (stats["runs"] - 1)
             stats["avg_duration_ms"] = round((prev_sum + row.duration_ms) / stats["runs"], 2)
     return {"recent_runs": rows, "dashboard": dashboard}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ADVANCED MATCHING ENGINE INTEGRATION
+# ═══════════════════════════════════════════════════════════════
+
+def run_advanced_matching(
+    db: Session,
+    profile_id: int,
+    auto_match_threshold: float = 0.92,
+    cross_period_days: int = 90,
+    user_id: int | None = None,
+) -> dict:
+    """
+    Runs the 4-phase advanced matching engine:
+    Phase 1 — candidate generation with amount bucketing
+    Phase 2 — 1:1 holistic scoring (amount + date + reference + description + entity)
+    Phase 3a — many-to-one group resolution
+    Phase 3b — one-to-many (split) resolution
+    Phase 3c — cross-period settlement matching
+    Phase 4 — unmatched → exception queue
+    """
+    from ..services.matching_engine import AdvancedMatchingEngine
+
+    profile = db.query(ReconciliationProfile).filter(
+        ReconciliationProfile.id == profile_id
+    ).first()
+    if not profile:
+        raise ValueError("Profile not found")
+
+    # ── Period lock check ────────────────────────────────────
+    cal = db.query(FinancialCloseCalendar).filter(
+        FinancialCloseCalendar.profile_id == profile_id
+    ).order_by(FinancialCloseCalendar.period_key.desc()).first()
+    if cal and cal.is_locked:
+        raise ValueError(
+            f"Period {cal.period_key} is locked. Matching cannot be run on a locked period."
+        )
+
+    engine = AdvancedMatchingEngine(
+        profile=profile,
+        auto_match_threshold=auto_match_threshold,
+        cross_period_days=cross_period_days,
+    )
+    return engine.run(db, profile_id=profile_id, user_id=user_id)
+
+
+def get_match_suggestions_advanced(
+    db: Session,
+    profile_id: int,
+    top_k: int = 25,
+    min_confidence: float = 0.50,
+) -> dict:
+    """
+    Surface AI-style suggestions for unmatched records without committing matches.
+    """
+    from ..services.matching_engine import (
+        AdvancedMatchingEngine, RecordView, CandidateIndex
+    )
+    from ..models.models import ReconciliationRecord as RR
+
+    profile = db.query(ReconciliationProfile).filter(
+        ReconciliationProfile.id == profile_id
+    ).first()
+    if not profile:
+        raise ValueError("Profile not found")
+
+    unmatched = (
+        db.query(RR)
+        .filter(RR.profile_id == profile_id, RR.status == "UNMATCHED")
+        .all()
+    )
+    all_records = (
+        db.query(RR)
+        .filter(RR.profile_id == profile_id)
+        .all()
+    )
+
+    engine = AdvancedMatchingEngine(profile)
+    src_views = [RecordView.from_orm(r) for r in unmatched]
+    tgt_views = [RecordView.from_orm(r) for r in all_records if r.status != "UNMATCHED"]
+    consumed_tgt: set = set()
+
+    items = engine.suggestions(src_views, tgt_views, consumed_tgt, top_k=top_k)
+    items = [i for i in items if i["confidence"] >= min_confidence]
+    return {"profile_id": profile_id, "items": items, "total": len(items)}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  PERIOD LOCK ENFORCEMENT SERVICE
+# ═══════════════════════════════════════════════════════════════
+
+def _assert_period_unlocked(db: Session, profile_id: int, period_key: str | None = None):
+    """
+    Raise ValueError if the relevant close calendar period is locked.
+    Called before any write operation on reconciliation data.
+    """
+    q = db.query(FinancialCloseCalendar).filter(
+        FinancialCloseCalendar.profile_id == profile_id,
+        FinancialCloseCalendar.is_locked == True,
+    )
+    if period_key:
+        q = q.filter(FinancialCloseCalendar.period_key == period_key)
+    locked = q.first()
+    if locked:
+        raise ValueError(
+            f"Period {locked.period_key} is locked and cannot accept new data. "
+            "Contact your administrator to unlock this period."
+        )
+
+
+def lock_period(db: Session, calendar_id: int, actor_id: int) -> dict:
+    """Lock a close calendar period — prevents all writes."""
+    cal = db.query(FinancialCloseCalendar).filter(
+        FinancialCloseCalendar.id == calendar_id
+    ).first()
+    if not cal:
+        raise ValueError("Calendar entry not found")
+    if cal.is_locked:
+        raise ValueError("Period is already locked")
+
+    cal.is_locked    = True
+    cal.locked_by    = actor_id
+    cal.locked_at    = datetime.utcnow()
+    cal.status       = "CLOSED"
+    db.commit()
+
+    audit_service.log_action(
+        db, "PERIOD_LOCKED",
+        user_id=actor_id,
+        entity_type="close_calendar",
+        entity_id=calendar_id,
+        metadata={"period_key": cal.period_key, "profile_id": cal.profile_id},
+    )
+    return {"calendar_id": calendar_id, "period_key": cal.period_key, "locked": True}
+
+
+def unlock_period(db: Session, calendar_id: int, actor_id: int, reason: str) -> dict:
+    """Unlock a period — requires ADMIN role and an explicit reason."""
+    cal = db.query(FinancialCloseCalendar).filter(
+        FinancialCloseCalendar.id == calendar_id
+    ).first()
+    if not cal:
+        raise ValueError("Calendar entry not found")
+    if not cal.is_locked:
+        raise ValueError("Period is not locked")
+
+    cal.is_locked    = False
+    cal.locked_by    = None
+    cal.locked_at    = None
+    cal.status       = "IN_PROGRESS"
+    db.commit()
+
+    audit_service.log_action(
+        db, "PERIOD_UNLOCKED",
+        user_id=actor_id,
+        entity_type="close_calendar",
+        entity_id=calendar_id,
+        metadata={"period_key": cal.period_key, "reason": reason},
+    )
+    return {"calendar_id": calendar_id, "period_key": cal.period_key, "locked": False}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  EXECUTIVE DASHBOARD — real enterprise data
+# ═══════════════════════════════════════════════════════════════
+
+def get_executive_dashboard_real(db: Session) -> dict:
+    """
+    Full executive dashboard from enterprise tables.
+    Replaces the project-based ExecutiveDashboard.
+    """
+    from ..models.models import (
+        ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
+        CertificationWorkflow, CertificationWorkflowHistory,
+        FinancialCloseCalendar, ReconciliationRecord, User,
+        CloseTask,
+    )
+    from sqlalchemy import func as sqlfunc
+
+    today = date.today()
+
+    profiles  = db.query(ReconciliationProfile).filter(ReconciliationProfile.active == True).all()
+    certs     = db.query(CertificationWorkflow).all()
+    calendars = db.query(FinancialCloseCalendar).all()
+
+    total_profiles    = len(profiles)
+    certified_count   = len([p for p in profiles if (p.lifecycle_state or "").upper() in ("CERTIFIED", "CLOSED")])
+    in_progress_count = len([p for p in profiles if (p.lifecycle_state or "").upper() in ("IN_PROGRESS", "PREPARED", "UNDER_REVIEW")])
+    open_count        = len([p for p in profiles if (p.lifecycle_state or "").upper() == "OPEN"])
+    certification_pct = round(certified_count / total_profiles * 100, 1) if total_profiles else 0.0
+
+    # Match stats
+    total_mg  = db.query(MatchGroup).count()
+    full_mg   = db.query(MatchGroup).filter(MatchGroup.classification == "FULL_MATCH").count()
+    auto_match_rate = round(full_mg / total_mg * 100, 1) if total_mg else 0.0
+
+    # Exception stats
+    total_exc = db.query(ExceptionQueueRecord).count()
+    open_exc  = db.query(ExceptionQueueRecord).filter(
+        ExceptionQueueRecord.status.notin_(["RESOLVED", "CLOSED"])
+    ).count()
+    escalated = db.query(ExceptionQueueRecord).filter(
+        ExceptionQueueRecord.status == "ESCALATED"
+    ).count()
+
+    # Overdue periods
+    overdue = 0
+    for c in calendars:
+        if c.is_locked:
+            continue
+        try:
+            due = date.fromisoformat(c.due_date)
+            if today > due:
+                overdue += 1
+        except Exception:
+            pass
+
+    # Risk breakdown
+    risk_counts = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
+    for p in profiles:
+        r = (p.risk_classification or "MEDIUM").upper()
+        risk_counts[r] = risk_counts.get(r, 0) + 1
+
+    # Pending certifications by stage
+    pending_by_stage = {}
+    for c in certs:
+        if (c.status or "").upper() not in ("CERTIFIED", "CLOSED", "FORCE_CLOSED"):
+            stage = c.current_stage or "UNKNOWN"
+            pending_by_stage[stage] = pending_by_stage.get(stage, 0) + 1
+
+    # Workflow SLA — certs overdue
+    certs_overdue = 0
+    for c in certs:
+        if (c.status or "").upper() in ("CERTIFIED", "CLOSED"):
+            continue
+        if c.due_date:
+            try:
+                due = date.fromisoformat(c.due_date)
+                if today > due:
+                    certs_overdue += 1
+            except Exception:
+                pass
+
+    # Certification trend (last 6 periods from calendar)
+    period_completion = {}
+    for cal in calendars:
+        if not cal.period_key:
+            continue
+        ps = period_completion.setdefault(cal.period_key, {"total": 0, "closed": 0})
+        ps["total"] += 1
+        if cal.is_locked or (cal.status or "").upper() in ("CLOSED", "CERTIFIED"):
+            ps["closed"] += 1
+    cert_trend = sorted(
+        [{"period": k, **v, "pct": round(v["closed"] / v["total"] * 100, 1) if v["total"] else 0}
+         for k, v in period_completion.items()],
+        key=lambda x: x["period"]
+    )[-6:]
+
+    # High risk profiles
+    high_risk_profiles = [
+        {
+            "id": p.id, "name": p.name,
+            "risk": p.risk_classification,
+            "type": p.reconciliation_type,
+            "state": p.lifecycle_state,
+        }
+        for p in profiles
+        if (p.risk_classification or "").upper() in ("HIGH", "CRITICAL")
+    ][:10]
+
+    return {
+        "profile_summary": {
+            "total": total_profiles,
+            "certified": certified_count,
+            "in_progress": in_progress_count,
+            "open": open_count,
+            "certification_pct": certification_pct,
+        },
+        "matching": {
+            "total_groups": total_mg,
+            "full_matches": full_mg,
+            "auto_match_rate": auto_match_rate,
+        },
+        "exceptions": {
+            "total": total_exc,
+            "open": open_exc,
+            "escalated": escalated,
+        },
+        "close_management": {
+            "overdue_periods": overdue,
+            "certs_overdue": certs_overdue,
+            "pending_by_stage": pending_by_stage,
+        },
+        "risk_breakdown":       risk_counts,
+        "certification_trend":  cert_trend,
+        "high_risk_profiles":   high_risk_profiles,
+        "auto_match_rate":      auto_match_rate,
+    }
+
+
+def get_risk_dashboard_real(db: Session) -> dict:
+    """
+    Real risk dashboard from enterprise reconciliation data.
+    """
+    from ..models.models import (
+        ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
+        CertificationWorkflow, FinancialCloseCalendar, ReconciliationRecord,
+    )
+    today = date.today()
+
+    profiles  = db.query(ReconciliationProfile).filter(ReconciliationProfile.active == True).all()
+    match_groups = db.query(MatchGroup).all()
+    exceptions   = db.query(ExceptionQueueRecord).all()
+
+    # Risk score per profile
+    profile_risk = []
+    for p in profiles:
+        p_mgs = [mg for mg in match_groups if mg.profile_id == p.id]
+        p_exc = [e for e in exceptions if any(
+            mg.id == e.match_group_id for mg in p_mgs
+        )]
+        total_mg   = len(p_mgs)
+        unmatched  = len([mg for mg in p_mgs if mg.classification == "UNMATCHED"])
+        open_exc   = len([e for e in p_exc if (e.status or "").upper() not in ("RESOLVED", "CLOSED")])
+        variance   = sum(abs(float(mg.variance_amount or 0)) for mg in p_mgs)
+
+        # Risk score 0–100
+        base_risk  = {"LOW": 10, "MEDIUM": 30, "HIGH": 60, "CRITICAL": 90}.get(
+            (p.risk_classification or "MEDIUM").upper(), 30
+        )
+        unmatched_factor = (unmatched / total_mg * 30) if total_mg else 0
+        exc_factor = min(open_exc * 5, 30)
+        risk_score = min(round(base_risk + unmatched_factor + exc_factor), 100)
+
+        profile_risk.append({
+            "id": p.id,
+            "name": p.name,
+            "risk_classification": p.risk_classification or "MEDIUM",
+            "risk_score": risk_score,
+            "total_records": total_mg,
+            "unmatched": unmatched,
+            "open_exceptions": open_exc,
+            "variance_amount": round(variance, 2),
+            "lifecycle_state": p.lifecycle_state or "OPEN",
+            "reconciliation_type": p.reconciliation_type or "",
+        })
+
+    profile_risk.sort(key=lambda x: -x["risk_score"])
+
+    # Exception aging by risk level
+    aging_by_risk = {"LOW": [], "MEDIUM": [], "HIGH": [], "CRITICAL": []}
+    for exc in exceptions:
+        if (exc.status or "").upper() in ("RESOLVED", "CLOSED"):
+            continue
+        if not exc.created_at:
+            continue
+        days = (today - exc.created_at.date()).days
+        # Find the profile risk for this exception
+        mg = next((mg for mg in match_groups if mg.id == exc.match_group_id), None)
+        if mg:
+            prof = next((p for p in profiles if p.id == mg.profile_id), None)
+            risk = (prof.risk_classification if prof else "MEDIUM") or "MEDIUM"
+            aging_by_risk[risk.upper()].append(days)
+
+    aging_summary = {
+        risk: {
+            "count": len(days),
+            "avg_days": round(sum(days) / len(days), 1) if days else 0,
+            "max_days": max(days) if days else 0,
+        }
+        for risk, days in aging_by_risk.items()
+    }
+
+    # SOD violations (preparer == reviewer)
+    sod_violations = []
+    for p in profiles:
+        if p.assigned_preparer and p.assigned_preparer == p.assigned_reviewer:
+            sod_violations.append({
+                "profile_id": p.id,
+                "profile_name": p.name,
+                "violation": "Preparer equals Reviewer",
+                "severity": "HIGH",
+            })
+        if p.assigned_reviewer and p.assigned_reviewer == p.assigned_approver:
+            sod_violations.append({
+                "profile_id": p.id,
+                "profile_name": p.name,
+                "violation": "Reviewer equals Approver",
+                "severity": "HIGH",
+            })
+
+    # Overdue high risk
+    overdue_high_risk = []
+    certs = db.query(CertificationWorkflow).filter(
+        CertificationWorkflow.status.notin_(["CERTIFIED", "CLOSED"])
+    ).all()
+    for c in certs:
+        if not c.due_date:
+            continue
+        try:
+            due = date.fromisoformat(c.due_date)
+            if today <= due:
+                continue
+        except Exception:
+            continue
+        prof = next((p for p in profiles if p.id == c.profile_id), None)
+        if prof and (prof.risk_classification or "").upper() in ("HIGH", "CRITICAL"):
+            overdue_high_risk.append({
+                "profile_id": c.profile_id,
+                "profile_name": prof.name if prof else f"Profile #{c.profile_id}",
+                "due_date": c.due_date,
+                "days_overdue": (today - due).days,
+                "risk": prof.risk_classification if prof else "HIGH",
+            })
+
+    return {
+        "profile_risk_scores": profile_risk[:50],
+        "risk_breakdown": {
+            k: len([p for p in profiles if (p.risk_classification or "").upper() == k])
+            for k in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+        },
+        "exception_aging_by_risk": aging_summary,
+        "sod_violations": sod_violations[:20],
+        "overdue_high_risk": overdue_high_risk[:20],
+        "total_risk_score": round(
+            sum(p["risk_score"] for p in profile_risk) / len(profile_risk), 1
+        ) if profile_risk else 0,
+    }

@@ -68,6 +68,8 @@ export const executionsAPI = {
       .get(`/projects/${projectId}/executions/${execId}/results?${qs}`)
       .then((r) => r.data)
   },
+  promote: (projectId, execId, payload = {}) =>
+    api.post(`/projects/${projectId}/executions/${execId}/promote`, payload).then((r) => r.data),
 }
 
 export const exportsAPI = {
@@ -164,8 +166,14 @@ export const enterpriseAPI = {
   matchSuggestions: (data) => api.post('/enterprise/matching/suggestions', data).then((r) => r.data),
   listExceptions: (queueType = '') =>
     api.get(`/enterprise/exceptions${queueType ? `?queue_type=${encodeURIComponent(queueType)}` : ''}`).then((r) => r.data),
-  listNotifications: (limit = 12) =>
-    api.get(`/enterprise/notifications?limit=${encodeURIComponent(limit)}`).then((r) => r.data),
+  listNotifications: (limit = 12, unreadOnly = false) =>
+    api.get(`/enterprise/notifications?limit=${encodeURIComponent(limit)}&unread_only=${unreadOnly}`).then((r) => r.data),
+  markNotificationRead: (id) =>
+    api.put(`/enterprise/notifications/${id}/read`).then((r) => r.data),
+  markAllNotificationsRead: () =>
+    api.post('/enterprise/notifications/mark-all-read').then((r) => r.data),
+  deleteNotification: (id) =>
+    api.delete(`/enterprise/notifications/${id}`).then((r) => r.data),
   assignException: (data) => api.post('/enterprise/exceptions/assign', data).then((r) => r.data),
   submitException: (data) => api.post('/enterprise/exceptions/submit', data).then((r) => r.data),
   approveException: (data) => api.post('/enterprise/exceptions/approve', data).then((r) => r.data),
@@ -227,6 +235,10 @@ export const enterpriseAPI = {
   autoJournal: (data) => api.post('/enterprise/journals/auto', data).then((r) => r.data),
   journalAction: (adjustmentId, action, comments = '') => api.post(`/enterprise/journals/${adjustmentId}/${action}`, { adjustment_id: adjustmentId, comments }).then((r) => r.data),
   variance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),
+  // Aliases used by PreparerWorkbench
+  getVariance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),
+  listJournalAdjustments: (profileId) =>
+    api.get(`/enterprise/journals?profile_id=${encodeURIComponent(profileId)}`).then((r) => r.data),
   advancedSearch: (data) => api.post('/enterprise/search', data).then((r) => r.data),
   bulkActions: (data) => api.post('/enterprise/bulk-actions', data).then((r) => r.data),
   addComment: (data) => api.post('/enterprise/comments', data).then((r) => r.data),
@@ -243,4 +255,48 @@ export const enterpriseAPI = {
   listDependencies: (profileId) =>
     api.get(`/enterprise/dependencies${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`).then((r) => r.data),
   jobMetrics: () => api.get('/enterprise/metrics/jobs').then((r) => r.data),
+}
+
+// ── Extended Enterprise API (Phase 1-4) ──────────────────────
+export const enterpriseExtAPI = {
+  cloneProfile: (profileId, payload) =>
+    api.post(`/enterprise/profiles/${profileId}/clone`, payload).then((r) => r.data),
+  rolloverProfile: (profileId, payload = {}) =>
+    api.post(`/enterprise/profiles/${profileId}/rollover`, payload).then((r) => r.data),
+  listCloseTasks: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/close-tasks${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
+  createCloseTask: (data) => api.post('/enterprise/close-tasks', data).then((r) => r.data),
+  updateCloseTask: (taskId, data) => api.patch(`/enterprise/close-tasks/${taskId}`, data).then((r) => r.data),
+  enhancedAnalytics: () => api.get('/enterprise/analytics/enhanced').then((r) => r.data),
+}
+
+// ── Phase 5 API (advanced matching + period lock + real dashboards) ──
+export const advancedAPI = {
+  // Advanced matching
+  runAdvancedMatching: (payload) =>
+    api.post('/enterprise/matching/run-advanced', payload).then((r) => r.data),
+  getMatchSuggestionsAdvanced: (profileId, params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/matching/suggestions-advanced/${profileId}${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
+
+  // Period lock
+  lockPeriod:   (calendarId) => api.post(`/enterprise/close-calendar/${calendarId}/lock`, {}).then((r) => r.data),
+  unlockPeriod: (calendarId, reason) => api.post(`/enterprise/close-calendar/${calendarId}/unlock`, { reason }).then((r) => r.data),
+
+  // Real dashboards
+  executiveDashboard: () => api.get('/enterprise/dashboard/executive-real').then((r) => r.data),
+  riskDashboard:      () => api.get('/enterprise/dashboard/risk-real').then((r) => r.data),
+
+  // Profile transactions
+  profileTransactions: (profileId) =>
+    api.get(`/enterprise/profiles/${profileId}/transactions`).then((r) => r.data),
+
+  // Exceptions with profile context
+  exceptionsWithProfile: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return api.get(`/enterprise/exceptions/with-profile${qs ? `?${qs}` : ''}`).then((r) => r.data)
+  },
 }

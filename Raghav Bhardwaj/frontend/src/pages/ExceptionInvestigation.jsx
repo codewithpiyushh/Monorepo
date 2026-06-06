@@ -138,7 +138,7 @@ export default function ExceptionInvestigation() {
         title="Exception Investigation Workbench"
         subtitle="Transaction, evidence, comments, workflow history, audit trail, and resolution actions in one screen."
         badge={selectedException ? `Exception #${selectedException.id}` : 'No exception selected'}
-        actions={selectedException ? <button className="btn-secondary" onClick={() => navigate('/exception-ops')}>Back to Queue</button> : null}
+        actions={selectedException ? <button className="btn-secondary" onClick={() => navigate('/exception-workbench')}>Back to Queue</button> : null}
       />
 
       <div className="flex-1 overflow-auto p-6 space-y-4">

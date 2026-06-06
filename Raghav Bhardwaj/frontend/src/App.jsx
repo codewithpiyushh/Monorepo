@@ -9,11 +9,11 @@ const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'))
 const CommandCenter = lazy(() => import('./pages/CommandCenter'))
 const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'))
 const ExceptionOpsPage = lazy(() => import('./pages/ExceptionOpsPage'))
+const ExceptionWorkbench = lazy(() => import('./pages/ExceptionWorkbench'))
 const ExceptionInvestigation = lazy(() => import('./pages/ExceptionInvestigation'))
 const CloseCertificationPage = lazy(() => import('./pages/CloseCertificationPage'))
 const ControlsGovernancePage = lazy(() => import('./pages/ControlsGovernancePage'))
 const PlatformAdminPage = lazy(() => import('./pages/PlatformAdminPage'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
 const AuditLogs = lazy(() => import('./pages/AuditLogs'))
 const ProjectWorkflowPage = lazy(() => import('./pages/ProjectWorkflowPage'))
 const PreparerWorkbench = lazy(() => import('./pages/PreparerWorkbench'))
@@ -21,13 +21,16 @@ const ReviewerWorkbench = lazy(() => import('./pages/ReviewerWorkbench'))
 const Schedules = lazy(() => import('./pages/Schedules'))
 const WorkflowPage = lazy(() => import('./pages/Workflow'))
 const RuleBuilder = lazy(() => import('./pages/RuleBuilder'))
+const EnterpriseOps = lazy(() => import('./pages/EnterpriseOps'))
 const EnterpriseReconciliationCenter = lazy(() => import('./pages/EnterpriseReconciliationCenter'))
 const WorkQueue = lazy(() => import('./pages/WorkQueue'))
 const ReconciliationsHub = lazy(() => import('./pages/ReconciliationsHub'))
 const AdminCenter = lazy(() => import('./pages/AdminCenter'))
 const ReconciliationAnalyticsExplorer = lazy(() => import('./pages/ReconciliationAnalyticsExplorer'))
 const RiskDashboard = lazy(() => import('./pages/RiskDashboard'))
+const ReconciliationProfiles = lazy(() => import('./pages/ReconciliationProfiles'))
 const MyPerformance = lazy(() => import('./pages/MyPerformance'))
+const TransactionMatchingWorkspace = lazy(() => import('./pages/TransactionMatchingWorkspace'))
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -38,7 +41,10 @@ function DefaultPageRedirect() {
   const user = useAuthStore((s) => s.user)
   const role = normalizeRole(user?.role)
 
-  if (role === 'preparer' || role === 'reviewer') {
+  if (role === 'preparer') {
+    return <Navigate to="/my-reconciliations" replace />
+  }
+  if (role === 'reviewer') {
     return <Navigate to="/work-queue" replace />
   }
   return <Navigate to="/command-center" replace />
@@ -63,11 +69,13 @@ export default function App() {
             <Route path="command-center" element={<CommandCenter />} />
             <Route path="executive-dashboard" element={<ExecutiveDashboard />} />
             <Route path="exception-ops" element={<ExceptionOpsPage />} />
+            <Route path="exception-workbench" element={<ExceptionWorkbench />} />
             <Route path="exception-investigation" element={<ExceptionInvestigation />} />
             <Route path="exception-investigation/:exceptionId" element={<ExceptionInvestigation />} />
             <Route path="analytics-explorer" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity/:account" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="reconciliation-profiles" element={<ReconciliationProfiles />} />
             <Route path="risk-dashboard" element={<RiskDashboard />} />
             <Route path="risk-dashboard/:entity" element={<RiskDashboard />} />
             <Route path="risk-dashboard/:entity/:account" element={<RiskDashboard />} />
@@ -75,11 +83,13 @@ export default function App() {
             <Route path="controls-governance" element={<ControlsGovernancePage />} />
             <Route path="platform-admin" element={<PlatformAdminPage />} />
             <Route path="work-queue" element={<WorkQueue />} />
+            <Route path="my-reconciliations" element={<PreparerWorkbench />} />
             <Route path="workspaces" element={<Navigate to="/work-queue" replace />} />
-            <Route path="preparer-worklist" element={<Navigate to="/work-queue" replace />} />
+            <Route path="preparer-worklist" element={<Navigate to="/my-reconciliations" replace />} />
             <Route path="review-queue" element={<Navigate to="/work-queue" replace />} />
             <Route path="my-performance" element={<MyPerformance />} />
             <Route path="reconciliations" element={<ReconciliationsHub />} />
+            <Route path="enterprise-ops" element={<EnterpriseOps />} />
             <Route path="admin" element={<AdminCenter />} />
             <Route path="projects/:projectId/:section" element={<ProjectWorkflowPage />} />
             <Route path="projects/:projectId/preparer" element={<PreparerWorkbench />} />
@@ -89,6 +99,11 @@ export default function App() {
             <Route path="certification-workflow" element={<WorkflowPage />} />
             <Route path="rule-builder" element={<RuleBuilder />} />
             <Route path="enterprise-center" element={<EnterpriseReconciliationCenter />} />
+            <Route path="dashboard" element={<Navigate to="/command-center" replace />} />
+            <Route path="governance-controls" element={<Navigate to="/controls-governance" replace />} />
+            <Route path="transaction-matching-workspace" element={<TransactionMatchingWorkspace />} />
+            <Route path="transaction-matching" element={<TransactionMatchingWorkspace />} />
+            <Route path="balance-reconciliations-workspace" element={<Navigate to="/enterprise-ops" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,115 +1,125 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { AgGridReact } from 'ag-grid-react'
 import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  Database,
-  FileUp,
-  Info,
-  Link2,
-  Upload,
+  AlertCircle, ArrowLeft, ArrowRight, CheckCircle2,
+  Database, FileUp, Info, Link2, Upload, X, Eye, EyeOff,
 } from 'lucide-react'
 import { datasetsAPI } from '../api'
 
 const SOURCE_TYPES = [
-  { id: 'file', label: 'File Upload', icon: FileUp, hint: 'CSV / XLSX' },
-  { id: 'api', label: 'API Connection', icon: Link2, hint: 'REST endpoint' },
-  { id: 'sql', label: 'SQL Connection', icon: Database, hint: 'PG / MySQL / MSSQL' },
+  { id: 'file', label: 'File Upload',     icon: FileUp,   hint: 'CSV / XLSX' },
+  { id: 'api',  label: 'API Connection',  icon: Link2,    hint: 'REST endpoint' },
+  { id: 'sql',  label: 'SQL Connection',  icon: Database, hint: 'PG / MySQL / MSSQL' },
 ]
 
 const INIT_CONNECTION = {
   file: {},
-  api: { url: '', authType: 'None', headers: '' },
-  sql: { dbType: 'PostgreSQL', host: '', port: '', username: '', database: '' },
+  api:  { url: '', authType: 'None', headers: '' },
+  sql:  { dbType: 'PostgreSQL', host: '', port: '', username: '', database: '' },
 }
 
 const CLASSIFICATION_OPTIONS = [
   { value: 'FACT', label: 'FACT', subtitle: 'Transaction-level' },
-  { value: 'DIM', label: 'DIM', subtitle: 'Master / reference' },
+  { value: 'DIM',  label: 'DIM',  subtitle: 'Master / reference' },
 ]
 
 function StatusChip({ ok, label }) {
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border',
-        ok
-          ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-300'
-          : 'border-surface-600/60 bg-surface-800/40 text-slate-500'
-      )}
-    >
-      {ok && <CheckCircle2 className="w-3 h-3" />}
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 11, fontWeight: 700,
+      padding: '2px 8px', borderRadius: 9999,
+      border: `1px solid ${ok ? 'rgba(34,211,160,0.30)' : 'var(--border-1)'}`,
+      background: ok ? 'rgba(34,211,160,0.10)' : 'var(--surface-3)',
+      color: ok ? 'var(--ok)' : 'var(--text-tertiary)',
+    }}>
+      {ok && <CheckCircle2 style={{ width: 11, height: 11 }} />}
       {label}
     </span>
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   PREVIEW MODAL  —  full-screen, column toggles in table header
+───────────────────────────────────────────────────────────────── */
 function PreviewModal({
-  dsLabel,
-  dsType,
-  preview,
-  classification,
-  selectedColumns,
-  onSelectedColumnsChange,
-  onClassificationChange,
-  onClose,
+  dsLabel, dsType, preview, classification,
+  hiddenColumns, onToggleColumn, onSelectAll, onClearAll,
+  onClassificationChange, onClose,
 }) {
-  const gridRef = useRef(null)
-  const rows = preview?.rows || []
+  const rows    = preview?.rows    || []
   const columns = preview?.columns || []
-  const visibleColumns = selectedColumns.length ? selectedColumns : columns
-
-  const columnDefs = useMemo(
-    () =>
-      visibleColumns.map((field) => ({
-        field,
-        filter: true,
-        sortable: true,
-        resizable: true,
-        minWidth: 130,
-        valueFormatter: (p) => p.value ?? '-',
-      })),
-    [visibleColumns]
-  )
+  const visibleCols = columns.filter((c) => !hiddenColumns.includes(c))
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = ''
-    }
+    return () => { document.body.style.overflow = '' }
   }, [])
 
+  const fmtVal = (v) => {
+    if (v == null || v === '') return '—'
+    return String(v)
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--bg)' }}>
-      <div
-        className="h-14 flex-shrink-0 flex items-center justify-between px-5 border-b border-surface-700/60"
-        style={{ background: 'var(--header-bg)' }}
-      >
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onClose} className="btn-ghost px-2 py-1.5">
-            <ArrowLeft className="w-4 h-4" />
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', flexDirection: 'column',
+      background: 'var(--surface-0)',
+    }}>
+      {/* ── Top bar ── */}
+      <div style={{
+        height: 52, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 20px',
+        background: 'var(--surface-1)',
+        borderBottom: '1px solid var(--border-1)',
+        gap: 12,
+      }}>
+        {/* Left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 28, height: 28, borderRadius: 'var(--r-md)',
+              border: '1px solid var(--border-2)',
+              background: 'var(--surface-3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: 'var(--text-secondary)',
+            }}
+          >
+            <ArrowLeft style={{ width: 14, height: 14 }} />
           </button>
-          <div className="w-px h-5 bg-surface-600/60" />
+          <div style={{ width: 1, height: 20, background: 'var(--border-1)' }} />
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{dsType}</span>
-            <p className="text-sm font-bold text-slate-100 leading-tight">{dsLabel} - Preview Data</p>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)', lineHeight: 1 }}>
+              {dsType}
+            </p>
+            <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2, marginTop: 2 }}>
+              {dsLabel} — Preview Data
+            </p>
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2">
-          <StatusChip ok={rows.length > 0} label="Preview loaded" />
-          <StatusChip ok={columns.length > 0} label={`${columns.length} cols`} />
+        {/* Center: status chips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <StatusChip ok={rows.length > 0}    label="Preview loaded" />
+          <StatusChip ok={columns.length > 0} label={`${visibleCols.length} of ${columns.length} cols`} />
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <div className="flex items-center gap-2 rounded-xl border border-surface-700/70 bg-surface-900/30 p-1">
+        {/* Right: classification + save */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            border: '1px solid var(--border-2)',
+            borderRadius: 'var(--r-md)',
+            overflow: 'hidden',
+          }}>
             {CLASSIFICATION_OPTIONS.map(({ value, label }) => {
               const active = classification === value
               return (
@@ -117,192 +127,282 @@ function PreviewModal({
                   key={value}
                   type="button"
                   onClick={() => onClassificationChange(value)}
-                  className={clsx(
-                    'h-8 px-3 rounded-lg text-xs font-semibold transition-all',
-                    active
-                      ? 'bg-brand-500/15 text-brand-200 border border-brand-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  )}
+                  style={{
+                    height: 28, padding: '0 12px',
+                    fontSize: 12, fontWeight: 700,
+                    background: active ? 'var(--accent-subtle)' : 'var(--surface-2)',
+                    color: active ? 'var(--accent)' : 'var(--text-tertiary)',
+                    border: 'none',
+                    borderRight: value === 'FACT' ? '1px solid var(--border-1)' : 'none',
+                    cursor: 'pointer',
+                    transition: 'background 100ms, color 100ms',
+                  }}
                 >
                   {label}
                 </button>
               )
             })}
           </div>
-
           <button
             type="button"
             onClick={onClose}
             disabled={!classification}
-            className={clsx(
-              'btn-primary',
-              !classification && 'opacity-50 cursor-not-allowed'
-            )}
+            className="btn-primary"
+            style={{ opacity: classification ? 1 : 0.5, cursor: classification ? 'pointer' : 'not-allowed' }}
           >
             Save &amp; Close
           </button>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        <div className="w-full lg:w-[320px] flex-shrink-0 border-b lg:border-b-0 lg:border-r border-surface-700/40" style={{ background: 'var(--bg-elev)' }}>
-          <div className="px-4 py-3 border-b border-surface-700/40">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Column Selector</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Select columns to show in the preview grid.
-            </p>
-          </div>
-          <div className="p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="text-[11px] font-semibold text-brand-300 hover:text-brand-200"
-                onClick={() => onSelectedColumnsChange(columns)}
+      {/* ── Sub-toolbar: col count + select/clear ── */}
+      <div style={{
+        height: 36, flexShrink: 0,
+        display: 'flex', alignItems: 'center',
+        padding: '0 16px', gap: 12,
+        background: 'var(--surface-1)',
+        borderBottom: '1px solid var(--border-1)',
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>
+          Raw Data Preview
+        </p>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          Top {rows.length} rows · {visibleCols.length} of {columns.length} columns visible
+        </span>
+        <div style={{ marginLeft: 8, display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={onSelectAll}
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            Show All
+          </button>
+          <span style={{ color: 'var(--text-disabled)' }}>·</span>
+          <button
+            type="button"
+            onClick={onClearAll}
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            Hide All
+          </button>
+        </div>
+      </div>
+
+      {/* ── Table ── */}
+      <div style={{ flex: 1, overflow: 'auto' }} className="slim-scroll">
+        <table style={{
+          width: '100%',
+          borderCollapse: 'separate',
+          borderSpacing: 0,
+          tableLayout: 'fixed',
+        }}>
+          {/* ── HEADER with inline column toggles ── */}
+          <thead>
+            <tr style={{ background: 'var(--surface-2)' }}>
+              {columns.map((col, idx) => {
+                const hidden  = hiddenColumns.includes(col)
+                const isLast  = idx === columns.length - 1
+                return (
+                  <th
+                    key={col}
+                    style={{
+                      position: 'sticky', top: 0, zIndex: 2,
+                      background: 'var(--surface-2)',
+                      borderBottom: '1px solid var(--border-1)',
+                      borderRight: isLast ? 'none' : '1px solid var(--border-1)',
+                      padding: '0 0 0 0',
+                      minWidth: 140,
+                      opacity: hidden ? 0.45 : 1,
+                      transition: 'opacity 150ms',
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '6px 12px 0',
+                    }}>
+                      {/* Column name row */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'space-between', gap: 6,
+                        marginBottom: 4,
+                      }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700,
+                          letterSpacing: '0.07em', textTransform: 'uppercase',
+                          color: hidden ? 'var(--text-disabled)' : 'var(--text-secondary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {col}
+                        </span>
+                        {/* Eye toggle button */}
+                        <button
+                          type="button"
+                          onClick={() => onToggleColumn(col)}
+                          title={hidden ? `Show ${col}` : `Hide ${col}`}
+                          style={{
+                            flexShrink: 0,
+                            width: 20, height: 20,
+                            borderRadius: 'var(--r-xs)',
+                            border: '1px solid var(--border-1)',
+                            background: hidden ? 'var(--surface-4)' : 'var(--surface-3)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: hidden ? 'var(--text-disabled)' : 'var(--accent)',
+                            transition: 'background 100ms',
+                          }}
+                        >
+                          {hidden
+                            ? <EyeOff style={{ width: 10, height: 10 }} />
+                            : <Eye    style={{ width: 10, height: 10 }} />}
+                        </button>
+                      </div>
+
+                      {/* Amber checkbox row — Blackline style */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        paddingBottom: 6,
+                        borderTop: '1px solid var(--border-0)',
+                        paddingTop: 4,
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={!hidden}
+                          onChange={() => onToggleColumn(col)}
+                          style={{
+                            width: 13, height: 13,
+                            accentColor: 'var(--accent)',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{
+                          fontSize: 10,
+                          color: hidden ? 'var(--text-disabled)' : 'var(--text-tertiary)',
+                          fontWeight: 500,
+                        }}>
+                          {hidden ? 'hidden' : 'visible'}
+                        </span>
+                      </div>
+                    </div>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+
+          {/* ── BODY ── */}
+          <tbody>
+            {rows.map((row, rIdx) => (
+              <tr
+                key={rIdx}
+                style={{ background: rIdx % 2 === 0 ? 'var(--surface-2)' : 'var(--surface-1)' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-3)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = rIdx % 2 === 0 ? 'var(--surface-2)' : 'var(--surface-1)'}
               >
-                Select All
-              </button>
-              <span className="text-slate-600">·</span>
-              <button
-                type="button"
-                className="text-[11px] font-semibold text-slate-500 hover:text-slate-300"
-                onClick={() => onSelectedColumnsChange([])}
-              >
-                Clear
-              </button>
-            </div>
-            <div className="max-h-[42vh] overflow-y-auto rounded-xl border border-surface-700/60 bg-surface-900/30">
-              <div className="divide-y divide-surface-700/50">
-                {columns.map((column) => {
-                  const checked = selectedColumns.includes(column)
+                {columns.map((col, cIdx) => {
+                  const hidden = hiddenColumns.includes(col)
+                  const isLast = cIdx === columns.length - 1
                   return (
-                    <label
-                      key={column}
-                      className={clsx(
-                        'flex items-center gap-3 px-3 py-2.5 text-sm cursor-pointer transition-colors',
-                        checked ? 'bg-brand-500/10 text-slate-100' : 'text-slate-400 hover:bg-surface-800/50'
-                      )}
+                    <td
+                      key={col}
+                      style={{
+                        fontSize: 12.5,
+                        color: hidden ? 'var(--text-disabled)' : 'var(--text-primary)',
+                        padding: '0 12px',
+                        height: 36,
+                        borderBottom: '1px solid var(--border-0)',
+                        borderRight: isLast ? 'none' : '1px solid var(--border-0)',
+                        verticalAlign: 'middle',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: 220,
+                        fontFamily: hidden ? 'inherit' : (
+                          ['amount','balance','count','qty','quantity'].some((k) => col.toLowerCase().includes(k))
+                            ? 'IBM Plex Mono, monospace' : 'inherit'
+                        ),
+                        opacity: hidden ? 0.35 : 1,
+                        transition: 'opacity 150ms',
+                      }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          onSelectedColumnsChange(
-                            checked
-                              ? selectedColumns.filter((value) => value !== column)
-                              : [...selectedColumns, column]
-                          )
-                        }}
-                        className="h-4 w-4 rounded border-surface-600 bg-surface-800 accent-brand-500 cursor-pointer flex-shrink-0"
-                      />
-                      <span className="truncate font-medium">{column}</span>
-                    </label>
+                      {hidden ? '—' : fmtVal(row[col])}
+                    </td>
                   )
                 })}
-              </div>
-            </div>
-          </div>
-        </div>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div
-            className="flex-shrink-0 px-4 py-3 border-b border-surface-700/40 flex items-center justify-between gap-3"
-            style={{ background: 'var(--bg-elev)' }}
-          >
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Raw Data Preview</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Top {rows.length} rows - {visibleColumns.length} selected of {columns.length} columns
-              </p>
-            </div>
+        {rows.length === 0 && (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+            No rows to preview
           </div>
-
-          <div className="flex-1 ag-theme-alpine-dark overflow-hidden">
-            <AgGridReact
-              ref={gridRef}
-              rowData={rows}
-              columnDefs={columnDefs}
-              suppressCellFocus
-              defaultColDef={{ resizable: true, minWidth: 120 }}
-            />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   DATASET CARD
+───────────────────────────────────────────────────────────────── */
 function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onReadyChange }) {
-  const [dataset, setDataset] = useState(existingDataset || null)
-  const [preview, setPreview] = useState(null)
-  const [sourceType, setSourceType] = useState('file')
-  const [connection, setConnection] = useState(INIT_CONNECTION)
-  const [uploading, setUploading] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
+  const [dataset,        setDataset]        = useState(existingDataset || null)
+  const [preview,        setPreview]        = useState(null)
+  const [sourceType,     setSourceType]     = useState('file')
+  const [connection,     setConnection]     = useState(INIT_CONNECTION)
+  const [uploading,      setUploading]      = useState(false)
+  const [showPreview,    setShowPreview]    = useState(false)
   const [classification, setClassification] = useState('')
-  const [selectedColumns, setSelectedColumns] = useState([])
+  const [hiddenColumns,  setHiddenColumns]  = useState([])  // columns to HIDE
+
+  useEffect(() => { setDataset(existingDataset || null) }, [existingDataset])
 
   useEffect(() => {
-    setDataset(existingDataset || null)
-  }, [existingDataset])
-
-  useEffect(() => {
-    if (!dataset) {
-      setPreview(null)
-      setSelectedColumns([])
-      return
-    }
-
+    if (!dataset) { setPreview(null); setHiddenColumns([]); return }
     let cancelled = false
-    datasetsAPI
-      .preview(projectId, dataset.id, 50)
-      .then((pv) => {
-        if (!cancelled) {
-          setPreview(pv)
-          setSelectedColumns(pv.columns || [])
-        }
-      })
+    datasetsAPI.preview(projectId, dataset.id, 50)
+      .then((pv) => { if (!cancelled) { setPreview(pv); setHiddenColumns([]) } })
       .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [dataset, projectId])
 
-  useEffect(() => {
-    if (dataset) {
-      onUploaded(dataset)
-    }
-  }, [dataset, onUploaded])
-
-  const ready = Boolean(dataset && preview)
-
-  useEffect(() => {
-    onReadyChange(type, ready)
-  }, [onReadyChange, ready, type])
+  useEffect(() => { if (dataset) onUploaded(dataset) }, [dataset, onUploaded])
 
   const columns = preview?.columns || dataset?.columns?.map((c) => c.column_name) || []
+  const ready   = Boolean(dataset && preview)
 
-  const onDrop = useCallback(
-    async (files) => {
-      const file = files[0]
-      if (!file) return
+  useEffect(() => { onReadyChange(type, ready) }, [onReadyChange, ready, type])
 
-      setUploading(true)
-      try {
-        const ds = await datasetsAPI.upload(projectId, type, file)
-        const pv = await datasetsAPI.preview(projectId, ds.id, 50)
-        setDataset(ds)
-        setPreview(pv)
-        setSelectedColumns(pv.columns || [])
-        toast.success(`${label} uploaded - ${ds.row_count} rows`)
-      } catch (err) {
-        toast.error(err.response?.data?.detail || 'Upload failed')
-      } finally {
-        setUploading(false)
-      }
-    },
-    [label, projectId, type]
-  )
+  /* toggle single column */
+  const toggleColumn = (col) => {
+    setHiddenColumns((prev) =>
+      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
+    )
+  }
+
+  const selectAll = () => setHiddenColumns([])
+  const clearAll  = () => setHiddenColumns([...columns])
+
+  const onDrop = useCallback(async (files) => {
+    const file = files[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const ds = await datasetsAPI.upload(projectId, type, file)
+      const pv = await datasetsAPI.preview(projectId, ds.id, 50)
+      setDataset(ds)
+      setPreview(pv)
+      setHiddenColumns([])
+      toast.success(`${label} uploaded — ${ds.row_count} rows`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }, [label, projectId, type])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -315,214 +415,216 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
   })
 
   const chips = [
-    { label: dataset ? `${dataset.row_count?.toLocaleString()} rows` : 'No file', ok: !!dataset },
-    { label: preview ? `${columns.length} cols` : 'Preview pending', ok: !!preview },
-    { label: classification || 'Classify', ok: !!classification },
-    { label: ready ? 'Ready' : 'Pending', ok: ready },
+    { label: dataset ? `${dataset.row_count?.toLocaleString()} rows` : 'No file',       ok: !!dataset },
+    { label: preview  ? `${columns.length} cols` : 'Preview pending',                   ok: !!preview  },
+    { label: classification || 'Classify',                                               ok: !!classification },
+    { label: ready ? 'Ready' : 'Pending',                                                ok: ready  },
   ]
 
   return (
     <>
-      <div
-        className={clsx('card flex flex-col overflow-hidden transition-all duration-200', ready ? 'border-emerald-700/40' : '')}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700/50" style={{ background: 'var(--bg-elev)' }}>
-          <div className="flex items-center gap-2.5">
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest bg-surface-700/80 text-slate-300 border border-surface-600/80">
+      <div style={{
+        background: 'var(--surface-2)',
+        border: `1px solid ${ready ? 'var(--ok-bdr)' : 'var(--border-1)'}`,
+        borderRadius: 'var(--r-lg)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        transition: 'border-color 200ms',
+      }}>
+        {/* Card header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px',
+          background: 'var(--surface-1)',
+          borderBottom: '1px solid var(--border-1)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em',
+              textTransform: 'uppercase', padding: '2px 7px',
+              borderRadius: 'var(--r-xs)',
+              background: 'var(--surface-4)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-2)',
+            }}>
               {type}
             </span>
-            <p className="text-sm font-bold text-slate-100">{label}</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{label}</p>
           </div>
           {ready && (
-            <span className="flex items-center gap-1 text-xs font-semibold text-emerald-300">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Ready
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: 'var(--ok)' }}>
+              <CheckCircle2 style={{ width: 13, height: 13 }} /> Ready
             </span>
           )}
         </div>
 
-        <div className="flex gap-1 px-4 pt-3 pb-0">
+        {/* Source type tabs */}
+        <div style={{ display: 'flex', gap: 2, padding: '8px 14px 0' }}>
           {SOURCE_TYPES.map(({ id, label: lbl, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setSourceType(id)}
-              className={clsx(
-                'flex items-center gap-1.5 h-8 px-3 rounded-t-lg text-xs font-semibold border border-b-0 transition-all',
-                sourceType === id
-                  ? 'border-surface-600/80 bg-surface-800/80 text-slate-100'
-                  : 'border-transparent text-slate-500 hover:text-slate-300'
-              )}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                height: 30, padding: '0 10px',
+                borderRadius: 'var(--r-sm) var(--r-sm) 0 0',
+                border: '1px solid transparent',
+                borderBottom: 'none',
+                fontSize: 11.5, fontWeight: 600,
+                background: sourceType === id ? 'var(--surface-3)' : 'transparent',
+                color: sourceType === id ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                borderColor: sourceType === id ? 'var(--border-1)' : 'transparent',
+                cursor: 'pointer',
+                transition: 'background 100ms, color 100ms',
+              }}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon style={{ width: 12, height: 12 }} />
               {lbl}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 p-4 space-y-3 border-t border-surface-700/40" style={{ background: 'var(--bg-elev)' }}>
+        {/* Body */}
+        <div style={{
+          flex: 1, padding: 14,
+          background: 'var(--surface-2)',
+          borderTop: '1px solid var(--border-1)',
+          display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          {/* File upload zone */}
           {sourceType === 'file' && (
             <div
               {...getRootProps()}
-              className={clsx(
-                'border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all duration-150 select-none',
-                isDragActive
-                  ? 'border-brand-500 bg-brand-500/10'
-                  : dataset
-                  ? 'border-emerald-700/50 bg-emerald-900/10'
-                  : 'border-surface-600/70 hover:border-surface-500/80 bg-surface-900/40'
-              )}
+              style={{
+                border: `2px dashed ${isDragActive ? 'var(--accent)' : dataset ? 'var(--ok-bdr)' : 'var(--border-2)'}`,
+                borderRadius: 'var(--r-md)',
+                padding: '18px 12px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: isDragActive ? 'var(--accent-subtle)' : dataset ? 'var(--ok-bg)' : 'var(--surface-3)',
+                transition: 'all 150ms',
+              }}
             >
               <input {...getInputProps()} />
               {uploading ? (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="animate-spin rounded-full h-7 w-7 border-2 border-brand-500 border-t-transparent" />
-                  <p className="text-xs text-slate-400">Uploading...</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <div className="animate-spin" style={{ width: 24, height: 24, border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%' }} />
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Uploading…</p>
                 </div>
               ) : dataset ? (
-                <div className="flex flex-col items-center gap-1">
-                  <CheckCircle2 className="w-7 h-7 text-emerald-400" />
-                  <p className="text-sm font-semibold text-emerald-300">{dataset.file_name}</p>
-                  <p className="text-xs text-slate-500">Drop a new file to replace</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle2 style={{ width: 22, height: 22, color: 'var(--ok)' }} />
+                  <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ok)', margin: 0 }}>{dataset.file_name}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>Drop a new file to replace</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="w-7 h-7 text-slate-500" />
-                  <p className="text-xs text-slate-400">{isDragActive ? 'Drop it...' : 'Drag and drop or click'}</p>
-                  <p className="text-[11px] text-slate-600">CSV or XLSX</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <Upload style={{ width: 22, height: 22, color: 'var(--text-tertiary)' }} />
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                    {isDragActive ? 'Drop the file…' : 'Drag & drop or click to upload'}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>CSV or XLSX</p>
                 </div>
               )}
             </div>
           )}
 
           {sourceType === 'api' && (
-            <div className="space-y-2.5">
-              <input
-                className="input text-xs"
-                placeholder="API URL https://..."
-                value={connection.api.url}
-                onChange={(e) => setConnection({ ...connection, api: { ...connection.api, url: e.target.value } })}
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  className="input text-xs"
-                  value={connection.api.authType}
-                  onChange={(e) => setConnection({ ...connection, api: { ...connection.api, authType: e.target.value } })}
-                >
-                  <option>None</option>
-                  <option>Bearer Token</option>
-                  <option>Basic Auth</option>
-                  <option>API Key</option>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input className="input" placeholder="API URL https://..." value={connection.api.url}
+                onChange={(e) => setConnection({ ...connection, api: { ...connection.api, url: e.target.value } })} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <select className="input" value={connection.api.authType}
+                  onChange={(e) => setConnection({ ...connection, api: { ...connection.api, authType: e.target.value } })}>
+                  <option>None</option><option>Bearer Token</option><option>Basic Auth</option><option>API Key</option>
                 </select>
-                <input
-                  className="input text-xs"
-                  placeholder='{"X-Key": "..."}'
-                  value={connection.api.headers}
-                  onChange={(e) => setConnection({ ...connection, api: { ...connection.api, headers: e.target.value } })}
-                />
+                <input className="input" placeholder='{"X-Key": "..."}' value={connection.api.headers}
+                  onChange={(e) => setConnection({ ...connection, api: { ...connection.api, headers: e.target.value } })} />
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-surface-900/40 rounded-lg px-3 py-2 border border-surface-700/40">
-                <Info className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
-                Prototype mode - upload a CSV/XLSX sample below to populate the preview.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-tertiary)', background: 'var(--surface-3)', borderRadius: 'var(--r-sm)', padding: '6px 10px', border: '1px solid var(--border-1)' }}>
+                <Info style={{ width: 12, height: 12, color: 'var(--accent)', flexShrink: 0 }} />
+                Upload a real source extract here to preview the columns that will be mapped into the live project.
               </div>
-              <div
-                {...getRootProps()}
-                className="border border-dashed border-surface-600/60 rounded-xl p-4 text-center cursor-pointer hover:border-surface-500/80 transition-all"
-              >
+              <div {...getRootProps()} style={{ border: '1px dashed var(--border-2)', borderRadius: 'var(--r-md)', padding: '12px', textAlign: 'center', cursor: 'pointer' }}>
                 <input {...getInputProps()} />
-                {dataset ? (
-                  <p className="text-xs text-emerald-300 font-semibold">{dataset.file_name}</p>
-                ) : (
-                  <p className="text-xs text-slate-500">Upload sample data for preview</p>
-                )}
+                {dataset
+                  ? <p style={{ fontSize: 12, color: 'var(--ok)', fontWeight: 600 }}>{dataset.file_name}</p>
+                  : <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Upload source data for preview</p>}
               </div>
             </div>
           )}
 
           {sourceType === 'sql' && (
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-3 gap-2">
-                <select
-                  className="input text-xs"
-                  value={connection.sql.dbType}
-                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, dbType: e.target.value } })}
-                >
-                  <option>PostgreSQL</option>
-                  <option>MySQL</option>
-                  <option>SQL Server</option>
-                  <option>Oracle</option>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <select className="input" value={connection.sql.dbType}
+                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, dbType: e.target.value } })}>
+                  <option>PostgreSQL</option><option>MySQL</option><option>SQL Server</option><option>Oracle</option>
                 </select>
-                <input
-                  className="input text-xs"
-                  placeholder="Host"
-                  value={connection.sql.host}
-                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, host: e.target.value } })}
-                />
-                <input
-                  className="input text-xs"
-                  placeholder="Port"
-                  value={connection.sql.port}
-                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, port: e.target.value } })}
-                />
+                <input className="input" placeholder="Host" value={connection.sql.host}
+                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, host: e.target.value } })} />
+                <input className="input" placeholder="Port" value={connection.sql.port}
+                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, port: e.target.value } })} />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  className="input text-xs"
-                  placeholder="Username"
-                  value={connection.sql.username}
-                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, username: e.target.value } })}
-                />
-                <input
-                  className="input text-xs"
-                  placeholder="Database"
-                  value={connection.sql.database}
-                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, database: e.target.value } })}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <input className="input" placeholder="Username" value={connection.sql.username}
+                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, username: e.target.value } })} />
+                <input className="input" placeholder="Database" value={connection.sql.database}
+                  onChange={(e) => setConnection({ ...connection, sql: { ...connection.sql, database: e.target.value } })} />
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-surface-900/40 rounded-lg px-3 py-2 border border-surface-700/40">
-                <Info className="w-3.5 h-3.5 text-brand-400 flex-shrink-0" />
-                Prototype mode - upload a CSV/XLSX sample below to populate the preview.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-tertiary)', background: 'var(--surface-3)', borderRadius: 'var(--r-sm)', padding: '6px 10px', border: '1px solid var(--border-1)' }}>
+                <Info style={{ width: 12, height: 12, color: 'var(--accent)', flexShrink: 0 }} />
+                Upload a real target extract here to preview the columns that will be mapped into the live project.
               </div>
-              <div
-                {...getRootProps()}
-                className="border border-dashed border-surface-600/60 rounded-xl p-4 text-center cursor-pointer hover:border-surface-500/80 transition-all"
-              >
+              <div {...getRootProps()} style={{ border: '1px dashed var(--border-2)', borderRadius: 'var(--r-md)', padding: '12px', textAlign: 'center', cursor: 'pointer' }}>
                 <input {...getInputProps()} />
-                {dataset ? (
-                  <p className="text-xs text-emerald-300 font-semibold">{dataset.file_name}</p>
-                ) : (
-                  <p className="text-xs text-slate-500">Upload sample data for preview</p>
-                )}
+                {dataset
+                  ? <p style={{ fontSize: 12, color: 'var(--ok)', fontWeight: 600 }}>{dataset.file_name}</p>
+                  : <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Upload target data for preview</p>}
               </div>
             </div>
           )}
 
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          {/* Status chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {chips.map(({ label: chipLabel, ok }) => (
               <StatusChip key={chipLabel} ok={ok} label={chipLabel} />
             ))}
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-t border-surface-700/40">
-          <p className="text-[11px] text-slate-500">
+        {/* Card footer */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px',
+          borderTop: '1px solid var(--border-1)',
+          background: 'var(--surface-1)',
+        }}>
+          <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
             {ready
-              ? `${columns.length} columns previewed`
+              ? `${columns.length} columns · ${(preview?.rows || []).length} rows previewed`
               : dataset
-              ? 'Preview the uploaded data before continuing'
+              ? 'Click Preview to inspect the uploaded data'
               : 'Upload data first'}
           </p>
           <button
             type="button"
             disabled={!dataset}
             onClick={() => setShowPreview(true)}
-            className={clsx(
-              'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold border transition-all',
-              dataset
-                ? 'border-brand-500/50 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20'
-                : 'border-surface-700/40 text-slate-600 cursor-not-allowed opacity-50'
-            )}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              height: 28, padding: '0 10px',
+              borderRadius: 'var(--r-md)',
+              fontSize: 11.5, fontWeight: 600,
+              background: dataset ? 'var(--accent-subtle)' : 'var(--surface-3)',
+              border: `1px solid ${dataset ? 'var(--accent-border)' : 'var(--border-1)'}`,
+              color: dataset ? 'var(--accent)' : 'var(--text-disabled)',
+              cursor: dataset ? 'pointer' : 'not-allowed',
+              opacity: dataset ? 1 : 0.5,
+              transition: 'background 100ms',
+            }}
           >
-            <Database className="w-3.5 h-3.5" />
+            <Database style={{ width: 12, height: 12 }} />
             Preview Data
           </button>
         </div>
@@ -534,8 +636,10 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
           dsType={type}
           preview={preview}
           classification={classification}
-          selectedColumns={selectedColumns}
-          onSelectedColumnsChange={setSelectedColumns}
+          hiddenColumns={hiddenColumns}
+          onToggleColumn={toggleColumn}
+          onSelectAll={selectAll}
+          onClearAll={clearAll}
           onClassificationChange={setClassification}
           onClose={() => setShowPreview(false)}
         />
@@ -544,6 +648,9 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
   )
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   UPLOAD STEP (parent)
+───────────────────────────────────────────────────────────────── */
 export default function UploadStep({ project, datasets, onNext, onBack }) {
   const [sourceDs, setSourceDs] = useState(datasets?.find((d) => d.dataset_type === 'source') || null)
   const [targetDs, setTargetDs] = useState(datasets?.find((d) => d.dataset_type === 'target') || null)
@@ -561,52 +668,63 @@ export default function UploadStep({ project, datasets, onNext, onBack }) {
   const canProceed = sourceDs && targetDs && readyState.source && readyState.target
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-shrink-0 flex items-center justify-between gap-4 px-5 py-3.5 border-b border-surface-700/60">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Header */}
+      <div style={{
+        flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 20px',
+        borderBottom: '1px solid var(--border-1)',
+        background: 'var(--surface-1)',
+      }}>
         <div>
-          <p className="text-[11px] uppercase tracking-widest text-slate-500 font-bold">Data Ingestion</p>
-          <p className="text-sm font-bold text-slate-100 mt-0.5">Configure Source & Target Datasets</p>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)', margin: 0 }}>
+            Data Ingestion
+          </p>
+          <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', margin: '2px 0 0' }}>
+            Configure Source &amp; Target Datasets
+          </p>
         </div>
         {onBack && (
-          <button type="button" className="btn-secondary" onClick={onBack}>
-            <ArrowLeft className="w-4 h-4" /> Back
+          <button type="button" className="btn-secondary btn-sm" onClick={onBack}>
+            <ArrowLeft style={{ width: 13, height: 13 }} /> Back
           </button>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-5">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <DatasetCard
-            label="Source Data"
-            type="source"
-            projectId={project.id}
-            existingDataset={sourceDs}
-            onUploaded={setSourceDs}
-            onReadyChange={handleReadyChange}
-          />
-          <DatasetCard
-            label="Target Data"
-            type="target"
-            projectId={project.id}
-            existingDataset={targetDs}
-            onUploaded={setTargetDs}
-            onReadyChange={handleReadyChange}
-          />
+      {/* Cards */}
+      <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          <DatasetCard label="Source Data" type="source" projectId={project.id}
+            existingDataset={sourceDs} onUploaded={setSourceDs} onReadyChange={handleReadyChange} />
+          <DatasetCard label="Target Data" type="target" projectId={project.id}
+            existingDataset={targetDs} onUploaded={setTargetDs} onReadyChange={handleReadyChange} />
         </div>
       </div>
 
-      <div className="flex-shrink-0 flex items-center justify-between gap-3 px-5 py-3.5 border-t border-surface-700/60">
-        <div className="flex items-center gap-2">
+      {/* Footer */}
+      <div style={{
+        flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 20px',
+        borderTop: '1px solid var(--border-1)',
+        background: 'var(--surface-1)',
+      }}>
+        <div>
           {!canProceed && (
-            <span className="flex items-center gap-1.5 text-xs text-amber-400">
-              <AlertCircle className="w-3.5 h-3.5" />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--warn)' }}>
+              <AlertCircle style={{ width: 13, height: 13 }} />
               Configure both Source and Target datasets to continue
             </span>
           )}
         </div>
-        <button className="btn-primary" disabled={!canProceed} onClick={() => onNext({ source: sourceDs, target: targetDs })}>
+        <button
+          className="btn-primary"
+          disabled={!canProceed}
+          onClick={() => onNext({ source: sourceDs, target: targetDs })}
+        >
           Save and Continue to Mapping
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight style={{ width: 13, height: 13 }} />
         </button>
       </div>
     </div>

@@ -1,730 +1,360 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+/**
+ * RiskDashboard — wired to /enterprise/dashboard/risk-real
+ * Profile risk scores, SoD violations, overdue high-risk, exception aging by risk.
+ */
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
-import { AlertTriangle, ShieldAlert, Siren, Radar } from 'lucide-react'
-import { executionsAPI, projectsAPI } from '../api'
+import { advancedAPI } from '../api'
 import PageHeader from '../components/ui/PageHeader'
-import { EmptyState, LoadingState } from '../components/ui/PageState'
-import { useProjectStore } from '../store/projectStore'
+import { LoadingState, EmptyState } from '../components/ui/PageState'
+import { ShieldAlert, ShieldCheck, AlertTriangle, Clock, Users, ChevronDown, ChevronUp } from 'lucide-react'
 
-function toCurrency(amount, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(Number(amount || 0))
+// ── Theme ─────────────────────────────────────────────────────
+const ACCENT = '#6366f1'
+const OK     = '#22c55e'
+const WARN   = '#f59e0b'
+const BAD    = '#ef4444'
+const PURPLE = '#a855f7'
+const ORANGE = '#f97316'
+
+const RISK_COLOR = { LOW: OK, MEDIUM: WARN, HIGH: ORANGE, CRITICAL: BAD }
+const ECHART_BASE = {
+  backgroundColor: 'transparent',
+  textStyle: { color: '#94a3b8', fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11 },
 }
 
-function statusTone(level) {
-  const normalized = String(level || '').toUpperCase()
-  if (normalized === 'CRITICAL') return 'text-red-300'
-  if (normalized === 'HIGH') return 'text-amber-300'
-  if (normalized === 'MEDIUM') return 'text-sky-300'
-  return 'text-emerald-300'
-}
-
-function flattenExecution(executionResults) {
-  const rows = []
-  ;(executionResults?.units || []).forEach((unit, unitIndex) => {
-    ;(unit.transactions || []).forEach((transaction) => {
-      const status = String(transaction.match_status || '').toLowerCase()
-      const mismatch = status !== 'matched'
-      const discrepancies = (() => {
-        if (!transaction.discrepancies) return []
-        try {
-          const parsed = typeof transaction.discrepancies === 'string' ? JSON.parse(transaction.discrepancies) : transaction.discrepancies
-          return Array.isArray(parsed) ? parsed : []
-        } catch {
-          return []
-        }
-      })()
-      rows.push({
-        record_id: transaction.id || `${unit.entity || 'NA'}-${unit.account || 'NA'}-${unitIndex}`,
-        entity: unit.entity || 'Unassigned',
-        account: unit.account || 'Unassigned',
-        status: transaction.match_status || 'OPEN',
-        exception_id: mismatch ? `EX-${transaction.id}` : null,
-        exception_classification: discrepancies[0]?.source_column || (mismatch ? 'Rule Mismatch' : 'No Exception'),
-        reference:
-          transaction.selected_source_data?.reference ||
-          transaction.selected_target_data?.reference ||
-          `TXN-${String(transaction.id || 0).padStart(5, '0')}`,
-        match_variance: mismatch ? Math.round((1 - Number(transaction.match_score || 0)) * 100) : 0,
-        tx_date:
-          transaction.selected_source_data?.date ||
-          transaction.selected_target_data?.date ||
-          null,
-      })
-    })
-  })
-  return rows
-}
-
-function toMonthName(rawDate) {
-  if (!rawDate) return 'Unknown'
-  const date = new Date(rawDate)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
-  return date.toLocaleString('en-US', { month: 'long' })
-}
-
-function decodeParam(value = '') {
-  if (!value) return ''
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
+// ── Risk score gauge ──────────────────────────────────────────
+function RiskGauge({ score }) {
+  const color = score >= 80 ? BAD : score >= 60 ? ORANGE : score >= 40 ? WARN : OK
+  const option = {
+    ...ECHART_BASE,
+    series: [{
+      type: 'gauge',
+      startAngle: 200, endAngle: -20,
+      min: 0, max: 100,
+      radius: '90%',
+      axisLine: { lineStyle: { width: 12, color: [[score / 100, color], [1, '#1e293b']] } },
+      pointer: { itemStyle: { color } },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: { show: false },
+      detail: { valueAnimation: true, formatter: '{value}', color, fontSize: 22, fontWeight: 700, offsetCenter: [0, '10%'] },
+      data: [{ value: score, name: 'Risk Score' }],
+      title: { fontSize: 11, color: '#64748b', offsetCenter: [0, '35%'] },
+    }],
   }
+  return <ReactECharts option={option} style={{ height: 160 }} notMerge />
 }
 
-function parseMatrixPath(key = '') {
-  const parts = String(key).split('|')
-  const out = {}
-  parts.forEach((part) => {
-    if (part.startsWith('E:')) out.entity = part.slice(2)
-    if (part.startsWith('A:')) out.account = part.slice(2)
-    if (part.startsWith('S:')) out.status = part.slice(2)
-    if (part.startsWith('X:')) out.exception = part.slice(2)
-  })
-  return out
+// ── Risk breakdown bar ────────────────────────────────────────
+function RiskBreakdownChart({ data }) {
+  const entries = Object.entries(data || {})
+  if (!entries.length) return null
+  const option = {
+    ...ECHART_BASE,
+    grid: { left: 70, right: 40, top: 8, bottom: 16 },
+    xAxis: { type: 'value', axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#1e293b' } } },
+    yAxis: { type: 'category', data: entries.map(([k]) => k), axisLabel: { color: '#94a3b8', fontSize: 10 } },
+    series: [{
+      type: 'bar',
+      data: entries.map(([k, v]) => ({ value: v, itemStyle: { color: RISK_COLOR[k] || ACCENT, borderRadius: [0, 4, 4, 0] } })),
+      label: { show: true, position: 'right', color: '#94a3b8', fontSize: 10 },
+    }],
+  }
+  return <ReactECharts option={option} style={{ height: 140 }} notMerge />
 }
 
+// ── Profile risk score row ────────────────────────────────────
+function ProfileRiskRow({ p }) {
+  const color = RISK_COLOR[p.risk_classification] || ACCENT
+  const pct   = Math.min(p.risk_score, 100)
+  return (
+    <tr>
+      <td style={{ fontSize: 12, fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {p.name}
+      </td>
+      <td>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+          background: `${color}14`, border: `1px solid ${color}33`, color }}>
+          {p.risk_classification}
+        </span>
+      </td>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 80, height: 6, background: 'var(--surface-3)', borderRadius: 9999, overflow: 'hidden' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width 400ms' }} />
+          </div>
+          <span style={{ fontSize: 11, fontWeight: 700, color, minWidth: 24 }}>{p.risk_score}</span>
+        </div>
+      </td>
+      <td style={{ fontSize: 11 }}>{p.total_records.toLocaleString()}</td>
+      <td style={{ fontSize: 11, color: p.unmatched > 0 ? BAD : OK }}>{p.unmatched}</td>
+      <td style={{ fontSize: 11, color: p.open_exceptions > 0 ? WARN : OK }}>{p.open_exceptions}</td>
+      <td style={{ fontSize: 11, color: p.variance_amount > 0 ? WARN : 'var(--text-tertiary)', fontWeight: p.variance_amount > 1000 ? 600 : 400 }}>
+        {p.variance_amount > 0 ? `$${Number(p.variance_amount).toLocaleString()}` : '—'}
+      </td>
+      <td style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{(p.reconciliation_type || '').replace(/_/g, ' ')}</td>
+    </tr>
+  )
+}
+
+// ── Exception aging by risk table ────────────────────────────
+function AgingByRiskTable({ data }) {
+  return (
+    <table className="data-table" style={{ borderRadius: 0 }}>
+      <thead>
+        <tr><th>Risk Level</th><th>Open Exceptions</th><th>Avg Age (days)</th><th>Max Age (days)</th></tr>
+      </thead>
+      <tbody>
+        {Object.entries(data || {}).map(([risk, stats]) => {
+          const color = RISK_COLOR[risk] || ACCENT
+          return (
+            <tr key={risk}>
+              <td>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+                  background: `${color}14`, border: `1px solid ${color}33`, color }}>
+                  {risk}
+                </span>
+              </td>
+              <td style={{ fontSize: 12, fontWeight: 600, color: stats.count > 0 ? color : OK }}>{stats.count}</td>
+              <td style={{ fontSize: 12, color: stats.avg_days > 7 ? WARN : 'var(--text-primary)' }}>{stats.avg_days}</td>
+              <td style={{ fontSize: 12, color: stats.max_days > 14 ? BAD : 'var(--text-primary)', fontWeight: stats.max_days > 14 ? 700 : 400 }}>{stats.max_days}</td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+  )
+}
+
+// ── SoD violation row ─────────────────────────────────────────
+function SodRow({ v }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px',
+      background: 'var(--surface-2)', borderRadius: 8,
+      border: '1px solid rgba(239,68,68,.2)',
+    }}>
+      <ShieldAlert style={{ width: 14, height: 14, color: BAD, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{v.profile_name}</p>
+        <p style={{ fontSize: 11, color: BAD }}>{v.violation}</p>
+      </div>
+      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 9999,
+        background: `${BAD}14`, border: `1px solid ${BAD}33`, color: BAD }}>
+        {v.severity}
+      </span>
+    </div>
+  )
+}
+
+// ── Overdue high risk row ─────────────────────────────────────
+function OverdueRow({ item }) {
+  const color = RISK_COLOR[item.risk] || WARN
+  return (
+    <tr>
+      <td style={{ fontSize: 12, fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.profile_name}</td>
+      <td>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 9999,
+          background: `${color}14`, border: `1px solid ${color}33`, color }}>
+          {item.risk}
+        </span>
+      </td>
+      <td style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11 }}>{item.due_date}</td>
+      <td style={{ fontSize: 12, fontWeight: 700, color: item.days_overdue > 7 ? BAD : WARN }}>
+        +{item.days_overdue}d
+      </td>
+    </tr>
+  )
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+const TABS = [
+  { id: 'overview',  label: 'Risk Overview' },
+  { id: 'profiles',  label: 'Profile Scores' },
+  { id: 'exceptions', label: 'Exception Aging' },
+  { id: 'sod',       label: 'SoD Violations' },
+  { id: 'overdue',   label: 'Overdue High Risk' },
+]
+
+// ── Main ──────────────────────────────────────────────────────
 export default function RiskDashboard() {
-  const navigate = useNavigate()
-  const { entity: routeEntity = '', account: routeAccount = '' } = useParams()
-  const selectedEntityRoute = decodeParam(routeEntity)
-  const selectedAccountRoute = decodeParam(routeAccount)
+  const navigate   = useNavigate()
+  const [tab, setTab] = useState('overview')
+  const [search, setSearch] = useState('')
+  const [riskFilter, setRiskFilter] = useState('')
 
-  const [selectedEntity, setSelectedEntity] = useState(selectedEntityRoute)
-  const [selectedAccount, setSelectedAccount] = useState(selectedAccountRoute)
-  const [sliceEntity, setSliceEntity] = useState('ALL')
-  const [sliceStatus, setSliceStatus] = useState('ALL')
-  const [sliceException, setSliceException] = useState('ALL')
-  const [expandedRows, setExpandedRows] = useState({})
-  const [entityPage, setEntityPage] = useState(1)
-  const [accountPage, setAccountPage] = useState(1)
-  const [txnPage, setTxnPage] = useState(1)
-  const PAGE_SIZE_ENTITY = 8
-  const PAGE_SIZE_ACCOUNT = 10
-  const PAGE_SIZE_TXN = 10
-  const { selectedProjectId, setSelectedProjectId } = useProjectStore()
-
-  useEffect(() => {
-    setSelectedEntity(selectedEntityRoute)
-    setSelectedAccount(selectedAccountRoute)
-  }, [selectedEntityRoute, selectedAccountRoute])
-
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
-  useEffect(() => {
-    if (!selectedProjectId && projects.length) setSelectedProjectId(String(projects[0].id))
-  }, [projects, selectedProjectId, setSelectedProjectId])
-
-  const { data: executions = [] } = useQuery({
-    queryKey: ['risk-executions', selectedProjectId],
-    queryFn: () => executionsAPI.list(Number(selectedProjectId)),
-    enabled: !!selectedProjectId,
+  const { data, isLoading } = useQuery({
+    queryKey: ['risk-dashboard-real'],
+    queryFn: advancedAPI.riskDashboard,
+    refetchInterval: 60000,
   })
 
-  const latestExecution = useMemo(() => executions.find((row) => String(row.status || '').toLowerCase() === 'completed') || executions[0], [executions])
+  const profileScores = useMemo(() => {
+    let list = data?.profile_risk_scores || []
+    if (riskFilter) list = list.filter((p) => p.risk_classification === riskFilter)
+    if (search) list = list.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    return list
+  }, [data, riskFilter, search])
 
-  const { data: executionResults } = useQuery({
-    queryKey: ['risk-results', selectedProjectId, latestExecution?.id],
-    queryFn: () => executionsAPI.results(Number(selectedProjectId), latestExecution.id, { page: 1, page_size: 1000 }),
-    enabled: !!selectedProjectId && !!latestExecution?.id,
-  })
+  const breakdown = data?.risk_breakdown || {}
+  const totalScore = data?.total_risk_score ?? 0
 
-  const transactions = useMemo(() => flattenExecution(executionResults), [executionResults])
-
-  const allDrilldown = useMemo(() => {
-    const grouped = new Map()
-    transactions.forEach((row) => {
-      const key = `${row.entity}::${row.account}`
-      const item = grouped.get(key) || {
-        entity: row.entity,
-        account: row.account,
-        exception_count: 0,
-        variance_amount: 0,
-        total_transactions: 0,
-        unmatched_count: 0,
-        partial_count: 0,
-      }
-      item.total_transactions += 1
-      if (row.exception_id) item.exception_count += 1
-      item.variance_amount += Math.abs(Number(row.match_variance || 0))
-      const normalized = String(row.status || '').toLowerCase()
-      if (normalized === 'unmatched') item.unmatched_count += 1
-      if (normalized === 'partial') item.partial_count += 1
-      grouped.set(key, item)
-    })
-
-    return Array.from(grouped.values())
-      .map((row) => {
-        const exceptionRate = row.total_transactions ? (row.exception_count / row.total_transactions) * 100 : 0
-        const severityWeight = (row.unmatched_count * 1.4) + (row.partial_count * 0.8)
-        const riskScore = Math.min(100, (exceptionRate * 0.6) + (severityWeight * 6) + Math.min(25, row.variance_amount / 10))
-        const riskLevel = riskScore >= 80 ? 'CRITICAL' : riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW'
-        return { ...row, risk_score: Math.round(riskScore), risk_level: riskLevel, exception_rate: Number(exceptionRate.toFixed(1)) }
-      })
-      .sort((a, b) => b.risk_score - a.risk_score)
-  }, [transactions])
-
-  const entitySummary = useMemo(() => {
-    const grouped = new Map()
-    allDrilldown.forEach((row) => {
-      const item = grouped.get(row.entity) || { entity: row.entity, risk_score: 0, exception_count: 0, variance_amount: 0, account_count: 0 }
-      item.risk_score += row.risk_score
-      item.exception_count += row.exception_count
-      item.variance_amount += row.variance_amount
-      item.account_count += 1
-      grouped.set(row.entity, item)
-    })
-
-    return Array.from(grouped.values()).sort((a, b) => b.risk_score - a.risk_score)
-  }, [allDrilldown])
-
-  const visibleAccounts = useMemo(() => {
-    if (!selectedEntity) return allDrilldown
-    return allDrilldown.filter((row) => row.entity === selectedEntity)
-  }, [allDrilldown, selectedEntity])
-
-  const selectedTransactions = useMemo(
-    () =>
-      transactions.filter((row) => {
-        if (selectedEntity && row.entity !== selectedEntity) return false
-        if (selectedAccount && row.account !== selectedAccount) return false
-        return true
-      }),
-    [transactions, selectedEntity, selectedAccount],
+  if (isLoading) return (
+    <div className="h-full flex flex-col">
+      <PageHeader title="Risk Dashboard" subtitle="Enterprise-wide risk scoring and compliance." />
+      <LoadingState />
+    </div>
   )
-
-  const matrixScopeTransactions = useMemo(() => {
-    return selectedTransactions.filter((row) => {
-      if (sliceEntity !== 'ALL' && row.entity !== sliceEntity) return false
-      if (sliceStatus !== 'ALL' && String(row.status || '').toUpperCase() !== sliceStatus) return false
-      if (sliceException !== 'ALL' && String(row.exception_classification || '') !== sliceException) return false
-      return true
-    })
-  }, [selectedTransactions, sliceEntity, sliceStatus, sliceException])
-
-  const matrixMonths = useMemo(() => {
-    const months = Array.from(new Set(matrixScopeTransactions.map((row) => toMonthName(row.tx_date))))
-    return months.length ? months : ['Unknown']
-  }, [matrixScopeTransactions])
-
-  const matrixRows = useMemo(() => {
-    const byEntity = new Map()
-    matrixScopeTransactions.forEach((row) => {
-      const entity = row.entity || 'Unassigned'
-      const account = row.account || 'Unassigned'
-      const status = String(row.status || 'OPEN').toUpperCase()
-      const exception = row.exception_classification || 'No Exception'
-      const month = toMonthName(row.tx_date)
-      const value = Number(row.match_variance || 0)
-
-      if (!byEntity.has(entity)) byEntity.set(entity, { values: {}, children: new Map(), count: 0 })
-      const eNode = byEntity.get(entity)
-      eNode.values[month] = (eNode.values[month] || 0) + value
-      eNode.count += 1
-
-      if (!eNode.children.has(account)) eNode.children.set(account, { values: {}, children: new Map(), count: 0 })
-      const aNode = eNode.children.get(account)
-      aNode.values[month] = (aNode.values[month] || 0) + value
-      aNode.count += 1
-
-      if (!aNode.children.has(status)) aNode.children.set(status, { values: {}, children: new Map(), count: 0 })
-      const sNode = aNode.children.get(status)
-      sNode.values[month] = (sNode.values[month] || 0) + value
-      sNode.count += 1
-
-      if (!sNode.children.has(exception)) sNode.children.set(exception, { values: {}, count: 0 })
-      const xNode = sNode.children.get(exception)
-      xNode.values[month] = (xNode.values[month] || 0) + value
-      xNode.count += 1
-    })
-
-    const out = []
-    const pushRows = (label, level, pathKey, node, hasChildren) => {
-      out.push({
-        label,
-        level,
-        key: pathKey,
-        hasChildren,
-        count: node.count || 0,
-        values: node.values || {},
-      })
-    }
-
-    Array.from(byEntity.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([entity, eNode]) => {
-      const eKey = `E:${entity}`
-      pushRows(entity, 0, eKey, eNode, eNode.children.size > 0)
-      if (!expandedRows[eKey]) return
-      Array.from(eNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([account, aNode]) => {
-        const aKey = `${eKey}|A:${account}`
-        pushRows(account, 1, aKey, aNode, aNode.children.size > 0)
-        if (!expandedRows[aKey]) return
-        Array.from(aNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([status, sNode]) => {
-          const sKey = `${aKey}|S:${status}`
-          pushRows(status, 2, sKey, sNode, sNode.children.size > 0)
-          if (!expandedRows[sKey]) return
-          Array.from(sNode.children.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([exception, xNode]) => {
-            const xKey = `${sKey}|X:${exception}`
-            pushRows(exception, 3, xKey, xNode, false)
-          })
-        })
-      })
-    })
-
-    return out
-  }, [matrixScopeTransactions, expandedRows])
-
-  const exceptionBreakdown = useMemo(() => {
-    const grouped = new Map()
-    selectedTransactions
-      .filter((row) => row.exception_id)
-      .forEach((row) => {
-        const item = grouped.get(row.exception_classification) || { label: row.exception_classification, count: 0 }
-        item.count += 1
-        grouped.set(row.exception_classification, item)
-      })
-
-    return Array.from(grouped.values()).sort((a, b) => b.count - a.count)
-  }, [selectedTransactions])
-
-  const riskSignals = useMemo(() => {
-    const openExceptions = selectedTransactions.filter((row) => row.exception_id)
-    const riskScore = Math.round(
-      visibleAccounts.length
-        ? visibleAccounts.reduce((sum, row) => sum + Number(row.risk_score || 0), 0) / visibleAccounts.length
-        : 0,
-    )
-    const criticalMismatches = selectedTransactions.filter((row) => {
-      const status = String(row.status || '').toLowerCase()
-      return status === 'unmatched' || Number(row.match_variance || 0) >= 80
-    }).length
-    const complianceAlerts = visibleAccounts.filter((row) => ['HIGH', 'CRITICAL'].includes(String(row.risk_level || '').toUpperCase())).length
-    const sodViolations = selectedTransactions.filter((row) => {
-      const label = String(row.exception_classification || '').toLowerCase()
-      return label.includes('sod') || label.includes('segregation') || label.includes('duty')
-    }).length
-    const suspiciousRefs = new Map()
-    selectedTransactions.forEach((row) => {
-      if (!row.exception_id) return
-      const key = `${row.entity}::${row.account}::${row.reference}`
-      suspiciousRefs.set(key, (suspiciousRefs.get(key) || 0) + 1)
-    })
-    const fraudIndicators = Array.from(suspiciousRefs.values()).filter((count) => count > 1).length
-    const hottestNode = visibleAccounts[0]
-      ? `${visibleAccounts[0].entity} / ${visibleAccounts[0].account}`
-      : 'No hotspots'
-    return {
-      riskScore,
-      exceptionHeatmap: hottestNode,
-      criticalMismatches,
-      sodViolations,
-      complianceAlerts,
-      fraudIndicators,
-      openExceptions: openExceptions.length,
-    }
-  }, [selectedTransactions, visibleAccounts])
-
-  const currentDepth = selectedEntity ? 'entity' : 'overview'
-
-  const goOverview = () => {
-    setSelectedAccount('')
-    setEntityPage(1)
-    setAccountPage(1)
-    setTxnPage(1)
-    navigate('/risk-dashboard')
-  }
-  const goEntity = (entity) => {
-    setSelectedAccount('')
-    setAccountPage(1)
-    setTxnPage(1)
-    navigate(`/risk-dashboard/${encodeURIComponent(entity)}`)
-  }
-  const selectAccount = (account) => {
-    setSelectedAccount(account)
-    setTxnPage(1)
-  }
-  const handleMatrixDrill = (row) => {
-    const path = parseMatrixPath(row?.key)
-    if (row.level === 0 && path.entity) {
-      goEntity(path.entity)
-      return
-    }
-    if (row.level === 1 && path.entity && path.account) {
-      goEntity(path.entity)
-      selectAccount(path.account)
-      return
-    }
-    if (row.level === 2) {
-      setSliceStatus(path.status || 'ALL')
-      return
-    }
-    if (row.level === 3) {
-      setSliceException(path.exception || 'ALL')
-    }
-  }
-
-  const paginatedEntities = useMemo(() => {
-    const start = (entityPage - 1) * PAGE_SIZE_ENTITY
-    return entitySummary.slice(start, start + PAGE_SIZE_ENTITY)
-  }, [entitySummary, entityPage])
-
-  const paginatedAccounts = useMemo(() => {
-    const start = (accountPage - 1) * PAGE_SIZE_ACCOUNT
-    return visibleAccounts.slice(start, start + PAGE_SIZE_ACCOUNT)
-  }, [visibleAccounts, accountPage])
-
-  const paginatedTransactions = useMemo(() => {
-    const start = (txnPage - 1) * PAGE_SIZE_TXN
-    return selectedTransactions.slice(start, start + PAGE_SIZE_TXN)
-  }, [selectedTransactions, txnPage])
-
-  const breadcrumbItems = [
-    { label: 'Overview', active: currentDepth === 'overview', onClick: goOverview },
-    ...(selectedEntity ? [{ label: selectedEntity, active: true, onClick: () => goEntity(selectedEntity) }] : []),
-  ]
-
-  const entityChartOption = useMemo(
-    () => ({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { top: 20, right: 12, bottom: 40, left: 80 },
-      xAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-      yAxis: { type: 'category', data: entitySummary.map((row) => row.entity), axisLabel: { color: '#94a3b8' } },
-      series: [{
-        type: 'bar',
-        data: entitySummary.map((row) => row.risk_score),
-        itemStyle: { color: '#4f9cf9' },
-        label: { show: true, color: '#e2e8f0' },
-      }],
-    }),
-    [entitySummary],
-  )
-
-  const accountChartOption = useMemo(
-    () => ({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { top: 20, right: 12, bottom: 40, left: 80 },
-      xAxis: { type: 'value', axisLabel: { color: '#94a3b8' } },
-      yAxis: { type: 'category', data: visibleAccounts.map((row) => row.account), axisLabel: { color: '#94a3b8' } },
-      series: [{
-        type: 'bar',
-        data: visibleAccounts.map((row) => row.risk_score),
-        itemStyle: { color: '#38bdf8' },
-        label: { show: true, color: '#e2e8f0' },
-      }],
-    }),
-    [visibleAccounts],
-  )
-
-  const chartOption = currentDepth === 'entity' ? accountChartOption : entityChartOption
-  const chartEvents =
-    currentDepth === 'entity'
-      ? {
-          click: (params) => {
-            if (!params?.name) return
-            selectAccount(params.name)
-          },
-        }
-      : {
-          click: (params) => {
-            if (!params?.name) return
-            goEntity(params.name)
-          },
-        }
-
-  const loading = !!selectedProjectId && !executionResults
-
-  const entityOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => r.entity))).sort(), [selectedTransactions])
-  const statusOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => String(r.status || '').toUpperCase()))).sort(), [selectedTransactions])
-  const exceptionOptions = useMemo(() => Array.from(new Set(selectedTransactions.map((r) => String(r.exception_classification || '')))).sort(), [selectedTransactions])
 
   return (
     <div className="h-full flex flex-col">
       <PageHeader
-        title={currentDepth === 'overview' ? 'Risk & Compliance Dashboard' : `Risk Drilldown - ${selectedEntity}`}
-        subtitle="Audit-focused risk monitoring with risk score, heatmap hotspots, critical mismatches, SOD checks, compliance alerts, and fraud indicators."
-        badge={currentDepth === 'overview' ? `${entitySummary.length} entities` : `${visibleAccounts.length} accounts`}
-        actions={
-          <div className="flex items-center gap-2">
-            <button className="btn-secondary" onClick={goOverview}>Reset</button>
-            {selectedEntity ? <button className="btn-secondary" onClick={() => goEntity(selectedEntity)}>Refresh Entity View</button> : null}
-          </div>
-        }
+        title="Risk Dashboard"
+        subtitle="Live risk scores, SoD violations, aging analysis and overdue high-risk profiles."
+        badge={`Overall: ${totalScore}/100`}
       />
 
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        <div className="card oracle-hero p-4 md:p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Oracle ARCS Style Monitor</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-100">Risk Intelligence Control Tower</h2>
-              <p className="mt-1 text-sm text-slate-400">Entity-first risk posture with account-level diagnostics and transaction evidence panel.</p>
+      <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
+
+        {/* ── KPI strip ────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
+          {[
+            ['LOW Risk',      breakdown.LOW      ?? 0, OK],
+            ['MEDIUM Risk',   breakdown.MEDIUM   ?? 0, WARN],
+            ['HIGH Risk',     breakdown.HIGH     ?? 0, ORANGE],
+            ['CRITICAL Risk', breakdown.CRITICAL ?? 0, BAD],
+            ['SoD Violations', (data?.sod_violations || []).length, PURPLE],
+          ].map(([label, val, color]) => (
+            <div key={label} style={{
+              background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+              borderRadius: 10, padding: '12px 16px',
+            }}>
+              <p style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{label}</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color }}>{val}</p>
             </div>
-            <div className="hidden md:grid grid-cols-2 gap-2 text-xs text-slate-300">
-              <div className="rounded-lg border border-surface-600 bg-surface-900/40 px-3 py-2"><ShieldAlert className="inline w-3.5 h-3.5 mr-1" /> Compliance Lens</div>
-              <div className="rounded-lg border border-surface-600 bg-surface-900/40 px-3 py-2"><AlertTriangle className="inline w-3.5 h-3.5 mr-1" /> Exception Focus</div>
-              <div className="rounded-lg border border-surface-600 bg-surface-900/40 px-3 py-2"><Siren className="inline w-3.5 h-3.5 mr-1" /> Critical Alerts</div>
-              <div className="rounded-lg border border-surface-600 bg-surface-900/40 px-3 py-2"><Radar className="inline w-3.5 h-3.5 mr-1" /> Fraud Signals</div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <div className="card p-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400">Project Source</span>
-          <select className="input max-w-xs" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-            {projects.map((project) => <option key={project.id} value={String(project.id)}>{project.name}</option>)}
-          </select>
-          <span className="text-xs text-slate-500">Risk view is scoped to this project only</span>
+        {/* ── Tab bar ──────────────────────────────────── */}
+        <div className="tab-bar" style={{ background: 'var(--surface-1)', borderRadius: 8 }}>
+          {TABS.map((t) => (
+            <button key={t.id} className={`tab-item ${tab === t.id ? 'tab-active' : ''}`}
+              onClick={() => setTab(t.id)}>{t.label}</button>
+          ))}
         </div>
 
-        {breadcrumbItems.length ? (
-          <div className="card p-3 flex flex-wrap items-center gap-2 text-sm">
-            {breadcrumbItems.map((item, index) => (
-              <div key={item.label} className="flex items-center gap-2">
-                <button className={`px-2 py-1 rounded-lg ${item.active ? 'bg-brand-900/30 text-brand-200 border border-brand-700/40' : 'bg-surface-900/40 text-slate-300 border border-surface-700'}`} onClick={item.onClick}>{item.label}</button>
-                {index < breadcrumbItems.length - 1 ? <span className="text-slate-500">/</span> : null}
+        {/* ── Overview ────────────────────────────────── */}
+        {tab === 'overview' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 12, padding: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Overall Risk Score</p>
+              <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>Average across all profiles</p>
+              <RiskGauge score={totalScore} />
+            </div>
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 12, padding: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Risk Distribution</p>
+              <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>Profiles by risk classification</p>
+              <RiskBreakdownChart data={breakdown} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 12 }}>
+                {Object.entries(breakdown).map(([risk, count]) => {
+                  const color = RISK_COLOR[risk] || ACCENT
+                  return (
+                    <div key={risk} style={{ textAlign: 'center', padding: '8px', background: 'var(--surface-1)', borderRadius: 8, border: `1px solid ${color}22` }}>
+                      <p style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{risk}</p>
+                      <p style={{ fontSize: 20, fontWeight: 700, color }}>{count}</p>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
+            </div>
           </div>
-        ) : null}
+        )}
 
-        {loading ? <LoadingState label="Loading risk dashboard..." /> : null}
-        {!loading && !transactions.length ? <EmptyState title="No risk data" description="Run reconciliation for this project to populate risk scoring." /> : null}
-
-        {!loading && transactions.length ? (
+        {/* ── Profile Scores ───────────────────────────── */}
+        {tab === 'profiles' && (
           <>
-            <div className="card focus-surface pulse-update p-4 overflow-auto">
-              <p className="text-sm font-semibold text-slate-100 mb-2">Oracle-style Drilldown Matrix</p>
-              <p className="hint-text mb-2">Tip: click hierarchy rows for instant drilldown; use + / - for expand and collapse.</p>
-              <div className="space-y-1 text-xs mb-3">
-                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
-                  Entity [ {sliceEntity === 'ALL' ? entityOptions.join(', ') || 'All' : sliceEntity} ]
-                </div>
-                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
-                  Status [ {sliceStatus === 'ALL' ? statusOptions.join(', ') || 'All' : sliceStatus} ]
-                </div>
-                <div className="rounded border border-surface-700 bg-surface-900/40 px-2 py-1">
-                  Exception [ {sliceException === 'ALL' ? 'All' : sliceException} ]
-                </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input className="input h-8 text-xs w-48" placeholder="Search profiles…"
+                value={search} onChange={(e) => setSearch(e.target.value)} />
+              <select className="input h-8 text-xs" value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}>
+                <option value="">All Risk Levels</option>
+                {['LOW','MEDIUM','HIGH','CRITICAL'].map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              {(riskFilter || search) && (
+                <button className="btn-ghost text-xs h-8" onClick={() => { setRiskFilter(''); setSearch('') }}>Clear</button>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                {profileScores.length} profiles
+              </span>
+            </div>
+            {profileScores.length === 0 ? (
+              <EmptyState title="No profiles match" description="Adjust filters." />
+            ) : (
+              <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden' }}>
+                <table className="data-table" style={{ borderRadius: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Profile</th><th>Risk Level</th><th>Risk Score</th>
+                      <th>Records</th><th>Unmatched</th><th>Open Exc.</th>
+                      <th>Variance</th><th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {profileScores.map((p) => <ProfileRiskRow key={p.id} p={p} />)}
+                  </tbody>
+                </table>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-                <select className="input" value={sliceEntity} onChange={(e) => setSliceEntity(e.target.value)}>
-                  <option value="ALL">All Entities</option>
-                  {entityOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <select className="input" value={sliceStatus} onChange={(e) => setSliceStatus(e.target.value)}>
-                  <option value="ALL">All Statuses</option>
-                  {statusOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <select className="input" value={sliceException} onChange={(e) => setSliceException(e.target.value)}>
-                  <option value="ALL">All Exceptions</option>
-                  {exceptionOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-                <button className="btn-secondary" onClick={() => { setSliceEntity('ALL'); setSliceStatus('ALL'); setSliceException('ALL') }}>
-                  Clear Slicers
-                </button>
-              </div>
-              <table className="enterprise-table text-sm">
+            )}
+          </>
+        )}
+
+        {/* ── Exception Aging ──────────────────────────── */}
+        {tab === 'exceptions' && (
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden' }}>
+            <AgingByRiskTable data={data?.exception_aging_by_risk} />
+          </div>
+        )}
+
+        {/* ── SoD Violations ───────────────────────────── */}
+        {tab === 'sod' && (
+          (data?.sod_violations || []).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <ShieldCheck style={{ width: 40, height: 40, color: OK, margin: '0 auto 12px' }} />
+              <p style={{ fontSize: 14, fontWeight: 700, color: OK }}>No SoD Violations Detected</p>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>All profiles have proper segregation of duties.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(data.sod_violations || []).map((v, i) => <SodRow key={i} v={v} />)}
+            </div>
+          )
+        )}
+
+        {/* ── Overdue High Risk ────────────────────────── */}
+        {tab === 'overdue' && (
+          (data?.overdue_high_risk || []).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <CheckCircle2 style={{ width: 40, height: 40, color: OK, margin: '0 auto 12px' }} />
+              <p style={{ fontSize: 14, fontWeight: 700, color: OK }}>No Overdue High-Risk Items</p>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>All high-risk certifications are within SLA.</p>
+            </div>
+          ) : (
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden' }}>
+              <table className="data-table" style={{ borderRadius: 0 }}>
                 <thead>
-                  <tr>
-                    <th>Hierarchy</th>
-                    <th>Records</th>
-                    {matrixMonths.map((m) => <th key={m}>{m}</th>)}
-                  </tr>
+                  <tr><th>Profile</th><th>Risk</th><th>Due Date</th><th>Days Overdue</th></tr>
                 </thead>
                 <tbody>
-                  {matrixRows.map((row) => (
-                    <tr key={row.key} className="cursor-pointer drill-row" onClick={() => handleMatrixDrill(row)}>
-                      <td className="text-slate-100">
-                        <div style={{ paddingLeft: `${row.level * 16}px` }} className="flex items-center gap-2">
-                          {row.hasChildren ? (
-                            <button
-                              className="text-xs border border-surface-600 rounded px-1"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setExpandedRows((prev) => ({ ...prev, [row.key]: !prev[row.key] }))
-                              }}
-                            >
-                              {expandedRows[row.key] ? '-' : '+'}
-                            </button>
-                          ) : <span className="w-4 inline-block" />}
-                          <span>{row.label}</span>
-                        </div>
-                      </td>
-                      <td>{row.count}</td>
-                      {matrixMonths.map((m) => <td key={`${row.key}-${m}`}>{toCurrency(row.values[m] || 0, 'USD')}</td>)}
-                    </tr>
-                  ))}
+                  {(data.overdue_high_risk || []).map((item, i) => <OverdueRow key={i} item={item} />)}
                 </tbody>
               </table>
             </div>
+          )
+        )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Risk Score</p><p className="text-xl font-semibold text-slate-100">{riskSignals.riskScore}</p></div>
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Exception Heatmap</p><p className="text-sm font-semibold text-slate-100">{riskSignals.exceptionHeatmap}</p></div>
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Critical Mismatches</p><p className="text-xl font-semibold text-red-300">{riskSignals.criticalMismatches}</p></div>
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">SOD Violations</p><p className="text-xl font-semibold text-amber-300">{riskSignals.sodViolations}</p></div>
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Compliance Alerts</p><p className="text-xl font-semibold text-sky-300">{riskSignals.complianceAlerts}</p></div>
-              <div className="oracle-kpi p-3"><p className="text-xs text-slate-400">Fraud Indicators</p><p className="text-xl font-semibold text-fuchsia-300">{riskSignals.fraudIndicators}</p></div>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <div className="card p-4 xl:col-span-2">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-100">{currentDepth === 'overview' ? 'Entity risk overview' : 'Account risk view'}</p>
-                    <p className="text-xs text-slate-400 mt-1">{currentDepth === 'overview' ? 'Click any entity bar to open account-level risk details.' : 'Click any account bar to open transaction details in the panel below.'}</p>
-                  </div>
-                  {selectedEntity ? <span className="text-xs text-slate-400">{selectedEntity}{selectedAccount ? ` / ${selectedAccount}` : ''}</span> : null}
-                </div>
-                <ReactECharts style={{ height: 340 }} option={chartOption} onEvents={chartEvents} />
-              </div>
-
-              <div className="card p-4">
-                <p className="text-sm font-semibold text-slate-100 mb-3">Audit Signal Summary</p>
-                <div className="space-y-3">
-                  <div className="oracle-kpi p-3">
-                    <p className="text-xs text-slate-400">Current Level</p>
-                    <p className="text-sm font-semibold text-slate-100 capitalize">{currentDepth}</p>
-                  </div>
-                  <div className="oracle-kpi p-3">
-                    <p className="text-xs text-slate-400">Open Exceptions</p>
-                    <p className="text-xl font-semibold text-slate-100">{riskSignals.openExceptions}</p>
-                  </div>
-                  <div className="oracle-kpi p-3">
-                    <p className="text-xs text-slate-400">Risk Scope</p>
-                    <p className="text-sm font-semibold text-slate-100">{selectedEntity || 'All Entities'} / {selectedAccount || 'All Accounts'}</p>
-                  </div>
-                  <div className="oracle-kpi p-3">
-                    <p className="text-xs text-slate-400">Exception Rate</p>
-                    <p className="text-sm font-semibold text-slate-100">{selectedTransactions.length ? `${Math.round((selectedTransactions.filter((row) => row.exception_id).length / selectedTransactions.length) * 100)}%` : '0%'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {currentDepth === 'overview' ? (
-              <div className="card focus-surface p-4 overflow-auto">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <p className="text-sm font-semibold text-slate-100">Entity impact</p>
-                  <span className="text-xs text-slate-400">Click any row to drill into the selected entity.</span>
-                </div>
-                <table className="enterprise-table text-sm">
-                  <thead><tr><th>Entity</th><th>Accounts</th><th>Risk</th><th>Exceptions</th><th>Variance</th></tr></thead>
-                  <tbody>
-                    {paginatedEntities.map((row) => (
-                      <tr key={row.entity} className="cursor-pointer drill-row" onClick={() => goEntity(row.entity)}>
-                        <td className="text-slate-100">{row.entity}</td>
-                        <td className="text-slate-300">{row.account_count}</td>
-                        <td className="text-slate-300">{row.risk_score}</td>
-                        <td className="text-slate-300">{row.exception_count}</td>
-                        <td className="text-slate-300">{toCurrency(row.variance_amount, 'INR')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                  <span>
-                    Showing {(entityPage - 1) * PAGE_SIZE_ENTITY + (paginatedEntities.length ? 1 : 0)}-
-                    {(entityPage - 1) * PAGE_SIZE_ENTITY + paginatedEntities.length} of {entitySummary.length}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button className="btn-secondary py-1 px-2 text-xs" disabled={entityPage <= 1} onClick={() => setEntityPage((p) => Math.max(1, p - 1))}>Prev</button>
-                    <span>Page {entityPage} / {Math.max(1, Math.ceil(entitySummary.length / PAGE_SIZE_ENTITY))}</span>
-                    <button className="btn-secondary py-1 px-2 text-xs" disabled={entityPage >= Math.ceil(entitySummary.length / PAGE_SIZE_ENTITY)} onClick={() => setEntityPage((p) => p + 1)}>Next</button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {currentDepth === 'entity' ? (
-              <div className="card p-4 overflow-auto space-y-4">
-                <div>
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <p className="text-sm font-semibold text-slate-100">Account drilldown for {selectedEntity}</p>
-                    <span className="text-xs text-slate-400">Click any account row to load the transaction panel.</span>
-                  </div>
-                  <table className="enterprise-table text-sm">
-                    <thead><tr><th>Account</th><th>Risk</th><th>Exceptions</th><th>Exception Rate</th><th>Variance</th></tr></thead>
-                    <tbody>
-                      {paginatedAccounts.map((row) => (
-                        <tr key={`${row.entity}-${row.account}`} className={`cursor-pointer drill-row ${selectedAccount === row.account ? 'bg-brand-900/10' : ''}`} onClick={() => selectAccount(row.account)}>
-                          <td className="text-slate-100">{row.account}</td>
-                          <td className={`font-medium ${statusTone(row.risk_level)}`}><span className={`status-chip status-chip-${String(row.risk_level || '').toLowerCase()}`}>{row.risk_level}</span> <span className="ml-2">({row.risk_score})</span></td>
-                          <td className="text-slate-300">{row.exception_count}</td>
-                          <td className="text-slate-300">{row.exception_rate}%</td>
-                          <td className="text-slate-300">{toCurrency(row.variance_amount, 'INR')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>
-                      Showing {(accountPage - 1) * PAGE_SIZE_ACCOUNT + (paginatedAccounts.length ? 1 : 0)}-
-                      {(accountPage - 1) * PAGE_SIZE_ACCOUNT + paginatedAccounts.length} of {visibleAccounts.length}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button className="btn-secondary py-1 px-2 text-xs" disabled={accountPage <= 1} onClick={() => setAccountPage((p) => Math.max(1, p - 1))}>Prev</button>
-                      <span>Page {accountPage} / {Math.max(1, Math.ceil(visibleAccounts.length / PAGE_SIZE_ACCOUNT))}</span>
-                      <button className="btn-secondary py-1 px-2 text-xs" disabled={accountPage >= Math.ceil(visibleAccounts.length / PAGE_SIZE_ACCOUNT)} onClick={() => setAccountPage((p) => p + 1)}>Next</button>
-                    </div>
-                  </div>
-                </div>
-                <div className="border-t border-surface-700 pt-4">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-100">{selectedAccount ? `Transactions for ${selectedAccount}` : 'Select an account'}</p>
-                    {selectedAccount ? <button className="btn-secondary" onClick={() => setSelectedAccount('')}>Clear</button> : null}
-                  </div>
-                  {selectedAccount ? (
-                    <>
-                      <div className="mb-3 rounded-lg border border-surface-700 p-3">
-                        <p className="text-xs text-slate-400 mb-2">Exception mix</p>
-                        {!exceptionBreakdown.length ? <p className="text-xs text-slate-500">No exceptions in selected account.</p> : null}
-                        <div className="space-y-1">
-                          {exceptionBreakdown.slice(0, 5).map((row) => (
-                            <div key={row.label} className="flex items-center justify-between text-xs text-slate-300">
-                              <span>{row.label}</span>
-                              <span className="font-semibold">{row.count}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {selectedTransactions.length ? (
-                        <div className="space-y-2">
-                          {paginatedTransactions.map((row) => (
-                            <div key={`${row.record_id}-${row.reference}`} className="rounded-xl border border-surface-700 bg-surface-900/40 p-3">
-                              <p className="text-sm font-medium text-slate-100">{row.reference}</p>
-                              <p className="mt-1 text-xs text-slate-400">{row.exception_classification} | {toCurrency(row.match_variance, 'INR')} variance | {String(row.status || '').toUpperCase()}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-400">No transactions available for this account.</p>
-                      )}
-                      {selectedTransactions.length ? (
-                        <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                          <span>
-                            Showing {(txnPage - 1) * PAGE_SIZE_TXN + (paginatedTransactions.length ? 1 : 0)}-
-                            {(txnPage - 1) * PAGE_SIZE_TXN + paginatedTransactions.length} of {selectedTransactions.length}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button className="btn-secondary py-1 px-2 text-xs" disabled={txnPage <= 1} onClick={() => setTxnPage((p) => Math.max(1, p - 1))}>Prev</button>
-                            <span>Page {txnPage} / {Math.max(1, Math.ceil(selectedTransactions.length / PAGE_SIZE_TXN))}</span>
-                            <button className="btn-secondary py-1 px-2 text-xs" disabled={txnPage >= Math.ceil(selectedTransactions.length / PAGE_SIZE_TXN)} onClick={() => setTxnPage((p) => p + 1)}>Next</button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="text-sm text-slate-400">Pick an account from the table or chart to inspect transaction-level risk.</p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </>
-        ) : null}
       </div>
     </div>
   )

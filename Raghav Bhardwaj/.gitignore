@@ -60,3 +60,13 @@ coverage/
 
 # Keep sample evidence folder structure if needed
 !evidences/.gitkeep
+
+.env
+*.db
+*.db-wal
+*.db-shm
+uploads/
+node_modules/
+__pycache__/
+.venv/
+dist/

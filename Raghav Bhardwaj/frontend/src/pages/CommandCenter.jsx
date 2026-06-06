@@ -1,95 +1,85 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ArrowRight,
-  BookOpen,
-  Zap,
-  AlertTriangle,
-  Grid2x2,
-  Info,
-  List,
-  Plus,
-  Search,
-  X,
+  ArrowRight, BookOpen, Zap, AlertTriangle,
+  Grid2x2, List, Plus, Search, X, ChevronRight,
+  TrendingUp, CheckCircle2, Clock, ShieldAlert, BarChart3,
+  AlertTriangle as AlertIcon,
 } from 'lucide-react'
-import { projectsAPI } from '../api'
+import { projectsAPI, enterpriseAPI } from '../api'
+import { advancedAPI } from '../api'
 import { LoadingState } from '../components/ui/PageState'
 import ProjectCreationModal from '../components/ProjectCreationModal'
+import { useProjectStore } from '../store/projectStore'
 
-const TILE_CARD_HEIGHT = 174
-const TILE_ROW_GAP = 10
-const LIST_ROW_HEIGHT = 74
-const LIST_ROW_GAP = 12
-const PAGINATION_HEIGHT = 56
+// ── Fixed tile dimensions ────────────────────────────────────
+const TILE_MIN_W = 200   // px — minimum tile width (responsive)
+const TILE_H     = 152   // px — compact tile height (3 rows fit easily)
+const TILE_GAP   = 10    // px — gap between tiles
+const LIST_ROW_H = 65    // px — list row height (including border)
 
-function getVisibleItemCount({ height, columns, view }) {
-  if (!height) return view === 'tile' ? columns : 3
-
-  if (view === 'tile') {
-    const rows = Math.max(1, Math.floor((height + TILE_ROW_GAP) / (TILE_CARD_HEIGHT + TILE_ROW_GAP)))
-    return rows * columns
-  }
-
-  return Math.max(1, Math.floor((height + LIST_ROW_GAP) / (LIST_ROW_HEIGHT + LIST_ROW_GAP)))
-}
-
+// ── Project Info Modal ────────────────────────────────────────
 function ProjectInfoModal({ project, onClose }) {
   if (!project) return null
-
-  const sourceLabel = project.source_dataset_name || 'source'
-  const targetLabel = project.target_dataset_name || 'target'
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-      <div className="card w-full max-w-xl overflow-hidden">
-        <div className="h-14 px-5 border-b border-surface-700/60 flex items-center justify-between">
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Project Information</p>
-            <h2 className="text-sm font-semibold text-slate-100 truncate">{project.name}</h2>
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', padding: 16,
+    }}>
+      <div style={{
+        background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+        borderTop: '3px solid #FFE600', borderRadius: 12,
+        width: '100%', maxWidth: 520,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.40)', overflow: 'hidden',
+        fontFamily: 'Inter, sans-serif',
+      }}>
+        <div style={{
+          height: 56, padding: '0 20px', borderBottom: '1px solid var(--border-1)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
+              Project Information
+            </p>
+            <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {project.name}
+            </h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 rounded-lg border border-surface-700/70 bg-surface-900/40 flex items-center justify-center text-slate-400 hover:text-slate-100"
-            title="Close"
-          >
-            <X className="w-4 h-4" />
+          <button type="button" onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border-2)',
+            background: 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: 'var(--text-secondary)',
+          }}>
+            <X style={{ width: 14, height: 14 }} />
           </button>
         </div>
-
-        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div>
-            <p className="text-xs text-slate-500">Project ID</p>
-            <p className="font-semibold text-slate-100">#{project.id}</p>
+        <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {[
+            { label: 'Project ID',  value: `#${project.id}` },
+            { label: 'Status',      value: project.status || '-' },
+            { label: 'Source',      value: project.source_dataset_name || 'source' },
+            { label: 'Target',      value: project.target_dataset_name || 'target' },
+            { label: 'Created by',  value: project.created_by_username || project.owner_username || '-' },
+            { label: 'Updated by',  value: project.updated_by_username || project.owner_username || '-' },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>{label}</p>
+              <p style={{ margin: '2px 0 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</p>
+            </div>
+          ))}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>Last updated</p>
+            <p style={{ margin: '2px 0 0', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+              {project.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}
+            </p>
           </div>
-          <div>
-            <p className="text-xs text-slate-500">Status</p>
-            <p className="font-semibold text-slate-100 capitalize">{project.status || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Source</p>
-            <p className="font-semibold text-slate-100 truncate">{sourceLabel}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Target</p>
-            <p className="font-semibold text-slate-100 truncate">{targetLabel}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Created by</p>
-            <p className="font-semibold text-slate-100">{project.created_by_username || project.owner_username || '-'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500">Updated by</p>
-            <p className="font-semibold text-slate-100">{project.updated_by_username || project.owner_username || '-'}</p>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-slate-500">Last updated</p>
-            <p className="font-semibold text-slate-100">{project.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}</p>
-          </div>
-          <div className="sm:col-span-2">
-            <p className="text-xs text-slate-500">Description</p>
-            <p className="text-slate-100">{project.description || 'No description provided'}</p>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>Description</p>
+            <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              {project.description || 'No description provided.'}
+            </p>
           </div>
         </div>
       </div>
@@ -97,345 +87,497 @@ function ProjectInfoModal({ project, onClose }) {
   )
 }
 
-function ProjectCard({ project, onOpenWorkspace, onShowInfo }) {
-  const sourceLabel = project.source_dataset_name || 'source'
-  const targetLabel = project.target_dataset_name || 'target'
+// ── Tile Card — fixed size ────────────────────────────────────
+function ProjectTileCard({ project }) {
+  const navigate = useNavigate()
+  const src = project.source_dataset_name || 'source'
+  const tgt = project.target_dataset_name || 'target'
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpenWorkspace}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onOpenWorkspace()
-        }
-      }}
-      className="card h-[174px] p-4 space-y-2.5 border-surface-700 text-left w-full transition hover:-translate-y-0.5 hover:border-brand-500/40"
+    <div style={{
+      height: TILE_H, width: '100%', minWidth: 0,
+      position: 'relative', display: 'flex', flexDirection: 'column',
+      borderRadius: 12, border: '1px solid var(--border-1)',
+      background: 'var(--surface-2)', overflow: 'hidden',
+      fontFamily: 'Inter, sans-serif',
+      transition: 'border-color 140ms, box-shadow 140ms',
+      boxSizing: 'border-box',
+    }}
+    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.35)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.22)' }}
+    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-1)'; e.currentTarget.style.boxShadow = 'none' }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-[13px] font-semibold text-slate-100 truncate">{project.name}</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            {`source-${sourceLabel}, target-${targetLabel}`}
+      {/* EY yellow accent bar */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#FFE600' }} />
+
+      <div style={{ padding: '12px 12px 10px', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+
+        {/* Row 1: Title + ID */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+          <h3 style={{
+            margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            flex: 1, minWidth: 0, letterSpacing: '-0.01em', lineHeight: 1.2,
+          }}>
+            {project.name}
+          </h3>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, height: 22, padding: '0 8px', borderRadius: 6,
+            border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+            fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)',
+          }}>
+            #{project.id}
+          </span>
+        </div>
+
+        {/* Row 2: Source / target */}
+        <p style={{ margin: '2px 0 6px', fontSize: 10.5, color: 'var(--text-tertiary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {src}, {tgt}
+        </p>
+
+        {/* Row 3: Compact meta — created + last updated on one line */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 'auto' }}>
+          <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--text-disabled)' }}>By:</span> {project.created_by_username || 'admin'}
+          </p>
+          <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ color: 'var(--text-disabled)' }}>Updated:</span> {project.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onKeyDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation()
-              onShowInfo()
+
+        {/* Row 4: Action buttons */}
+        <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'nowrap' }}>
+          {/* Ingestion */}
+          <button type="button"
+            onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}/ingestion`) }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              height: 26, padding: '0 8px', borderRadius: 5,
+              border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+              color: 'var(--text-primary)', fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+              transition: 'border-color 100ms, background 100ms', flexShrink: 0,
             }}
-            className="w-7 h-7 rounded-lg border border-surface-700/70 bg-surface-900/40 flex items-center justify-center text-slate-400 hover:text-slate-100"
-            title="Project information"
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.30)'; e.currentTarget.style.background = 'var(--surface-4)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = 'var(--surface-3)' }}
           >
-            <Info className="w-3.5 h-3.5" />
+            <BookOpen style={{ width: 11, height: 11 }} /> Ingestion
           </button>
-          <div className="text-[10px] font-semibold px-2 py-0.5 bg-surface-700 text-slate-200 rounded whitespace-nowrap">
-            #{project.id}
-          </div>
+
+          {/* Rules */}
+          <button type="button"
+            onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}/rules`) }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              height: 26, padding: '0 8px', borderRadius: 5,
+              border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+              color: 'var(--text-primary)', fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+              transition: 'border-color 100ms, background 100ms', flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.30)'; e.currentTarget.style.background = 'var(--surface-4)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = 'var(--surface-3)' }}
+          >
+            <Zap style={{ width: 11, height: 11 }} /> Rules
+          </button>
+
+          {/* Run — EY yellow */}
+          <button type="button"
+            onClick={(e) => { e.stopPropagation(); navigate(`/projects/${project.id}/results`) }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              height: 26, padding: '0 10px', borderRadius: 5,
+              border: '1px solid #E6CF00', background: '#FFE600',
+              color: '#1A1A24', fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+              transition: 'background 100ms, box-shadow 100ms', flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#FFED4A'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(255,230,0,0.28)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#FFE600'; e.currentTarget.style.boxShadow = 'none' }}
+          >
+            <ArrowRight style={{ width: 11, height: 11 }} /> Run
+          </button>
         </div>
-      </div>
-
-      <div className="space-y-0.5 text-[11px] text-slate-300">
-        <p>Created by: <span className="text-slate-100">{project.created_by_username || project.owner_username || '-'}</span></p>
-        <p>Updated by: <span className="text-slate-100">{project.updated_by_username || project.owner_username || '-'}</span></p>
-        <p>Last updated: <span className="text-slate-100">{project.updated_at ? new Date(project.updated_at).toLocaleString() : '-'}</span></p>
-      </div>
-
-      <div className="flex gap-2">
-        <span className="btn-secondary py-1.5 px-2.5 text-[11px] flex items-center gap-1.5 flex-1 justify-center">
-          <BookOpen className="w-3.5 h-3.5" />
-          Ingestion
-        </span>
-        <span className="btn-secondary py-1.5 px-2.5 text-[11px] flex items-center gap-1.5 flex-1 justify-center">
-          <Zap className="w-3.5 h-3.5" />
-          Rules
-        </span>
-        <span className="btn-primary py-1.5 px-2.5 text-[11px] flex items-center gap-1.5 flex-1 justify-center">
-          <ArrowRight className="w-3.5 h-3.5" />
-          Run
-        </span>
       </div>
     </div>
   )
 }
 
+// ── List Row ──────────────────────────────────────────────────
+function ProjectListRow({ project, onShowInfo, isLast }) {
+  const navigate = useNavigate()
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      padding: '14px 20px',
+      borderBottom: isLast ? 'none' : '1px solid var(--border-0)',
+      fontFamily: 'Inter, sans-serif', transition: 'background 100ms',
+      background: 'transparent',
+    }}
+    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-3)'}
+    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h3 style={{
+          margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)',
+          letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {project.name}
+        </h3>
+        <p style={{
+          margin: '3px 0 0', fontSize: 12, lineHeight: 1.5, color: 'var(--text-tertiary)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {project.description || 'No description provided.'}
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {/* Info */}
+        <button type="button" onClick={(e) => { e.stopPropagation(); onShowInfo() }} title="Project information"
+          style={{
+            width: 32, height: 32, borderRadius: '50%',
+            border: '1px solid var(--border-2)', background: 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', color: 'var(--text-tertiary)', flexShrink: 0,
+            transition: 'border-color 100ms, color 100ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.40)'; e.currentTarget.style.color = '#FFE600' }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+
+        {/* Open */}
+        <button type="button" onClick={() => navigate(`/projects/${project.id}/ingestion`)}
+          style={{
+            display: 'inline-flex', alignItems: 'center',
+            height: 32, padding: '0 16px', borderRadius: 6,
+            border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+            color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 600,
+            cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+            transition: 'border-color 100ms, background 100ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.35)'; e.currentTarget.style.background = 'var(--surface-4)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = 'var(--surface-3)' }}
+        >
+          Open
+        </button>
+
+        {/* Run */}
+        <button type="button" onClick={() => navigate(`/projects/${project.id}/results`)}
+          style={{
+            display: 'inline-flex', alignItems: 'center',
+            height: 32, padding: '0 16px', borderRadius: 6,
+            border: '1px solid #E6CF00', background: '#FFE600',
+            color: '#1A1A24', fontSize: 12.5, fontWeight: 700,
+            cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+            transition: 'background 100ms, box-shadow 100ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#FFED4A'; e.currentTarget.style.boxShadow = '0 3px 10px rgba(255,230,0,0.30)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#FFE600'; e.currentTarget.style.boxShadow = 'none' }}
+        >
+          Run
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Pagination bar ────────────────────────────────────────────
+function PaginationBar({ current, total, onPrev, onNext, onPage, showing, totalItems }) {
+  const visiblePages = useMemo(() => {
+    if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1)
+    const half = 2
+    let start = Math.max(1, current - half)
+    let end   = Math.min(total, current + half)
+    if (current - half < 1)      end   = Math.min(total, 5)
+    if (current + half > total)  start = Math.max(1, total - 4)
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+  }, [current, total])
+
+  // Always render — shows count even on single page, ready for overflow
+  if (total === 0) return null
+
+  return (
+    <div style={{
+      marginTop: 14, display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, flexShrink: 0,
+    }}>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--text-tertiary)' }}>
+        {showing}
+      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {total > 1 && <button type="button" disabled={current === 1} onClick={onPrev} style={{
+          height: 34, padding: '0 14px', borderRadius: 8,
+          border: '1px solid var(--border-2)', background: 'var(--surface-2)',
+          color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 600,
+          cursor: current === 1 ? 'not-allowed' : 'pointer',
+          fontFamily: 'Inter, sans-serif', opacity: current === 1 ? 0.5 : 1,
+        }}>Previous</button>}
+
+        {total > 1 && visiblePages.map((page) => {
+          const isActive = page === current
+          return (
+            <button key={page} type="button" onClick={() => onPage(page)} style={{
+              width: 34, height: 34, borderRadius: 8,
+              border: isActive ? '1px solid #E6CF00' : '1px solid var(--border-2)',
+              background: isActive ? '#FFE600' : 'var(--surface-2)',
+              color: isActive ? '#1A1A24' : 'var(--text-secondary)',
+              fontSize: 12.5, fontWeight: isActive ? 800 : 500,
+              cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+              transition: 'background 100ms, border-color 100ms',
+            }}
+            onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.30)'; e.currentTarget.style.background = 'var(--surface-3)' } }}
+            onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.background = 'var(--surface-2)' } }}
+            >{page}</button>
+          )
+        })}
+
+        {total > 1 && <button type="button" disabled={current === total} onClick={onNext} style={{
+          height: 34, padding: '0 14px', borderRadius: 8,
+          border: '1px solid var(--border-2)', background: 'var(--surface-2)',
+          color: 'var(--text-primary)', fontSize: 12.5, fontWeight: 600,
+          cursor: current === total ? 'not-allowed' : 'pointer',
+          fontFamily: 'Inter, sans-serif', opacity: current === total ? 0.5 : 1,
+        }}>Next</button>}
+      </div>
+    </div>
+  )
+}
+
+// ── CommandCenter ─────────────────────────────────────────────
 export default function CommandCenter() {
   const navigate = useNavigate()
-  const projectsAreaRef = useRef(null)
-  const [showCreationModal, setShowCreationModal] = useState(false)
-  const [infoProject, setInfoProject] = useState(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [projectView, setProjectView] = useState('tile')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [windowWidth, setWindowWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 0))
-  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 })
+  const gridRef  = useRef(null)   // measures available space for tiles
+  const listRef  = useRef(null)   // measures available space for list rows
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+  const [infoProject,    setInfoProject]    = useState(null)
+  const [currentPage,    setCurrentPage]    = useState(1)
+  const [tilesPerPage,   setTilesPerPage]   = useState(8)
+  const [rowsPerPage,    setRowsPerPage]    = useState(8)
+
+  const {
+    ccSearch: searchTerm, setCcSearch: setSearchTerm,
+    ccView: projectView,  setCcView: setProjectView,
+    ccShowModal: showCreationModal, setCcShowModal: setShowCreationModal,
+    setCcCounts,
+  } = useProjectStore()
+
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: projectsAPI.list,
   })
 
+  const { data: execDash } = useQuery({
+    queryKey: ['executive-dashboard-real'],
+    queryFn: async () => {
+      try { return await advancedAPI.executiveDashboard() }
+      catch { return null }  // silently fail for lower-privilege roles
+    },
+    refetchInterval: 60000,
+    retry: false,
+  })
+
+  // ── Measure available space → derive page size ────────────
+  const measureTileGrid = useCallback(() => {
+    const el = gridRef.current
+    if (!el) return
+    const w = el.clientWidth
+    const h = el.clientHeight
+    // Responsive cols: fill width with minimum tile width
+    const cols = Math.max(1, Math.floor((w + TILE_GAP) / (TILE_MIN_W + TILE_GAP)))
+    // Always show exactly 3 rows — fixed requirement
+    const rows = 3
+    setTilesPerPage(cols * rows)
+  }, [])
+
+  const measureListRows = useCallback(() => {
+    const el = listRef.current
+    if (!el) return
+    const h = el.clientHeight
+    // Leave 60px for pagination, 2px for container border
+    const rows = Math.max(1, Math.floor((h - 62) / LIST_ROW_H))
+    setRowsPerPage(rows)
+  }, [])
+
+  // Observe size changes
+  useEffect(() => {
+    const ro = new ResizeObserver(() => {
+      if (projectView === 'tile') measureTileGrid()
+      else measureListRows()
+    })
+    const target = projectView === 'tile' ? gridRef.current : listRef.current
+    if (target) ro.observe(target)
+    // Initial measure
+    if (projectView === 'tile') measureTileGrid()
+    else measureListRows()
+    return () => ro.disconnect()
+  }, [projectView, measureTileGrid, measureListRows])
+
   const filteredProjects = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
     if (!q) return projects
-    return projects.filter((project) => {
-      const haystack = [project.name, project.description, String(project.id), project.status].join(' ').toLowerCase()
-      return haystack.includes(q)
-    })
+    return projects.filter((p) =>
+      [p.name, p.description, String(p.id), p.status].join(' ').toLowerCase().includes(q)
+    )
   }, [projects, searchTerm])
 
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, projectView])
+  // Reset page when search/view changes
+  useEffect(() => { setCurrentPage(1) }, [searchTerm, projectView])
+
+  const activeCount = useMemo(
+    () => projects.filter((p) => String(p.status || '').toLowerCase() === 'active').length,
+    [projects]
+  )
 
   useEffect(() => {
-    const element = projectsAreaRef.current
-    if (!element) return undefined
+    setCcCounts({ active: activeCount, inactive: projects.length - activeCount, total: projects.length })
+  }, [activeCount, projects.length, setCcCounts])
 
-    const updateViewportSize = () => {
-      setViewportSize({
-        width: element.clientWidth,
-        height: element.clientHeight,
-      })
-    }
+  const pageSize     = projectView === 'tile' ? tilesPerPage : rowsPerPage
+  const totalPages   = Math.max(1, Math.ceil(filteredProjects.length / pageSize))
+  const safePage     = Math.min(currentPage, totalPages)
 
-    updateViewportSize()
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateViewportSize)
-      return () => window.removeEventListener('resize', updateViewportSize)
-    }
-
-    const observer = new ResizeObserver(updateViewportSize)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const updateWindowWidth = () => setWindowWidth(window.innerWidth)
-    updateWindowWidth()
-    window.addEventListener('resize', updateWindowWidth)
-    return () => window.removeEventListener('resize', updateWindowWidth)
-  }, [])
-
-  const projectCounts = useMemo(() => {
-    const active = projects.filter((project) => String(project.status || '').toLowerCase() === 'active').length
-    const inactive = projects.length - active
-    return { active, inactive, total: projects.length }
-  }, [projects])
-
-  const columns = useMemo(() => {
-    if (projectView !== 'tile') return 1
-    if (windowWidth >= 1280) return 4
-    if (windowWidth >= 640) return 2
-    return 1
-  }, [projectView, windowWidth])
-
-  const pageSize = useMemo(() => {
-    const height = viewportSize.height || 0
-    const fullHeightCount = getVisibleItemCount({ height, columns, view: projectView })
-    if (filteredProjects.length <= fullHeightCount) {
-      return fullHeightCount
-    }
-
-    return getVisibleItemCount({
-      height: Math.max(0, height - PAGINATION_HEIGHT),
-      columns,
-      view: projectView,
-    })
-  }, [columns, filteredProjects.length, projectView, viewportSize.height])
-
-  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize))
   const paginatedProjects = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
+    const start = (safePage - 1) * pageSize
     return filteredProjects.slice(start, start + pageSize)
-  }, [currentPage, filteredProjects, pageSize])
+  }, [safePage, filteredProjects, pageSize])
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
+    if (currentPage > totalPages) setCurrentPage(totalPages)
   }, [currentPage, totalPages])
 
-  const loading = projectsLoading
+  const showingLabel = filteredProjects.length === 0 ? 'No projects' :
+    `Showing ${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filteredProjects.length)} of ${filteredProjects.length}`
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {loading ? <LoadingState label="Loading projects..." /> : null}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
 
-        {!loading && (
-          <>
-            <div className="sticky top-0 z-20 border-b border-surface-700/60" style={{ background: 'var(--header-bg)' }}>
-              <div className="px-4 py-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Projects</p>
-                    <p className="text-base font-semibold text-slate-100">
-                      {projectCounts.total} total
-                      <span className="ml-3 text-sm font-normal text-slate-400">
-                        {projectCounts.active} active, {projectCounts.inactive} inactive
-                      </span>
-                    </p>
-                  </div>
+      {/* ── Enterprise KPI Strip ─────────────────────────────── */}
+      {execDash && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, 1fr)',
+          gap: 8,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border-1)',
+          background: 'var(--surface-1)',
+          flexShrink: 0,
+        }}>
+          {[
+            ['Profiles',        execDash.profile_summary?.total ?? '—',                                          BarChart3,    'var(--accent)',  '/reconciliation-profiles'],
+            ['Certified',       `${execDash.profile_summary?.certification_pct ?? 0}%`,                          CheckCircle2, 'var(--ok)',      '/close-certification'],
+            ['Open Exceptions', execDash.exceptions?.open ?? '—',                                                AlertIcon,    'var(--bad)',     '/exception-workbench'],
+            ['Auto-Match',      `${execDash.matching?.auto_match_rate ?? 0}%`,                                   TrendingUp,   'var(--info)',    '/transaction-matching'],
+            ['Overdue Periods', execDash.close_management?.overdue_periods ?? '—',                               Clock,        'var(--warn)',    '/close-certification'],
+            ['High Risk',       (execDash.risk_breakdown?.HIGH ?? 0) + (execDash.risk_breakdown?.CRITICAL ?? 0), ShieldAlert,  '#c026d3',       '/risk-dashboard'],
+          ].map(([label, val, Icon, color, path]) => (
+            <button key={label} onClick={() => navigate(path)} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+              borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+              transition: 'border-color 120ms', fontFamily: 'Inter, sans-serif',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = color}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-1)'}
+            >
+              <Icon style={{ width: 13, height: 13, color, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1 }}>{label}</p>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color, lineHeight: 1.2 }}>{val}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1 lg:flex-none flex items-center gap-2 rounded-xl border border-surface-700/70 bg-surface-900/40 px-3 h-10 min-w-0 md:min-w-[280px]">
-                      <Search className="w-4 h-4 text-slate-500" />
-                      <input
-                        className="w-full bg-transparent outline-none text-sm text-slate-100 placeholder:text-slate-500"
-                        placeholder="Search projects..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
+      {/* ── Main content area ────────────────────────────────── */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {isLoading ? (
+          <LoadingState label="Loading projects..." />
+        ) : (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '16px 20px' }}>
 
-                    <div className="flex items-center rounded-xl border border-surface-700/70 bg-surface-900/40 p-1 h-10">
-                      <button
-                        type="button"
-                        onClick={() => setProjectView('list')}
-                        className={`h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-2 transition ${
-                          projectView === 'list' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400 hover:text-slate-100'
-                        }`}
-                      >
-                        <List className="w-3.5 h-3.5" />
-                        List
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setProjectView('tile')}
-                        className={`h-8 px-3 rounded-lg text-xs font-medium flex items-center gap-2 transition ${
-                          projectView === 'tile' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400 hover:text-slate-100'
-                        }`}
-                      >
-                        <Grid2x2 className="w-3.5 h-3.5" />
-                        Tile
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowCreationModal(true)}
-                      className="h-10 px-4 rounded-xl border border-brand-500/40 bg-brand-500/10 text-brand-200 hover:bg-brand-500/15 transition flex items-center gap-2 text-sm font-semibold"
-                    >
-                      <Plus className="w-4 h-4" />
-                      New Project
-                    </button>
-                  </div>
+            {/* Empty state */}
+            {filteredProjects.length === 0 && (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{
+                  background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+                  borderRadius: 12, padding: 32, textAlign: 'center', maxWidth: 380,
+                }}>
+                  <AlertTriangle style={{ width: 28, height: 28, color: 'var(--text-tertiary)', margin: '0 auto 12px' }} />
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {projects.length === 0 ? 'No projects yet' : 'No projects match your search'}
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'var(--text-tertiary)' }}>
+                    {projects.length === 0
+                      ? 'Click "New Project" to create your first reconciliation project'
+                      : 'Try a different search term or clear the filter'}
+                  </p>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Projects Grid */}
-            <div ref={projectsAreaRef} className="flex-1 min-h-0 flex flex-col overflow-hidden p-4">
-              {filteredProjects.length === 0 ? (
-                <div className="flex-1 min-h-0 flex items-center justify-center">
-                  <div className="card p-6 text-center max-w-md w-full">
-                    <AlertTriangle className="w-7 h-7 text-slate-500 mx-auto mb-2" />
-                    <p className="text-slate-400">{projects.length === 0 ? 'No projects yet' : 'No projects match your search'}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {projects.length === 0 ? 'Click "New Project" to create your first reconciliation project' : 'Try a different search term or clear the filter'}
-                    </p>
+            {/* ── TILE view ──────────────────────────────────── */}
+            {filteredProjects.length > 0 && projectView === 'tile' && (
+              <div ref={gridRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{
+                  flex: 1, minHeight: 0, overflow: 'hidden',
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_MIN_W}px, 1fr))`,
+                  gridAutoRows: TILE_H,
+                  gap: TILE_GAP,
+                  alignContent: 'start',
+                }}>
+                  {paginatedProjects.map((p) => (
+                    <ProjectTileCard key={p.id} project={p} />
+                  ))}
+                </div>
+
+                <PaginationBar
+                  current={safePage} total={totalPages}
+                  onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  onPage={setCurrentPage}
+                  showing={showingLabel}
+                  totalItems={filteredProjects.length}
+                />
+              </div>
+            )}
+
+            {/* ── LIST view ──────────────────────────────────── */}
+            {filteredProjects.length > 0 && projectView === 'list' && (
+              <div ref={listRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  <div style={{
+                    background: 'var(--surface-2)', border: '1px solid var(--border-1)',
+                    borderRadius: 10, overflow: 'hidden',
+                  }}>
+                    {paginatedProjects.map((p, idx) => (
+                      <ProjectListRow
+                        key={p.id} project={p}
+                        isLast={idx === paginatedProjects.length - 1}
+                        onShowInfo={() => setInfoProject(p)}
+                      />
+                    ))}
                   </div>
                 </div>
-              ) : (
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  {projectView === 'list' ? (
-                    <div className="space-y-3">
-                      {paginatedProjects.map((project) => (
-                        <div key={project.id} className="card h-[74px] px-4 border-surface-700 flex items-center justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-sm font-semibold text-slate-100 truncate">{project.name}</h3>
-                            <p className="text-xs text-slate-400 mt-1 truncate">{project.description || 'No description provided'}</p>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <button
-                              type="button"
-                              className="w-9 h-9 rounded-lg border border-surface-700/70 bg-surface-900/40 flex items-center justify-center text-slate-400 hover:text-slate-100"
-                              onClick={() => setInfoProject(project)}
-                              title="Project information"
-                            >
-                              <Info className="w-4 h-4" />
-                            </button>
-                            <button className="btn-secondary py-2 px-3 text-xs" onClick={() => navigate(`/projects/${project.id}/ingestion`)}>
-                              Open
-                            </button>
-                            <button className="btn-primary py-2 px-3 text-xs" onClick={() => navigate(`/projects/${project.id}/results`)}>
-                              Run
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
-                      {paginatedProjects.map((project) => (
-                        <ProjectCard
-                          key={project.id}
-                          project={project}
-                          onOpenWorkspace={() => navigate(`/projects/${project.id}/ingestion`)}
-                          onShowInfo={() => setInfoProject(project)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {filteredProjects.length > pageSize ? (
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-slate-500">
-                    Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredProjects.length)} of {filteredProjects.length}
-                  </p>
+                <PaginationBar
+                  current={safePage} total={totalPages}
+                  onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  onPage={setCurrentPage}
+                  showing={showingLabel}
+                  totalItems={filteredProjects.length}
+                />
+              </div>
+            )}
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="btn-secondary px-3 py-2 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => {
-                        const isActive = page === currentPage
-                        return (
-                          <button
-                            key={page}
-                            type="button"
-                            onClick={() => setCurrentPage(page)}
-                            className={`min-w-9 h-9 px-3 rounded-lg border text-xs font-semibold transition ${
-                              isActive
-                                ? 'border-brand-500/50 bg-brand-500/15 text-slate-100'
-                                : 'border-surface-700/70 bg-surface-900/40 text-slate-400 hover:text-slate-100 hover:border-surface-500'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-secondary px-3 py-2 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </>
+          </div>
         )}
       </div>
 
