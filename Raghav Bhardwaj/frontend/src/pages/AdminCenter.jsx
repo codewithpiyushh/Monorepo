@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { auditAPI, enterpriseAPI } from '../api'
+import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
 import { ArrowRight } from 'lucide-react'
@@ -31,9 +32,10 @@ function RiskBadge({ value }) {
 export default function AdminCenter() {
   const navigate   = useNavigate()
   const [activeTab, setActiveTab] = useState('audit')
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
 
   const { data: auditPage,   isLoading: auditLoading }    = useQuery({ queryKey: ['admin-audit-preview'],  queryFn: () => auditAPI.list({ page: 1, page_size: 15 }) })
-  const { data: profiles = [],isLoading: profilesLoading } = useQuery({ queryKey: ['admin-profiles'],       queryFn: enterpriseAPI.listProfiles })
+  const { data: profiles = [],isLoading: profilesLoading } = useQuery({ queryKey: ['admin-profiles', selectedProjectId || 'all'], queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined) })
   const { data: workflows = [],isLoading: workflowsLoading}= useQuery({ queryKey: ['admin-cert-workflows'], queryFn: () => enterpriseAPI.listCertificationWorkflows() })
 
   const loading    = auditLoading || profilesLoading || workflowsLoading

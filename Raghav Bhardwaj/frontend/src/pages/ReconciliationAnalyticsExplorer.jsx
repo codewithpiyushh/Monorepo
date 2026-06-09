@@ -84,19 +84,120 @@ function ChartCard({ title, subtitle, children, height = 260 }) {
 
 function MatchTrendChart({ data }) {
   if (!data.length) return <EmptyState title="No execution trend yet" description="Run the selected project to populate trend data." />
+  
   const option = {
     ...BASE_CHART,
-    tooltip: { trigger: 'axis', backgroundColor: '#1e293b', borderColor: '#334155' },
-    legend: { data: ['Match Rate', 'Matched', 'Unmatched'], bottom: 0, textStyle: { color: COLORS.slate, fontSize: 10 } },
-    xAxis: { type: 'category', data: data.map((d) => d.label), axisLabel: { color: '#64748b', fontSize: 10 }, axisLine: { lineStyle: { color: '#334155' } } },
+    // Maximize space, push everything to the edges
+    grid: { left: 0, right: 0, top: 40, bottom: 20, containLabel: true }, 
+    
+    // Premium frosted-glass style tooltip
+    tooltip: { 
+      trigger: 'axis', 
+      backgroundColor: 'rgba(15, 23, 42, 0.9)', // Deep slate with opacity
+      borderColor: 'rgba(51, 65, 85, 0.5)',
+      textStyle: { color: '#f8fafc', fontSize: 12 },
+      axisPointer: { type: 'line', lineStyle: { color: 'rgba(99, 102, 241, 0.3)', width: 2 } },
+      padding: [12, 16],
+      borderRadius: 8,
+      extraCssText: 'backdrop-filter: blur(4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);'
+    },
+    
+    // Sleek legend floating top right
+    legend: { 
+      data: ['Match Rate', 'Matched', 'Unmatched'], 
+      top: 0, 
+      right: 10,
+      icon: 'circle', 
+      itemWidth: 8, 
+      textStyle: { color: 'var(--text-tertiary)', fontSize: 11, fontWeight: 500 } 
+    },
+    
+    xAxis: { 
+      type: 'category', 
+      data: data.map((d) => d.label), 
+      axisLine: { show: false }, // Zero chart junk
+      axisTick: { show: false }, 
+      axisLabel: { color: 'var(--text-tertiary)', fontSize: 11, margin: 16, fontWeight: 500 } 
+    },
+    
     yAxis: [
-      { type: 'value', max: 100, axisLabel: { color: '#64748b', fontSize: 10, formatter: '{value}%' }, splitLine: { lineStyle: { color: '#1e293b' } } },
-      { type: 'value', axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { show: false } },
+      { 
+        type: 'value', 
+        max: 100, 
+        splitLine: { show: false }, // Completely remove grid lines
+        axisLabel: { show: false }  // Hide Y-axis numbers (rely on tooltips & labels)
+      },
+      { 
+        type: 'value', 
+        splitLine: { show: false }, 
+        axisLabel: { show: false } 
+      },
     ],
+    
     series: [
-      { name: 'Match Rate', type: 'line', yAxisIndex: 0, smooth: true, data: data.map((d) => d.match_rate), lineStyle: { color: COLORS.green, width: 2 }, itemStyle: { color: COLORS.green } },
-      { name: 'Matched', type: 'bar', yAxisIndex: 1, data: data.map((d) => d.matched), itemStyle: { color: `${COLORS.blue}99` }, barMaxWidth: 24 },
-      { name: 'Unmatched', type: 'bar', yAxisIndex: 1, data: data.map((d) => d.unmatched), itemStyle: { color: `${COLORS.red}99` }, barMaxWidth: 24 },
+      // 1. The Glowing Area Trend Line
+      { 
+        name: 'Match Rate', 
+        type: 'line', 
+        yAxisIndex: 0, 
+        smooth: 0.4, // High-tension smooth curve
+        showSymbol: false, // Hide ugly dots
+        z: 3, // Bring to front
+        lineStyle: { 
+          color: COLORS.cyan, 
+          width: 3,
+          shadowColor: 'rgba(56, 189, 248, 0.5)', // Neon glow effect
+          shadowBlur: 12,
+          shadowOffsetY: 4
+        }, 
+        // Smooth gradient fading down to zero
+        areaStyle: {
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(56, 189, 248, 0.3)' },
+              { offset: 1, color: 'rgba(56, 189, 248, 0.0)' }
+            ]
+          }
+        },
+        data: data.map((d) => d.match_rate), 
+      },
+      
+      // 2. Ultra-thin Gradient Bars
+      { 
+        name: 'Matched', 
+        type: 'bar', 
+        yAxisIndex: 1, 
+        data: data.map((d) => d.matched), 
+        barMaxWidth: 8, // Very thin bars
+        itemStyle: { 
+          borderRadius: 8, // Pill shaped
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: COLORS.blue },
+              { offset: 1, color: 'rgba(99, 102, 241, 0.2)' } // Fades down
+            ]
+          }
+        }, 
+      },
+      { 
+        name: 'Unmatched', 
+        type: 'bar', 
+        yAxisIndex: 1, 
+        data: data.map((d) => d.unmatched), 
+        barMaxWidth: 8, 
+        itemStyle: { 
+          borderRadius: 8, 
+          color: {
+            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: COLORS.red },
+              { offset: 1, color: 'rgba(239, 68, 68, 0.2)' }
+            ]
+          }
+        }, 
+      },
     ],
   }
   return <ReactECharts option={option} style={{ height: '100%' }} notMerge />

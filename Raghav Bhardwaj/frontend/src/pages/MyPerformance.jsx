@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
+import { useProjectStore } from '../store/projectStore'
 import { enterpriseAPI } from '../api'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
@@ -16,6 +17,7 @@ function toHours(start, end) {
 
 export default function MyPerformance() {
   const user = useAuthStore((s) => s.user)
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
   const role = normalizeRole(user?.role || 'user')
 
   const subtitle = useMemo(() => {
@@ -25,8 +27,8 @@ export default function MyPerformance() {
   }, [role])
 
   const { data: profiles = [], isLoading: profilesLoading } = useQuery({
-    queryKey: ['enterprise-profiles'],
-    queryFn: enterpriseAPI.listProfiles,
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
   })
 
   const { data: workflows = [], isLoading: workflowsLoading } = useQuery({

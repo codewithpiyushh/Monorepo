@@ -334,6 +334,7 @@ class ReconciliationProfile(Base):
     __tablename__ = "reconciliation_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     name = Column(String(120), unique=True, nullable=False)
     reconciliation_type = Column(String(50), nullable=False)
     frequency = Column(String(30), nullable=False)

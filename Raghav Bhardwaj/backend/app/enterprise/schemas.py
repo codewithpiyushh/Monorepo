@@ -17,6 +17,7 @@ class IngestionBatchOut(BaseModel):
 
 
 class ProfileCreate(BaseModel):
+    project_id: Optional[int] = None
     name: str
     reconciliation_type: str
     frequency: str
@@ -35,6 +36,7 @@ class ProfileCreate(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    project_id: Optional[int] = None
     name: Optional[str] = None
     reconciliation_type: Optional[str] = None
     frequency: Optional[str] = None

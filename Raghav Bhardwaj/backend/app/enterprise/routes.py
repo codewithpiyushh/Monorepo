@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER
+from ..rbac.roles import ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR
 from ..models.models import ReconciliationAttachment, AuditPackage
 from .schemas import (
     IngestionBatchCreate,
@@ -85,22 +85,22 @@ def load_batch(batch_id: str, profile_id: int, db: Session = Depends(get_db), cu
 
 
 @router.get("/ingestion/summary")
-def ingestion_summary(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def ingestion_summary(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.get_ingestion_summary(db)
 
 
 @router.post("/profiles")
-def create_profile(payload: ProfileCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
+def create_profile(payload: ProfileCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
     return repository.create_profile(db, payload)
 
 
 @router.get("/profiles")
-def list_profiles(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    return repository.list_profiles(db, role=current_user.role, user_id=current_user.id)
+def list_profiles(project_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
+    return repository.list_profiles(db, role=current_user.role, user_id=current_user.id, project_id=project_id)
 
 
 @router.get("/profiles/{profile_id}/transactions")
-def list_profile_transactions(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_profile_transactions(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.profile_transactions_analytics(db, profile_id)
     except Exception as exc:
@@ -108,7 +108,7 @@ def list_profile_transactions(profile_id: int, db: Session = Depends(get_db), cu
 
 
 @router.patch("/profiles/{profile_id}")
-def update_profile(profile_id: int, payload: ProfileUpdate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
+def update_profile(profile_id: int, payload: ProfileUpdate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN]))):
     try:
         raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
         update_payload = {k: v for k, v in raw.items() if v is not None}
@@ -147,12 +147,12 @@ def matching_suggestions(payload: MatchSuggestionRequest, db: Session = Depends(
 
 
 @router.get("/exceptions")
-def list_exceptions(queue_type: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_exceptions(queue_type: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_exceptions(db, queue_type, current_user.role, current_user.id)
 
 
 @router.get("/notifications")
-def list_notifications(limit: int = 12, unread_only: bool = False, offset: int = 0, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_notifications(limit: int = 12, unread_only: bool = False, offset: int = 0, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     """Get paginated list of notifications for current user"""
     return service.list_notifications(db, current_user.id, unread_only, limit, offset)
 
@@ -203,7 +203,7 @@ def submit_exception(payload: WorkflowActionRequest, db: Session = Depends(get_d
 
 
 @router.post("/exceptions/approve")
-def approve_exception(payload: WorkflowActionRequest, db: Session = Depends(get_db), current_user=Depends(role_required([REVIEWER, ADMIN]))):
+def approve_exception(payload: WorkflowActionRequest, db: Session = Depends(get_db), current_user=Depends(role_required([APPROVER, ADMIN]))):
     try:
         return service.review_exception(db, payload.exception_id, True, payload.comments, current_user.id)
     except Exception as exc:
@@ -243,7 +243,7 @@ def upload_attachment(
 
 
 @router.get("/records/{record_id}/attachments")
-def list_attachments(record_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_attachments(record_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return db.query(ReconciliationAttachment).filter(ReconciliationAttachment.reconciliation_record_id == record_id).all()
 
 
@@ -257,7 +257,7 @@ def create_close_calendar(payload: FinancialCloseCalendarCreate, db: Session = D
 
 
 @router.get("/close-calendar")
-def list_close_calendar(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_close_calendar(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return repository.list_close_calendars(db, profile_id=profile_id)
 
 
@@ -287,7 +287,7 @@ def create_certification_workflow(payload: CertificationCreateRequest, db: Sessi
 
 
 @router.get("/certification/workflows")
-def list_certification_workflows(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_certification_workflows(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return repository.list_certification_workflows(db, profile_id=profile_id)
 
 
@@ -349,7 +349,7 @@ def delete_rule_definition(rule_id: int, db: Session = Depends(get_db), current_
 
 
 @router.get("/dashboard/executive")
-def executive_dashboard(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER]))):
+def executive_dashboard(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER, AUDITOR]))):
     return service.get_dashboard_metrics(db, "admin", current_user.id)
 
 
@@ -364,7 +364,7 @@ def preparer_dashboard(db: Session = Depends(get_db), current_user=Depends(role_
 
 
 @router.get("/analytics/explorer")
-def analytics_explorer(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def analytics_explorer(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, PREPARER, CERTIFIER, AUDITOR]))):
     try:
         return service.reconciliation_analytics_explorer(db, current_user.role, current_user.id)
     except Exception:
@@ -409,7 +409,7 @@ def run_enterprise_validation(payload: ValidationRunRequest, db: Session = Depen
 
 
 @router.post("/exceptions/classify")
-def classify_exception(payload: ExceptionClassifyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def classify_exception(payload: ExceptionClassifyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER]))):
     try:
         return service.classify_exception(db, payload.exception_id, payload.classification, payload.comments, current_user.id)
     except Exception as exc:
@@ -417,7 +417,7 @@ def classify_exception(payload: ExceptionClassifyRequest, db: Session = Depends(
 
 
 @router.post("/exceptions/comment")
-def add_exception_comment(payload: ExceptionCommentRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def add_exception_comment(payload: ExceptionCommentRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.add_exception_comment(db, payload.exception_id, payload.comment, current_user.id)
     except Exception as exc:
@@ -425,7 +425,7 @@ def add_exception_comment(payload: ExceptionCommentRequest, db: Session = Depend
 
 
 @router.get("/exceptions/{exception_id}/comments")
-def list_exception_comments(exception_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_exception_comments(exception_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_exception_comments(db, exception_id)
 
 
@@ -446,7 +446,7 @@ def escalate_exception(payload: ExceptionStatusRequest, db: Session = Depends(ge
 
 
 @router.post("/exceptions/reopen")
-def reopen_exception(payload: ExceptionStatusRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def reopen_exception(payload: ExceptionStatusRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.reopen_exception(db, payload.exception_id, payload.comments, current_user.id)
     except Exception as exc:
@@ -454,7 +454,7 @@ def reopen_exception(payload: ExceptionStatusRequest, db: Session = Depends(get_
 
 
 @router.post("/evidence/ocr")
-def ocr_extract(payload: OCRExtractRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def ocr_extract(payload: OCRExtractRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.ocr_extract_evidence(db, payload.attachment_id)
     except Exception as exc:
@@ -462,7 +462,7 @@ def ocr_extract(payload: OCRExtractRequest, db: Session = Depends(get_db), curre
 
 
 @router.post("/evidence/preview")
-def preview_evidence(payload: DocumentPreviewRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def preview_evidence(payload: DocumentPreviewRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.preview_evidence(db, payload.attachment_id)
     except Exception as exc:
@@ -479,7 +479,7 @@ def create_evidence_version(payload: EvidenceVersionRequest, db: Session = Depen
 
 
 @router.get("/evidence/{attachment_id}/history")
-def evidence_history(attachment_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def evidence_history(attachment_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_evidence_history(db, attachment_id)
 
 
@@ -508,7 +508,7 @@ def restore_snapshot(payload: SnapshotRestoreRequest, db: Session = Depends(get_
 
 
 @router.post("/snapshots/compare")
-def compare_snapshots(payload: SnapshotCompareRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def compare_snapshots(payload: SnapshotCompareRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     try:
         return service.compare_snapshots(db, payload.base_snapshot_id, payload.compare_snapshot_id)
     except Exception as exc:
@@ -530,12 +530,12 @@ def create_fx_rate(payload: ExchangeRateCreate, db: Session = Depends(get_db), c
 
 
 @router.post("/fx/convert")
-def convert_fx(payload: CurrencyConvertRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def convert_fx(payload: CurrencyConvertRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.convert_currency(db, payload.amount, payload.from_currency, payload.to_currency, payload.conversion_date)
 
 
 @router.get("/fx/reconciliation/{profile_id}")
-def fx_reconciliation(profile_id: int, reporting_currency: str, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def fx_reconciliation(profile_id: int, reporting_currency: str, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.fx_reconciliation(db, profile_id, reporting_currency)
 
 
@@ -585,12 +585,12 @@ def auto_journal(payload: AutoJournalRequest, db: Session = Depends(get_db), cur
 
 
 @router.get("/variance/{profile_id}")
-def variance(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def variance(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.variance_analysis(db, profile_id)
 
 
 @router.post("/search")
-def advanced_search(payload: AdvancedSearchRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def advanced_search(payload: AdvancedSearchRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
     return service.advanced_search(db, raw)
 
@@ -602,13 +602,13 @@ def bulk_actions(payload: BulkActionRequest, db: Session = Depends(get_db), curr
 
 
 @router.post("/comments")
-def add_comment(payload: CommentCreateRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def add_comment(payload: CommentCreateRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
     return service.add_comment(db, raw, current_user.id)
 
 
 @router.get("/comments/{profile_id}")
-def list_comments(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_comments(profile_id: int, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_comments(db, profile_id)
 
 
@@ -647,7 +647,7 @@ def upsert_setting(payload: EnterpriseSettingRequest, db: Session = Depends(get_
 
 
 @router.get("/settings")
-def list_settings(category: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_settings(category: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_enterprise_settings(db, category)
 
 
@@ -658,7 +658,7 @@ def create_dependency(payload: DependencyRequest, db: Session = Depends(get_db),
 
 
 @router.get("/dependencies")
-def list_dependencies(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_dependencies(profile_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.list_dependencies(db, profile_id)
 
 
@@ -684,13 +684,13 @@ def job_metrics(db: Session = Depends(get_db), current_user=Depends(role_require
 
 # --- Analytics & Risk endpoints (scaffold) ---
 @router.get("/analytics/summary")
-def analytics_summary(period: str | None = None, entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def analytics_summary(period: str | None = None, entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     """Executive summary KPIs for analytics explorer"""
     return service.analytics_dashboard_summary(db, period=period, entity=entity, user_id=current_user.id)
 
 
 @router.get("/analytics/drilldown")
-def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: int = 50, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: int = 50, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     """Drilldown data for a specific level (entity/account/recon/exception)"""
     return service.analytics_drilldown(db, level=level, key=key, limit=limit, user_id=current_user.id)
 
@@ -702,13 +702,13 @@ def calculate_risk(db: Session = Depends(get_db), current_user=Depends(role_requ
 
 
 @router.get("/risk/heatmap")
-def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, PREPARER, CERTIFIER, AUDITOR]))):
     """Return a heatmap summary for risk dashboard"""
     return service.list_risk_heatmap(db, entity)
 
 
 @router.get("/governance/policies")
-def get_governance_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def get_governance_policies(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR]))):
     return service.get_governance_policies(db)
 
 
@@ -749,6 +749,7 @@ def clone_profile(
 
     new_name = payload.get("name") or f"{src.name} (Copy)"
     new_profile = ReconciliationProfile(
+        project_id=src.project_id,
         name=new_name,
         reconciliation_type=src.reconciliation_type,
         frequency=src.frequency,
@@ -826,6 +827,7 @@ def rollover_profile(
     new_name = f"{base_name} – {next_period}"
 
     new_profile = ReconciliationProfile(
+        project_id=src.project_id,
         name=new_name,
         reconciliation_type=src.reconciliation_type,
         frequency=src.frequency,
@@ -1024,7 +1026,7 @@ def update_close_task(
 @router.get("/analytics/enhanced")
 def enhanced_analytics(
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER])),
+    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR])),
 ):
     """
     Real analytics from enterprise profile data:
@@ -1201,7 +1203,7 @@ def get_match_suggestions_advanced(
     top_k: int = 25,
     min_confidence: float = 0.50,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER])),
+    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER, AUDITOR])),
 ):
     try:
         return service.get_match_suggestions_advanced(db, profile_id, top_k, min_confidence)

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { enterpriseAPI, schedulesAPI } from '../api'
+import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { Workflow, CalendarDays, SlidersHorizontal, BarChart3, ArrowRight } from 'lucide-react'
 import { LoadingState } from '../components/ui/PageState'
@@ -61,7 +62,11 @@ const TONE_STYLES = {
 }
 
 export default function ReconciliationsHub() {
-  const { data: profiles  = [], isLoading: p } = useQuery({ queryKey: ['enterprise-profiles'], queryFn: enterpriseAPI.listProfiles })
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
+  const { data: profiles  = [], isLoading: p } = useQuery({
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
+  })
   const { data: schedules = [], isLoading: s } = useQuery({ queryKey: ['schedules'],           queryFn: schedulesAPI.list })
   const { data: ruleDefs  = [], isLoading: r } = useQuery({ queryKey: ['rule-definitions'],    queryFn: () => enterpriseAPI.listRuleDefinitions() })
   const loading = p || s || r

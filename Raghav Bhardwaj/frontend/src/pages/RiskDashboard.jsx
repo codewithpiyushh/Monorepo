@@ -26,28 +26,148 @@ const ECHART_BASE = {
 }
 
 // ── Risk score gauge ──────────────────────────────────────────
-function RiskGauge({ score }) {
-  const color = score >= 80 ? BAD : score >= 60 ? ORANGE : score >= 40 ? WARN : OK
+// ── Progressive Fill Risk Gauge ─────────────────────────────────────────
+function RiskGauge({ score, isDarkMode }) {
+  // 1. Theme Configuration
+  const bgColor = isDarkMode ? '#1e293b' : '#ffffff';       // Matches your card background perfectly for gaps
+  const inactiveTrack = isDarkMode ? '#334155' : '#e2e8f0'; // Dark grey for unfilled blocks
+  const textColor = isDarkMode ? '#f8fafc' : '#0f172a';
+  const subTextColor = isDarkMode ? '#94a3b8' : '#64748b';
+
+  // 2. Risk Level & Subtitle Logic
+  const getRiskStatus = (val) => {
+    if (val < 25) return { label: 'LOW', color: '#4ade80' };
+    if (val < 50) return { label: 'MEDIUM', color: '#facc15' };
+    if (val < 75) return { label: 'HIGH', color: '#f97316' };
+    return { label: 'CRITICAL', color: '#ef4444' };
+  };
+  const status = getRiskStatus(score);
+
+  // 3. Dynamic Track Fill Logic
+  // We divide the gauge into 10 blocks. If the score hasn't reached a block, it becomes inactive.
+  const generateTrackColors = () => {
+    const palette = [
+      '#4ade80', '#4ade80', // 0-20
+      '#a3e635', '#facc15', // 20-40 
+      '#facc15', '#f97316', // 40-60
+      '#f97316', '#ea580c', // 60-80
+      '#ef4444', '#ef4444'  // 80-100
+    ];
+
+    const colors = [];
+    for (let i = 0; i < 10; i++) {
+      const stop = (i + 1) / 10;
+      // If the score is greater than the start of this block, it gets colored.
+      const isActive = score > (i * 10);
+      colors.push([stop, isActive ? palette[i] : inactiveTrack]);
+    }
+    return colors;
+  };
+
   const option = {
     ...ECHART_BASE,
-    series: [{
-      type: 'gauge',
-      startAngle: 200, endAngle: -20,
-      min: 0, max: 100,
-      radius: '90%',
-      axisLine: { lineStyle: { width: 12, color: [[score / 100, color], [1, '#1e293b']] } },
-      pointer: { itemStyle: { color } },
-      axisTick: { show: false },
-      splitLine: { show: false },
-      axisLabel: { show: false },
-      detail: { valueAnimation: true, formatter: '{value}', color, fontSize: 22, fontWeight: 700, offsetCenter: [0, '10%'] },
-      data: [{ value: score, name: 'Risk Score' }],
-      title: { fontSize: 11, color: '#64748b', offsetCenter: [0, '35%'] },
-    }],
-  }
-  return <ReactECharts option={option} style={{ height: 160 }} notMerge />
-}
+    series: [
+      {
+        type: 'gauge',
+        startAngle: 180,
+        endAngle: 0,
+        min: 0,
+        max: 100,
+        splitNumber: 10, // 10 distinct segments to match your image
+        radius: '95%',
+        center: ['50%', '70%'],
+        
+        // The Colored/Inactive Track
+        axisLine: {
+          lineStyle: {
+            width: 24, 
+            color: generateTrackColors(), // Dynamically calculated
+          },
+        },
+        
+        // The Gaps
+        splitLine: {
+          show: true,
+          distance: -24, 
+          length: 24,   
+          lineStyle: { 
+            color: bgColor, 
+            width: 4 
+          } 
+        },
+        axisTick: { show: false },
 
+        // The Outer Labels (0, 20, 40, etc)
+        axisLabel: {
+          show: true,
+          distance: 18, 
+          color: subTextColor,
+          fontSize: 10,
+          fontWeight: 600,
+          formatter: (value) => (value % 20 === 0 ? value : ''), // Only show 0, 20, 40...
+        },
+
+        // The Pointer Indicator
+        pointer: {
+          show: true,
+          icon: 'path://M50,0 L100,100 L0,100 Z', // A clean triangle pointing down
+          length: '8%', 
+          width: 12,
+          offsetCenter: [0, '-58%'], // Hovers right at the edge of the track
+          itemStyle: { color: status.color } // Pointer matches current risk color
+        },
+
+        // The "MEDIUM" Subtitle
+        title: {
+          show: true,
+          offsetCenter: [0, '15%'], 
+          color: subTextColor,
+          fontSize: 12,
+          fontWeight: 700,
+        },
+
+        // The "41.9" Center Text
+        detail: {
+          valueAnimation: true,
+          formatter: '{value}',
+          color: textColor,
+          fontSize: 38,
+          fontWeight: 800,
+          offsetCenter: [0, '-15%'] 
+        },
+        
+        data: [{ value: score, name: status.label }], // Name renders the subtitle
+      },
+    ],
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <ReactECharts option={option} style={{ height: 200 }} notMerge />
+      
+      {/* Optional: The Legend below the gauge just like your image */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        gap: '16px', 
+        marginTop: '-10px',
+        paddingBottom: '16px'
+      }}>
+        {[
+          { label: 'Low', color: '#4ade80' },
+          { label: 'Medium', color: '#facc15' },
+          { label: 'High', color: '#f97316' },
+          { label: 'Critical', color: '#ef4444' }
+        ].map((item) => (
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: item.color }} />
+            <span style={{ fontSize: 11, color: subTextColor, fontWeight: 600 }}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 // ── Risk breakdown bar ────────────────────────────────────────
 function RiskBreakdownChart({ data }) {
   const entries = Object.entries(data || {})

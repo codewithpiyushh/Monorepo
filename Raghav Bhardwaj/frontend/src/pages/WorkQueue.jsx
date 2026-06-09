@@ -69,8 +69,8 @@ export default function WorkQueue() {
   })
 
   const { data: profiles = [] } = useQuery({
-    queryKey: ['enterprise-profiles'],
-    queryFn: enterpriseAPI.listProfiles,
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
   })
 
   const { data: workflows = [] } = useQuery({
@@ -86,8 +86,9 @@ export default function WorkQueue() {
   })
 
   const { data: roleDashboard } = useQuery({
-    queryKey: ['role-dashboard', role],
+    queryKey: ['role-dashboard', role, selectedProjectId || 'all'],
     queryFn: async () => {
+      if (selectedProjectId) return null
       if (role === 'reviewer') return enterpriseAPI.reviewerDashboard()
       if (role === 'preparer') return enterpriseAPI.preparerDashboard()
       const [preparer, reviewer] = await Promise.all([

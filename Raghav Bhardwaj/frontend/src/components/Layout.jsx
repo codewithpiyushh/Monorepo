@@ -80,12 +80,68 @@ const PREPARER_NAV_GROUPS = [
   },
 ]
 
+/**
+ * REVIEWER — first-pass validation queue.
+ * Reviewer sees submissions awaiting review and the audit trail (to
+ * verify history before acting). They do NOT see the approver queue
+ * or close certification — those are downstream steps.
+ */
 const REVIEWER_NAV_GROUPS = [
   {
     section: 'Review',
     items: [
-      { to: '/work-queue', icon: FolderOpen,    tip: 'Work Queue',  label: 'Work Queue' },
+      { to: '/work-queue', icon: FolderOpen,    tip: 'Review Queue — submissions awaiting first-pass review', label: 'Review Queue' },
       { to: '/audit',      icon: ClipboardList, tip: 'Audit Trail', label: 'Audit Trail' },
+    ],
+  },
+]
+
+/**
+ * APPROVER — final sign-off queue.
+ * Approver sees items that have already been reviewed and are waiting
+ * for final approval. Distinct from reviewer — this is the second
+ * independent control in the SOX two-step approval chain.
+ */
+const APPROVER_NAV_GROUPS = [
+  {
+    section: 'Approval',
+    items: [
+      { to: '/approver-queue',     icon: CheckCircle2,   tip: 'Approver Queue — reviewed items awaiting final sign-off', label: 'Approver Queue' },
+      { to: '/analytics-explorer', icon: BarChart3,      tip: 'Analytics',    label: 'Analytics' },
+      { to: '/audit',              icon: ClipboardList,  tip: 'Audit Trail',  label: 'Audit Trail' },
+    ],
+  },
+]
+
+/**
+ * CERTIFIER — period close sign-off.
+ * Certifier's primary job is the close certification page.
+ * They also need the close calendar and a read-only view of analytics.
+ */
+const CERTIFIER_NAV_GROUPS = [
+  {
+    section: 'Close Certification',
+    items: [
+      { to: '/close-certification', icon: CalendarCheck2, tip: 'Close Certification', label: 'Close Cert' },
+      { to: '/close-calendar',      icon: CalendarCheck2, tip: 'Close Calendar',      label: 'Calendar' },
+      { to: '/analytics-explorer',  icon: BarChart3,      tip: 'Analytics',           label: 'Analytics' },
+    ],
+  },
+]
+
+/**
+ * AUDITOR — read-only compliance view.
+ * Auditor can browse the audit trail, finalized reconciliations,
+ * reconciliation profiles, and analytics. No write operations.
+ */
+const AUDITOR_NAV_GROUPS = [
+  {
+    section: 'Audit & Compliance',
+    items: [
+      { to: '/audit',                icon: ClipboardList, tip: 'Audit Trail',              label: 'Audit Trail' },
+      { to: '/reconciliation-profiles', icon: FolderOpen, tip: 'Reconciliation Profiles',  label: 'Profiles' },
+      { to: '/analytics-explorer',   icon: BarChart3,     tip: 'Analytics',                label: 'Analytics' },
+      { to: '/risk-dashboard',       icon: ShieldAlert,   tip: 'Risk Dashboard',           label: 'Risk' },
     ],
   },
 ]
@@ -126,8 +182,11 @@ export default function Layout() {
     ? projects.find((p) => String(p.id) === String(activeProjectId))
     : null
 
-  const navGroups = role === 'preparer' ? PREPARER_NAV_GROUPS
+  const navGroups = role === 'preparer'  ? PREPARER_NAV_GROUPS
     : role === 'reviewer'  ? REVIEWER_NAV_GROUPS
+    : role === 'approver'  ? APPROVER_NAV_GROUPS
+    : role === 'certifier' ? CERTIFIER_NAV_GROUPS
+    : role === 'auditor'   ? AUDITOR_NAV_GROUPS
     : ADMIN_NAV_GROUPS
 
   const navFlat = flatItems(navGroups)
@@ -168,16 +227,19 @@ export default function Layout() {
   const handleSwitchUser = async () => {
     if (!import.meta.env.DEV) return
     const seq = [
-      { role: 'admin',    username: 'admin',       password: 'admin123' },
-      { role: 'preparer', username: 'preparer123', password: 'preparer123' },
-      { role: 'reviewer', username: 'reviewer123', password: 'reviewer123' },
+      { role: 'admin',    username: 'admin',     password: 'admin123' },
+      { role: 'preparer', username: 'preparer',  password: 'preparer123' },
+      { role: 'reviewer', username: 'reviewer',  password: 'reviewer123' },
+      { role: 'approver', username: 'approver',  password: 'approver123' },
+      { role: 'certifier', username: 'certifier', password: 'certifier123' },
+      { role: 'auditor',  username: 'auditor',   password: 'auditor123' },
     ]
     const idx    = seq.findIndex((e) => e.role === (user?.role || 'admin').toLowerCase())
     const target = seq[(idx + 1 + seq.length) % seq.length]
     try {
       const data = await authAPI.login(target.username, target.password)
       setAuth(data.user, data.access_token)
-      navigate('/command-center')
+      navigate('/')
     } catch { clearAuth(); navigate('/login') }
   }
 
@@ -546,11 +608,13 @@ export default function Layout() {
             </h1>
           </div>
 
-          {/* Project selector — hidden on Home/CommandCenter and for preparer role */}
+          {/* Project selector — hidden for roles that don't operate on projects */}
           {!isWorkflowRoute
             && !location.pathname.startsWith('/command-center')
             && !location.pathname.startsWith('/my-reconciliations')
             && role !== 'preparer'
+            && role !== 'auditor'
+            && role !== 'certifier'
             && projects.length > 0 && (
             <div className="hidden md:flex items-center gap-2 ml-8">
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>

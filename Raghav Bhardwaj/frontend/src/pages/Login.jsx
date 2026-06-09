@@ -9,11 +9,14 @@ const DEMO_CREDS = [
   { role: 'Admin',     username: 'admin',     password: 'admin123',     desc: 'Full platform access' },
   { role: 'Preparer',  username: 'preparer',  password: 'preparer123',  desc: 'Data entry & submission' },
   { role: 'Reviewer',  username: 'reviewer',  password: 'reviewer123',  desc: 'Review & approval' },
+  { role: 'Approver',  username: 'approver',  password: 'approver123',  desc: 'Final sign-off' },
+  { role: 'Certifier', username: 'certifier', password: 'certifier123', desc: 'Close certification' },
+  { role: 'Auditor',   username: 'auditor',   password: 'auditor123',   desc: 'Read-only audit access' },
 ]
 
 const FEATURES = [
   { icon: BarChart3,  title: 'Real-time Analytics',   body: 'Executive dashboards with live reconciliation KPIs and risk signals.' },
-  { icon: Shield,     title: 'RBAC Governance',        body: '5-role workflow: Preparer → Reviewer → Approver → Certifier.' },
+  { icon: Shield,     title: 'RBAC Governance',        body: '6-role workflow: Preparer → Reviewer → Approver → Certifier → Auditor.' },
   { icon: Globe,      title: 'Enterprise Scale',       body: 'Inspired by Oracle ARCS — built for financial close compliance.' },
 ]
 

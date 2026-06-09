@@ -11,8 +11,8 @@ router = APIRouter(prefix="/api/v1/enterprise", tags=["enterprise-v1"])
 
 
 @router.get("/profiles")
-def list_profiles(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
-    return repository.list_profiles(db)
+def list_profiles(project_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+    return repository.list_profiles(db, project_id=project_id)
 
 
 @router.post("/profiles")

@@ -15,7 +15,7 @@ const ROLE_ROUTES = {
   admin:    { default: '/command-center',    exception: '/exception-workbench', workflow: '/close-certification', reconciliation: '/reconciliation-profiles' },
   preparer: { default: '/my-reconciliations', exception: '/my-reconciliations',  workflow: '/my-reconciliations',  reconciliation: '/my-reconciliations' },
   reviewer: { default: '/work-queue',         exception: '/work-queue',          workflow: '/work-queue',          reconciliation: '/work-queue' },
-  approver: { default: '/work-queue',         exception: '/work-queue',          workflow: '/close-certification', reconciliation: '/reconciliation-profiles' },
+  approver: { default: '/approver-queue',     exception: '/approver-queue',      workflow: '/approver-queue',      reconciliation: '/reconciliation-profiles' },
   certifier:{ default: '/close-certification',exception: '/exception-workbench', workflow: '/close-certification', reconciliation: '/reconciliation-profiles' },
   auditor:  { default: '/audit',              exception: '/exception-workbench', workflow: '/audit',               reconciliation: '/reconciliation-profiles' },
 }

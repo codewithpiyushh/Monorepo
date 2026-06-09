@@ -82,6 +82,7 @@ def add_validation_errors(db: Session, batch_id: str, source_system: str, errors
 
 def create_profile(db: Session, payload):
     profile = ReconciliationProfile(
+        project_id=payload.project_id,
         name=payload.name,
         reconciliation_type=payload.reconciliation_type,
         frequency=payload.frequency,
@@ -95,6 +96,8 @@ def create_profile(db: Session, payload):
         assigned_certifier=payload.assigned_certifier,
         risk_classification=payload.risk_classification,
         due_days=payload.due_days,
+        auto_approve_threshold=payload.auto_approve_threshold,
+        materiality_limit=payload.materiality_limit,
     )
     db.add(profile)
     db.commit()
@@ -102,8 +105,10 @@ def create_profile(db: Session, payload):
     return profile
 
 
-def list_profiles(db: Session, role: str | None = None, user_id: int | None = None):
+def list_profiles(db: Session, role: str | None = None, user_id: int | None = None, project_id: int | None = None):
     query = db.query(ReconciliationProfile)
+    if project_id is not None:
+        query = query.filter(ReconciliationProfile.project_id == project_id)
     normalized_role = (role or "").lower()
     if normalized_role == "approver":
         normalized_role = "reviewer"

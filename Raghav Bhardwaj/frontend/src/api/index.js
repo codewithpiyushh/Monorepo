@@ -137,7 +137,9 @@ export const workflowAPI = {
   get: (id) => api.get(`/workflow/${id}`).then((r) => r.data),
   assign: (data) => api.post('/workflow/assign', data).then((r) => r.data),
   submit: (data) => api.post('/workflow/submit', data).then((r) => r.data),
+  review: (data) => api.post('/workflow/review', data).then((r) => r.data),
   approve: (data) => api.post('/workflow/approve', data).then((r) => r.data),
+  returnForRework: (data) => api.post('/workflow/return-for-rework', data).then((r) => r.data),
   reject: (data) => api.post('/workflow/reject', data).then((r) => r.data),
   delete: (data) => api.post('/workflow/delete', data).then((r) => r.data),
   listAttachments: (workflowId) => api.get(`/workflow/${workflowId}/attachments`).then((r) => r.data),
@@ -158,7 +160,8 @@ export const enterpriseAPI = {
   validateBatch: (batchId) => api.post(`/enterprise/ingestion/${batchId}/validate`).then((r) => r.data),
   loadBatch: (batchId, profileId) => api.post(`/enterprise/ingestion/${batchId}/load/${profileId}`).then((r) => r.data),
   createProfile: (data) => api.post('/enterprise/profiles', data).then((r) => r.data),
-  listProfiles: () => api.get('/enterprise/profiles').then((r) => r.data),
+  listProfiles: (projectId) =>
+    api.get(`/enterprise/profiles${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`).then((r) => r.data),
   listProfileTransactions: (profileId) => api.get(`/enterprise/profiles/${profileId}/transactions`).then((r) => r.data),
   updateProfile: (profileId, data) => api.patch(`/enterprise/profiles/${profileId}`, data).then((r) => r.data),
   deleteProfile: (profileId) => api.delete(`/enterprise/profiles/${profileId}`).then((r) => r.data),
@@ -234,6 +237,9 @@ export const enterpriseAPI = {
   createJournal: (data) => api.post('/enterprise/journals', data).then((r) => r.data),
   autoJournal: (data) => api.post('/enterprise/journals/auto', data).then((r) => r.data),
   journalAction: (adjustmentId, action, comments = '') => api.post(`/enterprise/journals/${adjustmentId}/${action}`, { adjustment_id: adjustmentId, comments }).then((r) => r.data),
+  // Alias used by ReviewerWorkbench
+  actionJournal: ({ adjustment_id, action, comments = '' }) =>
+    api.post(`/enterprise/journals/${adjustment_id}/${action}`, { adjustment_id, comments }).then((r) => r.data),
   variance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),
   // Aliases used by PreparerWorkbench
   getVariance: (profileId) => api.get(`/enterprise/variance/${profileId}`).then((r) => r.data),

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { enterpriseAPI, authAPI } from '../api'
+import { enterpriseAPI, authAPI, projectsAPI } from '../api'
 import { advancedAPI, enterpriseExtAPI } from '../api'
+import { useProjectStore } from '../store/projectStore'
 import toast from 'react-hot-toast'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
@@ -183,10 +184,14 @@ export default function CloseCertificationPage() {
   const [activeTab,    setActiveTab]    = useState('calendar')
   const [filterStatus, setFilterStatus] = useState('')
   const qc = useQueryClient()
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
+
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({ queryKey: ['projects'], queryFn: projectsAPI.list })
+  const hasProjects = projects.length > 0
 
   const { data: calendars = [],  isLoading: calLoading  } = useQuery({ queryKey: ['close-cal'],         queryFn: () => enterpriseAPI.listCloseCalendar() })
   const { data: workflows = [],  isLoading: wfLoading   } = useQuery({ queryKey: ['cert-workflows-all'], queryFn: () => enterpriseAPI.listCertificationWorkflows() })
-  const { data: profiles  = [] }                           = useQuery({ queryKey: ['enterprise-profiles'], queryFn: enterpriseAPI.listProfiles })
+  const { data: profiles  = [] }                           = useQuery({ queryKey: ['enterprise-profiles', selectedProjectId || 'all'], queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined) })
   const { data: users     = [] }                           = useQuery({ queryKey: ['users-list'],          queryFn: authAPI.listUsers })
   const { data: allTasks  = [] }                           = useQuery({ queryKey: ['all-close-tasks'],     queryFn: () => enterpriseExtAPI.listCloseTasks() })
 
@@ -225,7 +230,25 @@ export default function CloseCertificationPage() {
     return calendars
   }, [calendars, filterStatus])
 
-  const loading = calLoading || wfLoading
+  const loading = calLoading || wfLoading || projectsLoading
+
+  if (!loading && !hasProjects) {
+    return (
+      <div className="h-full flex flex-col">
+        <PageHeader
+          title="Period Close Monitor"
+          subtitle="Manage close periods, lock controls, and certification workflows."
+          badge="No projects"
+        />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <EmptyState
+            title="No projects yet"
+            description="Create your first reconciliation project before using the Period Close Monitor."
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex flex-col">

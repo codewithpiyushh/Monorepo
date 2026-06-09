@@ -603,9 +603,8 @@ def generate_aging_and_reminders(db: Session):
 
 def list_exceptions(db: Session, queue_type: str | None = None, role: str | None = None, user_id: int | None = None):
     q = db.query(ExceptionQueueRecord)
-    normalized_role = (role or "").lower()
-    if normalized_role == "approver":
-        normalized_role = "reviewer"
+    # Each role sees its own scoped queue — no cross-role aliasing
+    normalized_role = (role or "").lower().strip()
 
     if queue_type == "actionable_preparer":
         q = q.filter(
@@ -628,9 +627,20 @@ def list_exceptions(db: Session, queue_type: str | None = None, role: str | None
             (ExceptionQueueRecord.assigned_to.is_(None)) | (ExceptionQueueRecord.assigned_to == user_id)
         )
     elif normalized_role == "reviewer":
+        # Reviewer sees items submitted for review
         q = q.filter(
             (ExceptionQueueRecord.assigned_to.is_(None)) | (ExceptionQueueRecord.assigned_to == user_id)
         )
+    elif normalized_role == "approver":
+        # Approver sees escalated / in-review items awaiting final approval
+        q = q.filter(
+            ExceptionQueueRecord.queue_type.in_(["exception", "escalated"])
+        ).filter(
+            (ExceptionQueueRecord.assigned_to.is_(None)) | (ExceptionQueueRecord.assigned_to == user_id)
+        )
+    elif normalized_role == "auditor":
+        # Auditor sees all resolved/finalized exceptions (read-only scope)
+        q = q.filter(ExceptionQueueRecord.queue_type.in_(["resolved", "finalized"]))
 
     return q.order_by(ExceptionQueueRecord.updated_at.desc()).all()
 
@@ -1029,45 +1039,77 @@ def action_certification_workflow(
         raise ValueError("Certification workflow not found")
     current = wf.status
     normalized_action = action.upper().strip()
-    normalized_role = (actor_role or "").lower()
-    if normalized_role == "approver":
-        normalized_role = "reviewer"
+    # Each role is treated as a distinct identity — no cross-role aliasing.
+    # APPROVER and REVIEWER are separate stages with separate accountabilities.
+    normalized_role = (actor_role or "").lower().strip()
 
+    # ---------------------------------------------------------------------------
+    # Transition table — (required_role, target_status, next_stage, allowed_from_statuses)
+    # REVIEW  → only reviewer can perform  (validates completeness)
+    # APPROVE → only approver can perform  (final sign-off, distinct SOX control)
+    # ---------------------------------------------------------------------------
     transitions = {
-        "PREPARE": ("preparer", STATUS["PREPARED"], "REVIEWER", {STATUS["OPEN"], STATUS["REOPENED"]}),
-        "SUBMIT": ("preparer", STATUS["SUBMITTED"], "REVIEWER", {STATUS["PREPARED"]}),
-        "REVIEW": ("reviewer", STATUS["REVIEWED"], "APPROVER", {STATUS["SUBMITTED"]}),
-        "APPROVE": ("reviewer", STATUS["APPROVED"], "CERTIFIER", {STATUS["REVIEWED"]}),
-        "CERTIFY": ("certifier", STATUS["CERTIFIED"], "ADMIN", {STATUS["APPROVED"]}),
-        "CLOSE": ("admin", STATUS["CLOSED"], "DONE", {STATUS["CERTIFIED"]}),
-        "REOPEN": ("admin", STATUS["REOPENED"], "PREPARER", {STATUS["PREPARED"], STATUS["SUBMITTED"], STATUS["REVIEWED"], STATUS["APPROVED"], STATUS["CERTIFIED"], STATUS["CLOSED"], STATUS["FORCE_CLOSED"]}),
-        "FORCE_CLOSE": ("admin", STATUS["FORCE_CLOSED"], "DONE", {STATUS["OPEN"], STATUS["PREPARED"], STATUS["SUBMITTED"], STATUS["REVIEWED"], STATUS["APPROVED"], STATUS["REOPENED"]}),
+        "PREPARE":     ("preparer",  STATUS["PREPARED"],    "REVIEWER",  {STATUS["OPEN"], STATUS["REOPENED"]}),
+        "SUBMIT":      ("preparer",  STATUS["SUBMITTED"],   "REVIEWER",  {STATUS["PREPARED"]}),
+        "REVIEW":      ("reviewer",  STATUS["REVIEWED"],    "APPROVER",  {STATUS["SUBMITTED"]}),
+        "APPROVE":     ("approver",  STATUS["APPROVED"],    "CERTIFIER", {STATUS["REVIEWED"]}),
+        "CERTIFY":     ("certifier", STATUS["CERTIFIED"],   "ADMIN",     {STATUS["APPROVED"]}),
+        "CLOSE":       ("admin",     STATUS["CLOSED"],      "DONE",      {STATUS["CERTIFIED"]}),
+        "REOPEN":      ("admin",     STATUS["REOPENED"],    "PREPARER",  {
+            STATUS["PREPARED"], STATUS["SUBMITTED"], STATUS["REVIEWED"],
+            STATUS["APPROVED"], STATUS["CERTIFIED"], STATUS["CLOSED"], STATUS["FORCE_CLOSED"],
+        }),
+        "FORCE_CLOSE": ("admin",     STATUS["FORCE_CLOSED"],"DONE",      {
+            STATUS["OPEN"], STATUS["PREPARED"], STATUS["SUBMITTED"],
+            STATUS["REVIEWED"], STATUS["APPROVED"], STATUS["REOPENED"],
+        }),
     }
+
     if normalized_action not in transitions:
-        raise ValueError("Unsupported action")
+        raise ValueError(f"Unsupported action '{normalized_action}'")
     required_role, target_status, stage, allowed_from = transitions[normalized_action]
+
     if current not in allowed_from:
-        raise ValueError(f"Action {normalized_action} is not allowed from status {current}")
+        raise ValueError(
+            f"Action '{normalized_action}' is not allowed from current status '{current}'. "
+            f"Expected one of: {sorted(allowed_from)}"
+        )
+
+    # Role check — admin can bypass for operational overrides
     if normalized_role != required_role and normalized_role != "admin":
-        raise ValueError(f"{required_role} role required")
+        raise ValueError(
+            f"Role '{normalized_role}' cannot perform '{normalized_action}'. "
+            f"Required role: '{required_role}'"
+        )
+
+    # Assignment check — only the designated person can act at each stage
     if normalized_role == required_role and actor_id is not None:
         if required_role == "preparer" and wf.preparer_id and actor_id != wf.preparer_id:
-            raise ValueError("Only assigned preparer can perform this action")
-        if required_role == "reviewer" and (wf.reviewer_id or wf.approver_id) and actor_id not in {wf.reviewer_id, wf.approver_id}:
-            raise ValueError("Only assigned reviewer/approver can perform this action")
+            raise ValueError("Only the assigned preparer can perform this action")
+        if required_role == "reviewer" and wf.reviewer_id and actor_id != wf.reviewer_id:
+            raise ValueError("Only the assigned reviewer can perform this action")
+        if required_role == "approver" and wf.approver_id and actor_id != wf.approver_id:
+            raise ValueError("Only the assigned approver can perform this action")
         if required_role == "certifier" and wf.certifier_id and actor_id != wf.certifier_id:
-            raise ValueError("Only assigned certifier can perform this action")
+            raise ValueError("Only the assigned certifier can perform this action")
+
     if normalized_action in {"REOPEN", "FORCE_CLOSE"} and not (comments or "").strip():
         raise ValueError("Comments are required for reopen/force-close actions")
+
+    # SoD: REVIEW, APPROVE, and CERTIFY must each be performed by a different person
     if normalized_action in {"REVIEW", "APPROVE", "CERTIFY"} and actor_id is not None:
-        prior = (
-            db.query(CertificationWorkflowHistory)
+        prior_actors = {
+            h.actor_id
+            for h in db.query(CertificationWorkflowHistory)
             .filter(CertificationWorkflowHistory.workflow_id == wf.id)
-            .order_by(CertificationWorkflowHistory.id.desc())
-            .first()
-        )
-        if prior and prior.actor_id == actor_id:
-            raise ValueError("Segregation of duties violation: consecutive approval stages require different users")
+            .all()
+            if h.actor_id is not None
+        }
+        if actor_id in prior_actors:
+            raise ValueError(
+                "Segregation of duties violation: each stage (REVIEW, APPROVE, CERTIFY) "
+                "must be performed by a different user."
+            )
 
     wf.status = target_status
     wf.current_stage = stage
@@ -1985,14 +2027,19 @@ def auto_generate_journal_adjustments(db: Session, payload: dict, actor_id: int 
 
 def variance_analysis(db: Session, profile_id: int):
     records = repository.get_records_by_profile(db, profile_id)
-    src_total = sum((r.amount or 0.0) for r in records)
+    source_balance = sum(max(float(r.amount or 0.0), 0.0) for r in records)
+    target_balance = sum(abs(min(float(r.amount or 0.0), 0.0)) for r in records)
+    balance_delta = source_balance - target_balance
     unmatched = [r for r in records if (r.status or "").upper() in {"UNMATCHED", "PARTIAL_MATCH"}]
-    unmatched_total = sum((r.amount or 0.0) for r in unmatched)
+    unmatched_total = sum(abs(float(r.amount or 0.0)) for r in unmatched)
     return {
         "profile_id": profile_id,
-        "source_balance_difference": src_total,
+        "source_balance_difference": balance_delta,
+        "source_balance": round(source_balance, 2),
+        "target_balance": round(target_balance, 2),
+        "total_variance": round(abs(balance_delta), 2),
         "unmatched_amount": unmatched_total,
-        "adjustment_recommendation": "Create journal adjustment" if abs(unmatched_total) > 0 else "No adjustment needed",
+        "adjustment_recommendation": "Create journal adjustment" if abs(balance_delta) > 0 else "No adjustment needed",
     }
 
 

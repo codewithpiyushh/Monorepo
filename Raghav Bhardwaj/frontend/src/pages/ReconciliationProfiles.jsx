@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { enterpriseAPI, authAPI } from '../api'
 import { enterpriseExtAPI } from '../api'
 import toast from 'react-hot-toast'
+import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState } from '../components/ui/PageState'
 import {
@@ -60,6 +61,7 @@ function StateBadge({ state }) {
 function ProfileFormModal({ profile, users, onClose, onSaved }) {
   const isEdit = !!profile
   const qc = useQueryClient()
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
   const [form, setForm] = useState(isEdit ? {
     name: profile.name,
     reconciliation_type: profile.reconciliation_type || 'BANK_RECONCILIATION',
@@ -89,6 +91,7 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
     try {
       const payload = {
         ...form,
+        project_id: isEdit ? (profile.project_id || null) : (selectedProjectId ? Number(selectedProjectId) : null),
         tolerance_threshold: Number(form.tolerance_threshold),
         date_window_days: Number(form.date_window_days),
         due_days: Number(form.due_days),
@@ -367,6 +370,7 @@ function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) 
 // ── Main Page ─────────────────────────────────────────────────
 export default function ReconciliationProfiles() {
   const qc = useQueryClient()
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
   const [showCreate, setShowCreate] = useState(false)
   const [editProfile, setEditProfile] = useState(null)
   const [cloneProfile, setCloneProfile] = useState(null)
@@ -377,8 +381,8 @@ export default function ReconciliationProfiles() {
   const [search, setSearch] = useState('')
 
   const { data: profiles = [], isLoading } = useQuery({
-    queryKey: ['enterprise-profiles'],
-    queryFn: enterpriseAPI.listProfiles,
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
   })
   const { data: users = [] } = useQuery({
     queryKey: ['users-list'],

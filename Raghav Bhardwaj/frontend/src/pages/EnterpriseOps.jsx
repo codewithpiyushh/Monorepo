@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import toast from 'react-hot-toast'
+import { useProjectStore } from '../store/projectStore'
 
 function parseJsonSafe(value) {
   try {
@@ -13,6 +14,7 @@ function parseJsonSafe(value) {
 
 export default function EnterpriseOps() {
   const qc = useQueryClient()
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
   const [sourceSystem, setSourceSystem] = useState('ERP')
   const [metadataText, setMetadataText] = useState('{"file_name":"sample.csv","period":"2026-04"}')
   const [recordsText, setRecordsText] = useState('[{"entity":"E1","account":"A1","period":"2026-04","currency":"USD","amount":1000,"reference":"REF1","date":"2026-04-02"},{"entity":"E1","account":"A1","period":"2026-04","currency":"USD","amount":-1000,"reference":"REF1","date":"2026-04-02"}]')
@@ -55,7 +57,10 @@ export default function EnterpriseOps() {
     document_path: '/docs/supporting_doc.pdf',
   })
 
-  const { data: profiles = [] } = useQuery({ queryKey: ['enterprise-profiles'], queryFn: enterpriseAPI.listProfiles })
+  const { data: profiles = [] } = useQuery({
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
+  })
   const { data: exceptions = [] } = useQuery({
     queryKey: ['enterprise-exceptions', queueType],
     queryFn: () => enterpriseAPI.listExceptions(queueType),
@@ -252,6 +257,7 @@ export default function EnterpriseOps() {
                 frequency: profileForm.frequency,
                 tolerance_threshold: Number(profileForm.tolerance_threshold) || 0,
                 date_window_days: Number(profileForm.date_window_days) || 0,
+                project_id: selectedProjectId ? Number(selectedProjectId) : null,
                 workflow_config: workflowConfig,
                 matching_rules: matchingRules,
                 assigned_preparer: profileForm.assigned_preparer ? Number(profileForm.assigned_preparer) : null,

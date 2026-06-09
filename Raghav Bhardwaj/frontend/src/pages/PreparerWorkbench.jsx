@@ -25,6 +25,7 @@ import {
 import { enterpriseAPI, workflowAPI } from '../api'
 import { enterpriseExtAPI, advancedAPI } from '../api'
 import { useAuthStore } from '../store/authStore'
+import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
 
@@ -95,8 +96,8 @@ function HomeTab({ profile, cert, matchGroups, exceptions, closeTasks, varianceD
     return (matchGroups || []).reduce((s, mg) => s + Math.abs(Number(mg.variance_amount || 0)), 0)
   }, [varianceData, matchGroups])
 
-  const srcBalance = varianceData?.source_balance ?? 1250000
-  const tgtBalance = varianceData?.target_balance ?? (srcBalance - totalVariance)
+  const srcBalance = varianceData?.source_balance ?? 0
+  const tgtBalance = varianceData?.target_balance ?? Math.max(srcBalance - totalVariance, 0)
 
   const totalMG   = (matchGroups || []).length
   const fullMatch = (matchGroups || []).filter((m) => m.classification === 'FULL_MATCH').length
@@ -834,6 +835,7 @@ const TABS = [
 export default function PreparerWorkbench() {
   const { projectId } = useParams()
   const user         = useAuthStore((s) => s.user)
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
   const qc           = useQueryClient()
   const isLegacyMode = Boolean(projectId)
 
@@ -843,8 +845,8 @@ export default function PreparerWorkbench() {
 
   // ── Data fetching ───────────────────────────────────────────
   const { data: profiles = [], isLoading: profLoading } = useQuery({
-    queryKey: ['enterprise-profiles'],
-    queryFn: enterpriseAPI.listProfiles,
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
     enabled: !isLegacyMode,
   })
   const { data: allCerts = [] } = useQuery({
@@ -859,13 +861,18 @@ export default function PreparerWorkbench() {
 
   const myProfiles = useMemo(() => {
     if (isLegacyMode) return []
-    return profiles.filter((p) =>
+    const scopedProfiles = selectedProjectId
+      ? profiles.filter((p) => String(p.project_id || '') === String(selectedProjectId))
+      : profiles
+    return scopedProfiles.filter((p) =>
       !user || p.assigned_preparer === user.id || ['admin','preparer'].includes(user?.role)
     )
-  }, [profiles, user, isLegacyMode])
+  }, [profiles, user, isLegacyMode, selectedProjectId])
 
   useEffect(() => {
-    if (myProfiles.length > 0 && !selectedProfileId) setSelectedProfileId(myProfiles[0].id)
+    if (myProfiles.length > 0 && (!selectedProfileId || !myProfiles.some((p) => p.id === selectedProfileId))) {
+      setSelectedProfileId(myProfiles[0].id)
+    }
   }, [myProfiles, selectedProfileId])
 
   const selectedProfile = useMemo(() => myProfiles.find((p) => p.id === selectedProfileId) || null, [myProfiles, selectedProfileId])

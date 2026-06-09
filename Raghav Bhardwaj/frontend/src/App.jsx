@@ -4,49 +4,66 @@ import { useAuthStore } from './store/authStore'
 import { normalizeRole } from './utils/roles'
 import Layout from './components/Layout'
 
-const Login = lazy(() => import('./pages/Login'))
-const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'))
-const CommandCenter = lazy(() => import('./pages/CommandCenter'))
-const ExecutiveDashboard = lazy(() => import('./pages/ExecutiveDashboard'))
-const ExceptionOpsPage = lazy(() => import('./pages/ExceptionOpsPage'))
-const ExceptionWorkbench = lazy(() => import('./pages/ExceptionWorkbench'))
-const ExceptionInvestigation = lazy(() => import('./pages/ExceptionInvestigation'))
-const CloseCertificationPage = lazy(() => import('./pages/CloseCertificationPage'))
-const ControlsGovernancePage = lazy(() => import('./pages/ControlsGovernancePage'))
-const PlatformAdminPage = lazy(() => import('./pages/PlatformAdminPage'))
-const AuditLogs = lazy(() => import('./pages/AuditLogs'))
-const ProjectWorkflowPage = lazy(() => import('./pages/ProjectWorkflowPage'))
-const PreparerWorkbench = lazy(() => import('./pages/PreparerWorkbench'))
-const ReviewerWorkbench = lazy(() => import('./pages/ReviewerWorkbench'))
-const Schedules = lazy(() => import('./pages/Schedules'))
-const WorkflowPage = lazy(() => import('./pages/Workflow'))
-const RuleBuilder = lazy(() => import('./pages/RuleBuilder'))
-const EnterpriseOps = lazy(() => import('./pages/EnterpriseOps'))
+const Login                         = lazy(() => import('./pages/Login'))
+const UnauthorizedPage              = lazy(() => import('./pages/UnauthorizedPage'))
+const CommandCenter                 = lazy(() => import('./pages/CommandCenter'))
+const ExecutiveDashboard            = lazy(() => import('./pages/ExecutiveDashboard'))
+const ExceptionOpsPage              = lazy(() => import('./pages/ExceptionOpsPage'))
+const ExceptionWorkbench            = lazy(() => import('./pages/ExceptionWorkbench'))
+const ExceptionInvestigation        = lazy(() => import('./pages/ExceptionInvestigation'))
+const CloseCertificationPage        = lazy(() => import('./pages/CloseCertificationPage'))
+const ControlsGovernancePage        = lazy(() => import('./pages/ControlsGovernancePage'))
+const PlatformAdminPage             = lazy(() => import('./pages/PlatformAdminPage'))
+const AuditLogs                     = lazy(() => import('./pages/AuditLogs'))
+const ProjectWorkflowPage           = lazy(() => import('./pages/ProjectWorkflowPage'))
+const PreparerWorkbench             = lazy(() => import('./pages/PreparerWorkbench'))
+const ReviewerWorkbench             = lazy(() => import('./pages/ReviewerWorkbench'))
+const ApproverWorkbench             = lazy(() => import('./pages/ApproverWorkbench'))
+const Schedules                     = lazy(() => import('./pages/Schedules'))
+const WorkflowPage                  = lazy(() => import('./pages/Workflow'))
+const RuleBuilder                   = lazy(() => import('./pages/RuleBuilder'))
+const EnterpriseOps                 = lazy(() => import('./pages/EnterpriseOps'))
 const EnterpriseReconciliationCenter = lazy(() => import('./pages/EnterpriseReconciliationCenter'))
-const WorkQueue = lazy(() => import('./pages/WorkQueue'))
-const ReconciliationsHub = lazy(() => import('./pages/ReconciliationsHub'))
-const AdminCenter = lazy(() => import('./pages/AdminCenter'))
+const WorkQueue                     = lazy(() => import('./pages/WorkQueue'))
+const ReconciliationsHub            = lazy(() => import('./pages/ReconciliationsHub'))
+const AdminCenter                   = lazy(() => import('./pages/AdminCenter'))
 const ReconciliationAnalyticsExplorer = lazy(() => import('./pages/ReconciliationAnalyticsExplorer'))
-const RiskDashboard = lazy(() => import('./pages/RiskDashboard'))
-const ReconciliationProfiles = lazy(() => import('./pages/ReconciliationProfiles'))
-const MyPerformance = lazy(() => import('./pages/MyPerformance'))
-const TransactionMatchingWorkspace = lazy(() => import('./pages/TransactionMatchingWorkspace'))
+const RiskDashboard                 = lazy(() => import('./pages/RiskDashboard'))
+const ReconciliationProfiles        = lazy(() => import('./pages/ReconciliationProfiles'))
+const MyPerformance                 = lazy(() => import('./pages/MyPerformance'))
+const TransactionMatchingWorkspace  = lazy(() => import('./pages/TransactionMatchingWorkspace'))
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
   return token ? children : <Navigate to="/login" replace />
 }
 
+/**
+ * DefaultPageRedirect — each role lands on the page that is the start
+ * of their workflow.  Previously only preparer and reviewer were handled;
+ * approver, certifier, and auditor all fell through to /command-center
+ * which is an admin operations page they have no business starting from.
+ */
 function DefaultPageRedirect() {
   const user = useAuthStore((s) => s.user)
   const role = normalizeRole(user?.role)
 
-  if (role === 'preparer') {
-    return <Navigate to="/my-reconciliations" replace />
-  }
-  if (role === 'reviewer') {
-    return <Navigate to="/work-queue" replace />
-  }
+  // Preparer → their reconciliation worklist
+  if (role === 'preparer')  return <Navigate to="/my-reconciliations" replace />
+
+  // Reviewer → their review queue (submissions awaiting first-pass review)
+  if (role === 'reviewer')  return <Navigate to="/work-queue" replace />
+
+  // Approver → their approval queue (reviewed items awaiting final sign-off)
+  if (role === 'approver')  return <Navigate to="/approver-queue" replace />
+
+  // Certifier → the close certification page (their primary job)
+  if (role === 'certifier') return <Navigate to="/close-certification" replace />
+
+  // Auditor → the audit trail (their read-only home base)
+  if (role === 'auditor')   return <Navigate to="/audit" replace />
+
+  // Admin → command centre
   return <Navigate to="/command-center" replace />
 }
 
@@ -66,43 +83,59 @@ export default function App() {
             }
           >
             <Route index element={<DefaultPageRedirect />} />
-            <Route path="command-center" element={<CommandCenter />} />
-            <Route path="executive-dashboard" element={<ExecutiveDashboard />} />
-            <Route path="exception-ops" element={<ExceptionOpsPage />} />
-            <Route path="exception-workbench" element={<ExceptionWorkbench />} />
-            <Route path="exception-investigation" element={<ExceptionInvestigation />} />
+
+            {/* ── Shared / admin ── */}
+            <Route path="command-center"           element={<CommandCenter />} />
+            <Route path="executive-dashboard"      element={<ExecutiveDashboard />} />
+            <Route path="exception-ops"            element={<ExceptionOpsPage />} />
+            <Route path="exception-workbench"      element={<ExceptionWorkbench />} />
+            <Route path="exception-investigation"  element={<ExceptionInvestigation />} />
             <Route path="exception-investigation/:exceptionId" element={<ExceptionInvestigation />} />
-            <Route path="analytics-explorer" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="analytics-explorer"       element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity/:account" element={<ReconciliationAnalyticsExplorer />} />
-            <Route path="reconciliation-profiles" element={<ReconciliationProfiles />} />
-            <Route path="risk-dashboard" element={<RiskDashboard />} />
-            <Route path="risk-dashboard/:entity" element={<RiskDashboard />} />
+            <Route path="reconciliation-profiles"  element={<ReconciliationProfiles />} />
+            <Route path="risk-dashboard"           element={<RiskDashboard />} />
+            <Route path="risk-dashboard/:entity"   element={<RiskDashboard />} />
             <Route path="risk-dashboard/:entity/:account" element={<RiskDashboard />} />
-            <Route path="close-certification" element={<CloseCertificationPage />} />
-            <Route path="controls-governance" element={<ControlsGovernancePage />} />
-            <Route path="platform-admin" element={<PlatformAdminPage />} />
-            <Route path="work-queue" element={<WorkQueue />} />
-            <Route path="my-reconciliations" element={<PreparerWorkbench />} />
-            <Route path="workspaces" element={<Navigate to="/work-queue" replace />} />
-            <Route path="preparer-worklist" element={<Navigate to="/my-reconciliations" replace />} />
-            <Route path="review-queue" element={<Navigate to="/work-queue" replace />} />
-            <Route path="my-performance" element={<MyPerformance />} />
-            <Route path="reconciliations" element={<ReconciliationsHub />} />
-            <Route path="enterprise-ops" element={<EnterpriseOps />} />
-            <Route path="admin" element={<AdminCenter />} />
-            <Route path="projects/:projectId/:section" element={<ProjectWorkflowPage />} />
-            <Route path="projects/:projectId/preparer" element={<PreparerWorkbench />} />
-            <Route path="projects/:projectId/reviewer" element={<ReviewerWorkbench />} />
-            <Route path="audit" element={<AuditLogs />} />
-            <Route path="close-calendar" element={<Schedules />} />
-            <Route path="certification-workflow" element={<WorkflowPage />} />
-            <Route path="rule-builder" element={<RuleBuilder />} />
-            <Route path="enterprise-center" element={<EnterpriseReconciliationCenter />} />
-            <Route path="dashboard" element={<Navigate to="/command-center" replace />} />
-            <Route path="governance-controls" element={<Navigate to="/controls-governance" replace />} />
+            <Route path="close-certification"      element={<CloseCertificationPage />} />
+            <Route path="controls-governance"      element={<ControlsGovernancePage />} />
+            <Route path="platform-admin"           element={<PlatformAdminPage />} />
+            <Route path="reconciliations"          element={<ReconciliationsHub />} />
+            <Route path="enterprise-ops"           element={<EnterpriseOps />} />
+            <Route path="enterprise-center"        element={<EnterpriseReconciliationCenter />} />
+            <Route path="admin"                    element={<AdminCenter />} />
+            <Route path="audit"                    element={<AuditLogs />} />
+            <Route path="close-calendar"           element={<Schedules />} />
+            <Route path="certification-workflow"   element={<WorkflowPage />} />
+            <Route path="rule-builder"             element={<RuleBuilder />} />
+
+            {/* ── Preparer ── */}
+            <Route path="my-reconciliations"       element={<PreparerWorkbench />} />
+            <Route path="my-performance"           element={<MyPerformance />} />
+            <Route path="preparer-worklist"        element={<Navigate to="/my-reconciliations" replace />} />
+
+            {/* ── Reviewer ── */}
+            <Route path="work-queue"               element={<WorkQueue />} />
+            <Route path="workspaces"               element={<Navigate to="/work-queue" replace />} />
+            <Route path="review-queue"             element={<Navigate to="/work-queue" replace />} />
+
+            {/* ── Approver ── */}
+            <Route path="approver-queue"           element={<ApproverWorkbench />} />
+
+            {/* ── Project-scoped workflow ── */}
+            <Route path="projects/:projectId/:section"   element={<ProjectWorkflowPage />} />
+            <Route path="projects/:projectId/preparer"   element={<PreparerWorkbench />} />
+            <Route path="projects/:projectId/reviewer"   element={<ReviewerWorkbench />} />
+            <Route path="projects/:projectId/approver"   element={<ApproverWorkbench />} />
+
+            {/* ── Transaction matching ── */}
             <Route path="transaction-matching-workspace" element={<TransactionMatchingWorkspace />} />
-            <Route path="transaction-matching" element={<TransactionMatchingWorkspace />} />
+            <Route path="transaction-matching"           element={<TransactionMatchingWorkspace />} />
+
+            {/* ── Legacy aliases ── */}
+            <Route path="dashboard"                      element={<Navigate to="/command-center" replace />} />
+            <Route path="governance-controls"            element={<Navigate to="/controls-governance" replace />} />
             <Route path="balance-reconciliations-workspace" element={<Navigate to="/enterprise-ops" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

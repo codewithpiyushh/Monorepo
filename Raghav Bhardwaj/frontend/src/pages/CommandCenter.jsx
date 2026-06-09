@@ -391,7 +391,8 @@ export default function CommandCenter() {
     const cols = Math.max(1, Math.floor((w + TILE_GAP) / (TILE_MIN_W + TILE_GAP)))
     // Always show exactly 3 rows — fixed requirement
     const rows = 3
-    setTilesPerPage(cols * rows)
+    // Keep tile pages bounded so the tile view still paginates on large screens.
+    setTilesPerPage(Math.max(1, Math.min(cols * rows, 12)))
   }, [])
 
   const measureListRows = useCallback(() => {
@@ -457,7 +458,7 @@ export default function CommandCenter() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
 
       {/* ── Enterprise KPI Strip ─────────────────────────────── */}
-      {execDash && (
+      {projects.length > 0 && execDash && (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(6, 1fr)',

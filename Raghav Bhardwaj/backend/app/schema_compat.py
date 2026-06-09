@@ -29,6 +29,7 @@ def apply_compat_patches() -> None:
             ("resolved_at", "DATETIME NULL"),
         ],
         "reconciliation_profiles": [
+            ("project_id", "INT NULL"),
             ("assigned_approver", "INT NULL"),
             ("assigned_certifier", "INT NULL"),
             ("risk_classification", "VARCHAR(20) NULL"),

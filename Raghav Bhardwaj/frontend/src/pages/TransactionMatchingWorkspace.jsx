@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
 import { advancedAPI } from '../api'
+import { useProjectStore } from '../store/projectStore'
 import toast from 'react-hot-toast'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState } from '../components/ui/PageState'
@@ -30,7 +31,11 @@ export default function TransactionMatchingWorkspace() {
   const [fxDate,            setFxDate]            = useState('')
 
   const qc = useQueryClient()
-  const { data: profiles = [] } = useQuery({ queryKey: ['enterprise-profiles'], queryFn: enterpriseAPI.listProfiles })
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
+  const { data: profiles = [] } = useQuery({
+    queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
+  })
 
   const selectedProfile = useMemo(() => profiles.find((p) => String(p.id) === String(profileId)) || null, [profiles, profileId])
 

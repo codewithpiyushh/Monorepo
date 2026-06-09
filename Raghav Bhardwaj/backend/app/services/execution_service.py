@@ -580,6 +580,7 @@ def promote_execution_to_profile(
         profile_name = f"{profile_name} [run#{execution_id}]"
 
     profile = ReconciliationProfile(
+        project_id=project_id,
         name=profile_name,
         reconciliation_type=recon_type,
         frequency="MONTHLY",

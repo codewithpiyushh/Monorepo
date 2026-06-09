@@ -1,3 +1,38 @@
+# Reconciliation App — Quickstart
+
+This repository contains a reconciliation application (backend FastAPI + frontend React). For a full, detailed guide see `PROJECT_GUIDE.md`.
+
+Quick start (local development):
+
+1. Backend
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -c "from app.database import init_db; init_db()"
+uvicorn app.main:app --reload --port 8000
+```
+
+2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+3. Seed demo data (optional)
+
+```powershell
+cd backend
+python scripts\bootstrap_demo_database.py
+```
+
+Where to go next:
+- Read the full `PROJECT_GUIDE.md` for architecture, role descriptions, flows, and API examples.
+- Open the Preparer/Reviewer/Execution workbenches in the UI to try a seeded demo flow.
 # DRMS — Data Reconciliation Management System
 
 Enterprise financial reconciliation platform inspired by **Oracle ARCS** and **BlackLine**, built with FastAPI + React.
@@ -85,6 +120,13 @@ npm run dev
 ```
 
 App: `http://localhost:5173`
+
+### One-shot demo seed
+From the repo root, run:
+```powershell
+.\seed-demo-flow.ps1
+```
+That resets and seeds the full demo flow automatically: users, projects, enterprise profiles, close calendars, workflows, exceptions, notifications, and supporting audit data.
 
 ---
 

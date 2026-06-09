@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { enterpriseAPI } from '../api'
+import { useProjectStore } from '../store/projectStore'
 import toast from 'react-hot-toast'
 import PageHeader from '../components/ui/PageHeader'
 
@@ -11,10 +12,11 @@ export default function WorkflowPage() {
   const [action, setAction] = useState('PREPARE')
   const [comments, setComments] = useState('')
   const [profileFilter, setProfileFilter] = useState('')
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
 
   const { data: profiles = [] } = useQuery({
-    queryKey: ['certification-profiles'],
-    queryFn: enterpriseAPI.listProfiles,
+    queryKey: ['certification-profiles', selectedProjectId || 'all'],
+    queryFn: () => enterpriseAPI.listProfiles(selectedProjectId ? Number(selectedProjectId) : undefined),
   })
 
   const { data: workflows = [] } = useQuery({
