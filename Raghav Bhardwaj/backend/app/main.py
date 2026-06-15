@@ -1,75 +1,103 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from .database import init_db
-from .routes import auth, projects, datasets, mappings, rules, executions, audit, export, schedules
-from .routes import ops_v1
+from contextlib import asynccontextmanager
+
+# Database & Core
+from .database import init_db, SessionLocal
+from .core.config import settings
+from .schema_compat import apply_compat_patches
+from .scheduler import service as scheduler_service
+
+# Routes
+from .routes import (
+    auth, projects, datasets, mappings, rules, 
+    executions, audit, export, schedules, ops_v1, 
+    balances, aging, variance
+)
 from .sequence import routes as sequences
 from .workflow import routes as workflow
-from .services.auth_service import create_user
-from .schemas.schemas import UserCreate
-from .database import SessionLocal
-from .scheduler import service as scheduler_service
-from .enterprise import routes as enterprise
-from .enterprise import routes_v1 as enterprise_v1
-from .schema_compat import apply_compat_patches
-
-app = FastAPI(
-    title="DRMS — Data Reconciliation Management System",
-    description=(
-        "Enterprise-grade data reconciliation platform inspired by Oracle ARCS.\n\n"
-        "Authentication: use `/api/auth/login`, then pass `Authorization: Bearer <token>`.\n"
-        "Versioned APIs are available under `/api/v1/enterprise` and `/api/v1/ops`.\n"
-    ),
-    version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+from .enterprise import (
+    routes as enterprise, 
+    routes_v1 as enterprise_v1,
+    profiles_v1,
+    lifecycle_router,
+    supporting_items_router,
+    comment_router
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Helpers
+def _seed_demo_user():
+    # Placeholder for your user seeding logic
+    pass
 
-# Register routers
-app.include_router(auth.router)
-app.include_router(projects.router)
-app.include_router(datasets.router)
-app.include_router(mappings.router)
-app.include_router(rules.router)
-app.include_router(executions.router)
-app.include_router(audit.router)
-app.include_router(export.router)
-app.include_router(sequences.router)
-app.include_router(schedules.router)
-app.include_router(workflow.router)
-app.include_router(enterprise.router)
-app.include_router(enterprise_v1.router)
-app.include_router(ops_v1.router)
-
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     init_db()
-    apply_compat_patches()
-    _seed_demo_user()
+    try:
+        apply_compat_patches()
+    except Exception as e:
+        print(f"[schema_compat] Warning: {e}")
+
+    try:
+        _seed_demo_user()
+    except Exception as e:
+        print(f"[seed_demo_user] Warning: {e}")
+
+    db = SessionLocal()
+    try:
+        from .services.demo_manager import run_demo_startup
+        run_demo_startup(db)
+    finally:
+        db.close()
+
     if os.getenv("DISABLE_SCHEDULER", "false").lower() not in ("1", "true", "yes"):
         db = SessionLocal()
         try:
             scheduler_service.start_scheduler(db)
         finally:
             db.close()
+    yield
+    # Shutdown logic...
 
+app = FastAPI(
+    title="DRMS — Data Reconciliation Management System",
+    version="2.0.0",
+    docs_url="/api/docs",
+    lifespan=lifespan,
+)
 
-@app.on_event("shutdown")
-def on_shutdown():
-    if os.getenv("DISABLE_SCHEDULER", "false").lower() not in ("1", "true", "yes"):
-        scheduler_service.shutdown_scheduler()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-
+# ── Router Registration ───────────────────────────────────────────────────────
+# Keep these as-is for legacy support
+app.include_router(auth.router, prefix="/api") 
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(datasets.router, prefix="/api/v1")
+app.include_router(mappings.router, prefix="/api/v1")
+app.include_router(rules.router, prefix="/api/v1")
+app.include_router(executions.router, prefix="/api/v1")
+app.include_router(audit.router, prefix="/api/v1")
+app.include_router(export.router, prefix="/api/v1")
+app.include_router(sequences.router, prefix="/api/v1")
+app.include_router(schedules.router, prefix="/api/v1")
+app.include_router(workflow.router, prefix="/api/v1")
+app.include_router(enterprise.router, prefix="/api/v1/enterprise")
+app.include_router(enterprise_v1.router, prefix="/api/v1/enterprise")
+app.include_router(profiles_v1.router, prefix="/api/v1/profiles")
+app.include_router(lifecycle_router.router, prefix="/api/v1")
+app.include_router(supporting_items_router.router, prefix="/api/v1")
+app.include_router(ops_v1.router, prefix="/api/v1/ops")
+app.include_router(balances.router, prefix="/api/v1")
+app.include_router(aging.router, prefix="/api/v1/exceptions") # Fixes 404s for aging endpoints
+app.include_router(variance.router, prefix="/api/v1")
+app.include_router(comment_router.router, prefix="/api/v1/enterprise/comments", tags=["comments"])
 def _seed_demo_user():
     db = SessionLocal()
     try:
@@ -141,7 +169,6 @@ def _seed_demo_user():
             )
     finally:
         db.close()
-
 
 @app.get("/api/health")
 def health():

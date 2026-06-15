@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, Index
+    Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey, Index, Date, true
 )
 from sqlalchemy.orm import relationship
 from ..database import Base
@@ -31,7 +31,7 @@ class Project(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    is_demo_data = Column(Boolean, default=False, nullable=False, index=True)
     owner = relationship("User", back_populates="projects")
     datasets = relationship("Dataset", back_populates="project", cascade="all, delete-orphan")
     mappings = relationship("Mapping", back_populates="project", cascade="all, delete-orphan")
@@ -348,12 +348,127 @@ class ReconciliationProfile(Base):
     assigned_certifier = Column(Integer, ForeignKey("users.id"), nullable=True)
     risk_classification = Column(String(20), default="MEDIUM")
     due_days = Column(Integer, default=5)
+    risk_score          = Column(Float, nullable=True)
+    risk_scored_at      = Column(DateTime, nullable=True)
     auto_approve_threshold = Column(Float, default=1.0)
     materiality_limit = Column(Float, default=0.0)
     lifecycle_state = Column(String(30), default="OPEN")
     active = Column(Boolean, default=True)
+    is_demo_data = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ReconciliationBalance(Base):
+    """
+    Balance Reconciliation Engine — core record.
+
+    One row per profile per period.  Tracks GL balance vs supporting balance,
+    calculates variance, and drives the DRAFT → UNDER_REVIEW → APPROVED →
+    CERTIFIED state machine without introducing a new workflow framework —
+    it reuses CertificationWorkflow for history and ownership.
+    """
+    __tablename__ = "reconciliation_balances"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    profile_id          = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    period_key          = Column(String(30), nullable=False)          # e.g. 2026-05
+
+    # ── Balances ──────────────────────────────────────────────────────────
+    source_balance      = Column(Float, nullable=False, default=0.0)  # GL / source
+    target_balance      = Column(Float, nullable=False, default=0.0)  # Bank / supporting
+    variance_amount     = Column(Float, nullable=True)                # ABS(source - target)
+    variance_percentage = Column(Float, nullable=True)                # safe division
+    variance_severity_classification = Column(String(30), nullable=True)
+    root_cause_category = Column(String(40), nullable=True)
+    variance_explanation = Column(Text, nullable=True)
+    resolution_target_date = Column(Date, nullable=True)
+    resolution_status = Column(String(20), nullable=True, default="OPEN")
+    explained_variance = Column(Float, nullable=True)
+    unexplained_variance = Column(Float, nullable=True)
+    flux_amount = Column(Float, nullable=True)
+    flux_percentage = Column(Float, nullable=True)
+
+    # ── Thresholds inherited from profile on creation ─────────────────────
+    threshold_amount    = Column(Float, nullable=False, default=0.0)
+    materiality_limit   = Column(Float, nullable=False, default=0.0)
+
+    # ── Status machine ────────────────────────────────────────────────────
+    # DRAFT | BALANCED | WITHIN_THRESHOLD | OUT_OF_BALANCE |
+    # UNDER_REVIEW | APPROVED | CERTIFIED | REJECTED
+    status              = Column(String(30), nullable=False, default="DRAFT")
+    comments            = Column(Text, nullable=True)
+
+    # ── Workflow timestamps ───────────────────────────────────────────────
+    submitted_at        = Column(DateTime, nullable=True)
+    reviewed_at         = Column(DateTime, nullable=True)
+    approved_at         = Column(DateTime, nullable=True)
+    certified_at        = Column(DateTime, nullable=True)
+
+    # ── Ownership — copied from profile at creation time ──────────────────
+    preparer_id         = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewer_id         = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approver_id         = Column(Integer, ForeignKey("users.id"), nullable=True)
+    certifier_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # ── Audit ─────────────────────────────────────────────────────────────
+    created_by          = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by          = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+    updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_demo_data        = Column(Boolean, default=False, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_recon_balances_profile_period",  "profile_id", "period_key"),
+        Index("ix_recon_balances_status",          "status"),
+        Index("ix_recon_balances_created_at",      "created_at"),
+        # One balance record per profile per period
+        Index("uq_recon_balances_profile_period",  "profile_id", "period_key", unique=True),
+    )
+
+
+class ReconciliationBalanceHistory(Base):
+    """
+    Immutable audit trail for every state transition on a balance record.
+    Participates in the existing hash-chain audit structure via audit_service.
+    """
+    __tablename__ = "reconciliation_balance_history"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    balance_id      = Column(Integer, ForeignKey("reconciliation_balances.id"), nullable=False, index=True)
+    actor_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    actor_role      = Column(String(30), nullable=True)
+    action          = Column(String(40), nullable=False)   # CREATE/UPDATE/SUBMIT/APPROVE/REJECT/CERTIFY
+    from_status     = Column(String(30), nullable=True)
+    to_status       = Column(String(30), nullable=True)
+    source_balance  = Column(Float, nullable=True)         # snapshot at time of action
+    target_balance  = Column(Float, nullable=True)
+    variance_amount = Column(Float, nullable=True)
+    comments        = Column(Text, nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+
+class VarianceSnapshot(Base):
+    __tablename__ = "variance_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
+    period_key = Column(String(30), nullable=False)
+    raw_variance = Column(Float, nullable=True)
+    explained_variance = Column(Float, nullable=True)
+    unexplained_variance = Column(Float, nullable=True)
+    flux_amount = Column(Float, nullable=True)
+    flux_percentage = Column(Float, nullable=True)
+    risk_score_at_snapshot = Column(Float, nullable=True)
+    variance_classification = Column(String(30), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_demo_data = Column(Boolean, default=False, nullable=False)
+
+    __table_args__ = (
+        Index("ix_variance_snapshot_profile", "profile_id"),
+        Index("ix_variance_snapshot_period", "period_key"),
+        Index("ix_variance_snapshot_profile_period", "profile_id", "period_key"),
+    )
 
 
 class ReconciliationRecord(Base):
@@ -385,9 +500,11 @@ class MatchGroup(Base):
     __tablename__ = "match_groups"
 
     id = Column(Integer, primary_key=True, index=True)
+    execution_id = Column(Integer, ForeignKey("executions.id"), nullable=True)
+    execution = relationship("Execution", backref="match_groups")
     profile_id = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False)
-    strategy = Column(String(40), nullable=False)  # exact/tolerance/fuzzy/date_window/rule_based
-    classification = Column(String(30), nullable=False)  # FULL_MATCH/PARTIAL_MATCH/UNMATCHED/VARIANCE_FLAGGED
+    strategy = Column(String(50), nullable=true)
+    classification = Column(String(30), nullable=False)
     confidence = Column(Float, default=0.0)
     variance_amount = Column(Float, default=0.0)
     reconciled = Column(Boolean, default=False)
@@ -424,9 +541,63 @@ class ExceptionQueueRecord(Base):
     resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_demo_data = Column(Boolean, default=False, nullable=False)
+
     __table_args__ = (
         Index("ix_exception_queue_status", "status"),
         Index("ix_exception_queue_assigned", "assigned_to"),
+        Index("ix_exception_queue_demo", "is_demo_data"),
+    )
+
+
+class ExceptionAgingSnapshot(Base):
+    """
+    Periodic snapshot of exception aging state per exception.
+    Enables month-over-month trend comparisons without recomputing history.
+    Written by the aging engine on each run; one row per exception per period.
+    """
+    __tablename__ = "exception_aging_snapshots"
+
+    id                      = Column(Integer, primary_key=True, index=True)
+    exception_id            = Column(Integer, ForeignKey("exception_queue_records.id"), nullable=False)
+    profile_id              = Column(Integer, nullable=True)          # denormalised for fast filter
+    snapshot_period         = Column(String(8), nullable=False)       # e.g. "2026-05"
+    age_days                = Column(Integer, nullable=False)
+    bucket                  = Column(String(10), nullable=False)      # CURRENT/WARNING/BREACH/CRITICAL
+    exception_amount        = Column(Float, nullable=True)
+    status                  = Column(String(30), nullable=True)       # status at snapshot time
+    risk_classification     = Column(String(20), nullable=True)
+    created_at              = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_aging_snapshot_exception",  "exception_id"),
+        Index("ix_aging_snapshot_period",     "snapshot_period"),
+        Index("ix_aging_snapshot_bucket",     "bucket"),
+        Index("ix_aging_snapshot_profile",    "profile_id"),
+    )
+
+
+class ExceptionEscalationLog(Base):
+    """
+    Immutable log of every automated aging escalation.
+    Participates in the hash-chain audit via audit_service.
+    Prevents duplicate escalation notifications within the same day.
+    """
+    __tablename__ = "exception_escalation_logs"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    exception_id        = Column(Integer, ForeignKey("exception_queue_records.id"), nullable=False)
+    escalation_level    = Column(String(20), nullable=False)    # BREACH / CRITICAL / SEVERE
+    age_days            = Column(Integer, nullable=False)
+    notified_user_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notified_role       = Column(String(30), nullable=True)
+    escalated_at        = Column(DateTime, default=datetime.utcnow)
+    notification_sent   = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("ix_escalation_log_exception",    "exception_id"),
+        Index("ix_escalation_log_level",        "escalation_level"),
+        Index("ix_escalation_log_escalated_at", "escalated_at"),
     )
 
 
@@ -479,6 +650,7 @@ class CertificationWorkflow(Base):
     last_comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_demo_data = Column(Boolean, default=False, nullable=False, index=True)
 
 
 class CertificationWorkflowHistory(Base):
@@ -493,6 +665,7 @@ class CertificationWorkflowHistory(Base):
     to_status = Column(String(30), nullable=True)
     comments = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_demo_data = Column(Boolean, default=False, nullable=False)
 
 
 class ReconciliationRuleDefinition(Base):
@@ -847,9 +1020,12 @@ class UINotification(Base):
     metadata_json = Column(Text, nullable=True)  # JSON for additional data
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     read_at = Column(DateTime, nullable=True)
+    is_demo_data = Column(Boolean, default=False, nullable=False)
+
     __table_args__ = (
         Index("ix_ui_notifications_user_unread", "user_id", "is_read"),
         Index("ix_ui_notifications_created", "created_at"),
+        Index("ix_ui_notifications_demo", "is_demo_data"),
     )
 
 

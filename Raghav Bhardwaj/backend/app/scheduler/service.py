@@ -146,6 +146,34 @@ def _run_system_job(job_name: str):
         db.close()
 
 
+def _run_aging_escalations():
+    """APScheduler wrapper — daily aging escalation engine."""
+    from ..database import SessionLocal
+    from ..services.aging_service import run_escalations
+    db = SessionLocal()
+    try:
+        result = run_escalations(db, actor_id=None)
+        logger.info("[Aging Scheduler] Escalations: %s", result)
+    except Exception:
+        logger.exception("[Aging Scheduler] Escalation error")
+    finally:
+        db.close()
+
+
+def _run_aging_snapshot():
+    """APScheduler wrapper — monthly aging snapshot writer."""
+    from ..database import SessionLocal
+    from ..services.aging_service import write_monthly_snapshot
+    db = SessionLocal()
+    try:
+        result = write_monthly_snapshot(db, actor_id=None)
+        logger.info("[Aging Scheduler] Snapshot: %s", result)
+    except Exception:
+        logger.exception("[Aging Scheduler] Snapshot error")
+    finally:
+        db.close()
+
+
 def _register_system_jobs():
     system_jobs = [
         ("system:overdue_detection", "*/15 * * * *", "overdue_detection"),
@@ -165,6 +193,24 @@ def _register_system_jobs():
             replace_existing=True,
             misfire_grace_time=120,
         )
+
+    # ── Aging Engine Jobs ────────────────────────────────────────────────────
+    scheduler.add_job(
+        _run_aging_escalations,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="aging_escalations",
+        name="Daily Aging Escalation Engine",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    scheduler.add_job(
+        _run_aging_snapshot,
+        trigger=CronTrigger(day=1, hour=0, minute=5),
+        id="aging_monthly_snapshot",
+        name="Monthly Aging Snapshot Writer",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
 
 
 def create_schedule(

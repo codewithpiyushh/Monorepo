@@ -7,7 +7,7 @@ import {
   ClipboardList, Command, FolderOpen, LogOut, Moon, Repeat,
   Shield, Sun, ShieldAlert, Scale, User, Search, ChevronRight,
   LayoutDashboard, Settings, ChevronsLeft, ChevronsRight,
-  Grid2x2, List, Plus,
+  Grid2x2, List, Plus, Clock,
 } from 'lucide-react'
 import NotificationCenter from './NotificationCenter'
 import { useAuthStore } from '../store/authStore'
@@ -22,6 +22,7 @@ const PAGE_META = {
   '/exception-workbench':     { label: 'Exception Workbench',       section: 'Operations' },
   '/certification-workflow':  { label: 'Certification Workflow',    section: 'Close Management' },
   '/analytics-explorer':      { label: 'Analytics',                section: 'Analytics' },
+  '/variance-analytics':      { label: 'Variance Analytics',       section: 'Analytics' },
   '/reconciliation-profiles': { label: 'Reconciliation Profiles',  section: 'Operations' },
   '/admin':                   { label: 'Admin Center',              section: 'Administration' },
   '/work-queue':              { label: 'Work Queue',                section: 'My Work' },
@@ -63,6 +64,10 @@ const ADMIN_NAV_GROUPS = [
   {
     section: 'Admin',
     items: [
+      { to: '/reconciliation-profiles', icon: FolderOpen,  tip: 'Reconciliation Profiles', label: 'Profiles' },
+      { to: '/balance-reconciliation',  icon: Scale,       tip: 'Balance Reconciliation',  label: 'Balance Recon' },
+      { to: '/aging-dashboard',         icon: Clock,       tip: 'Aging Analysis',          label: 'Aging Analysis' },
+      { to: '/variance-analytics',      icon: BarChart3,   tip: 'Variance Analytics',      label: 'Variance Analytics' },
       { to: '/rule-builder',       icon: ShieldAlert,     tip: 'Rule Builder',          label: 'Rule Builder' },
       { to: '/audit',              icon: ClipboardList,   tip: 'Audit Trail',           label: 'Audit Trail' },
       { to: '/admin',              icon: Settings,        tip: 'Admin Center',          label: 'Admin' },
@@ -74,6 +79,7 @@ const PREPARER_NAV_GROUPS = [
   {
     section: 'My Work',
     items: [
+      { to: '/balance-reconciliation', icon: Scale,        tip: 'Balance Reconciliation', label: 'Balance Recon' },
       { to: '/my-reconciliations', icon: ClipboardList, tip: 'My Reconciliations', label: 'My Reconciliations' },
       { to: '/my-performance',     icon: BarChart3,      tip: 'My Performance',     label: 'Performance' },
     ],
@@ -90,8 +96,11 @@ const REVIEWER_NAV_GROUPS = [
   {
     section: 'Review',
     items: [
-      { to: '/work-queue', icon: FolderOpen,    tip: 'Review Queue — submissions awaiting first-pass review', label: 'Review Queue' },
-      { to: '/audit',      icon: ClipboardList, tip: 'Audit Trail', label: 'Audit Trail' },
+      { to: '/work-queue',             icon: FolderOpen,    tip: 'Review Queue — submissions awaiting first-pass review', label: 'Review Queue' },
+      { to: '/balance-reconciliation', icon: Scale,         tip: 'Balance Reconciliation', label: 'Balance Recon' },
+      { to: '/aging-dashboard',        icon: Clock,         tip: 'Aging Analysis',         label: 'Aging Analysis' },
+      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',     label: 'Variance Analytics' },
+      { to: '/audit',                  icon: ClipboardList, tip: 'Audit Trail', label: 'Audit Trail' },
     ],
   },
 ]
@@ -106,9 +115,12 @@ const APPROVER_NAV_GROUPS = [
   {
     section: 'Approval',
     items: [
-      { to: '/approver-queue',     icon: CheckCircle2,   tip: 'Approver Queue — reviewed items awaiting final sign-off', label: 'Approver Queue' },
-      { to: '/analytics-explorer', icon: BarChart3,      tip: 'Analytics',    label: 'Analytics' },
-      { to: '/audit',              icon: ClipboardList,  tip: 'Audit Trail',  label: 'Audit Trail' },
+      { to: '/approver-queue',         icon: CheckCircle2,   tip: 'Approver Queue — reviewed items awaiting final sign-off', label: 'Approver Queue' },
+      { to: '/balance-reconciliation', icon: Scale,          tip: 'Balance Reconciliation', label: 'Balance Recon' },
+      { to: '/aging-dashboard',        icon: Clock,          tip: 'Aging Analysis',         label: 'Aging Analysis' },
+      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',     label: 'Variance Analytics' },
+      { to: '/analytics-explorer',     icon: BarChart3,      tip: 'Analytics',    label: 'Analytics' },
+      { to: '/audit',                  icon: ClipboardList,  tip: 'Audit Trail',  label: 'Audit Trail' },
     ],
   },
 ]
@@ -122,9 +134,12 @@ const CERTIFIER_NAV_GROUPS = [
   {
     section: 'Close Certification',
     items: [
-      { to: '/close-certification', icon: CalendarCheck2, tip: 'Close Certification', label: 'Close Cert' },
-      { to: '/close-calendar',      icon: CalendarCheck2, tip: 'Close Calendar',      label: 'Calendar' },
-      { to: '/analytics-explorer',  icon: BarChart3,      tip: 'Analytics',           label: 'Analytics' },
+      { to: '/close-certification',    icon: CalendarCheck2, tip: 'Close Certification', label: 'Close Cert' },
+      { to: '/balance-reconciliation', icon: Scale,          tip: 'Balance Reconciliation', label: 'Balance Recon' },
+      { to: '/aging-dashboard',        icon: Clock,          tip: 'Aging Analysis',         label: 'Aging Analysis' },
+      { to: '/variance-analytics',     icon: BarChart3,      tip: 'Variance Analytics',     label: 'Variance Analytics' },
+      { to: '/close-calendar',         icon: CalendarCheck2, tip: 'Close Calendar',      label: 'Calendar' },
+      { to: '/analytics-explorer',     icon: BarChart3,      tip: 'Analytics',           label: 'Analytics' },
     ],
   },
 ]
@@ -138,6 +153,8 @@ const AUDITOR_NAV_GROUPS = [
   {
     section: 'Audit & Compliance',
     items: [
+      { to: '/aging-dashboard',        icon: Clock,         tip: 'Aging Analysis',           label: 'Aging Analysis' },
+      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',       label: 'Variance Analytics' },
       { to: '/audit',                icon: ClipboardList, tip: 'Audit Trail',              label: 'Audit Trail' },
       { to: '/reconciliation-profiles', icon: FolderOpen, tip: 'Reconciliation Profiles',  label: 'Profiles' },
       { to: '/analytics-explorer',   icon: BarChart3,     tip: 'Analytics',                label: 'Analytics' },

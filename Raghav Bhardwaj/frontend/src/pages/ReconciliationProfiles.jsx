@@ -1,25 +1,32 @@
+// frontend/src/pages/ReconciliationProfiles.jsx
+// Updated: Wired ApprovalChainBuilder into ProfileFormModal.
+// All existing functionality preserved — chain builder added as a new
+// collapsible section below Workflow Assignments.
+
 import { useState, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { enterpriseAPI, authAPI } from '../api'
 import { enterpriseExtAPI } from '../api'
+import lifecycleAPI from '../api/lifecycleAPI'
 import toast from 'react-hot-toast'
 import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState } from '../components/ui/PageState'
+import ApprovalChainBuilder from '../components/profile/ApprovalChainBuilder'
 import {
   Plus, Copy, RefreshCw, Edit2, Trash2, X, ChevronDown, ChevronUp,
-  ShieldAlert, CheckCircle2, Clock, AlertTriangle, Layers,
+  ShieldAlert, CheckCircle2, Clock, AlertTriangle, Layers, GitMerge,
 } from 'lucide-react'
 
-// ── Constants ─────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
 const RECON_TYPES = [
   'BANK_RECONCILIATION','AP_RECONCILIATION','AR_RECONCILIATION',
   'INTERCOMPANY_RECONCILIATION','PAYROLL_RECONCILIATION','CASH_RECONCILIATION',
   'INVENTORY_RECONCILIATION','FX_RECONCILIATION',
 ]
-const FREQUENCIES  = ['DAILY','WEEKLY','MONTHLY','QUARTERLY','YEARLY']
-const RISK_LEVELS  = ['LOW','MEDIUM','HIGH','CRITICAL']
+const FREQUENCIES      = ['DAILY','WEEKLY','MONTHLY','QUARTERLY','YEARLY']
+const RISK_LEVELS      = ['LOW','MEDIUM','HIGH','CRITICAL']
 const LIFECYCLE_STATES = ['OPEN','IN_PROGRESS','PREPARED','SUBMITTED','UNDER_REVIEW','APPROVED','CERTIFIED','CLOSED']
 
 const BLANK_FORM = {
@@ -29,14 +36,14 @@ const BLANK_FORM = {
   assigned_approver:'', assigned_certifier:'',
 }
 
-const RISK_COLOR = { LOW:'var(--ok)', MEDIUM:'var(--warn)', HIGH:'var(--bad)', CRITICAL:'#c026d3' }
+const RISK_COLOR  = { LOW:'var(--ok)', MEDIUM:'var(--warn)', HIGH:'var(--bad)', CRITICAL:'#c026d3' }
 const STATE_COLOR = {
   OPEN:'var(--text-tertiary)', IN_PROGRESS:'var(--accent)', PREPARED:'var(--info)',
   SUBMITTED:'var(--warn)', UNDER_REVIEW:'var(--warn)', APPROVED:'var(--ok)',
   CERTIFIED:'var(--ok)', CLOSED:'var(--text-disabled)',
 }
 
-// ── Small helpers ─────────────────────────────────────────────
+// ── Small helpers ──────────────────────────────────────────────────────────
 function RiskBadge({ risk }) {
   const color = RISK_COLOR[risk] || 'var(--text-tertiary)'
   return (
@@ -57,26 +64,42 @@ function StateBadge({ state }) {
   )
 }
 
-// ── Profile Form Modal ────────────────────────────────────────
+// ── Parse chain safely ─────────────────────────────────────────────────────
+function parseChain(raw) {
+  if (!raw) return []
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(parsed) ? parsed.map((s, i) => ({ ...s, _id: s._id || String(i) })) : []
+  } catch {
+    return []
+  }
+}
+
+// ── Profile Form Modal ─────────────────────────────────────────────────────
 function ProfileFormModal({ profile, users, onClose, onSaved }) {
   const isEdit = !!profile
-  const qc = useQueryClient()
+  const qc     = useQueryClient()
   const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
+
   const [form, setForm] = useState(isEdit ? {
-    name: profile.name,
+    name:                profile.name,
     reconciliation_type: profile.reconciliation_type || 'BANK_RECONCILIATION',
-    frequency: profile.frequency || 'MONTHLY',
+    frequency:           profile.frequency || 'MONTHLY',
     tolerance_threshold: profile.tolerance_threshold ?? 0.5,
-    date_window_days: profile.date_window_days ?? 2,
+    date_window_days:    profile.date_window_days ?? 2,
     risk_classification: profile.risk_classification || 'MEDIUM',
-    due_days: profile.due_days ?? 5,
-    assigned_preparer: String(profile.assigned_preparer || ''),
-    assigned_reviewer: String(profile.assigned_reviewer || ''),
-    assigned_approver: String(profile.assigned_approver || ''),
-    assigned_certifier: String(profile.assigned_certifier || ''),
+    due_days:            profile.due_days ?? 5,
+    assigned_preparer:   String(profile.assigned_preparer || ''),
+    assigned_reviewer:   String(profile.assigned_reviewer || ''),
+    assigned_approver:   String(profile.assigned_approver || ''),
+    assigned_certifier:  String(profile.assigned_certifier || ''),
   } : { ...BLANK_FORM })
 
-  const [saving, setSaving] = useState(false)
+  // ── Approval chain state ───────────────────────────────────────────────
+  const [chain, setChain]           = useState(() => parseChain(profile?.approval_chain_json))
+  const [chainValid, setChainValid] = useState(true)
+  const [showChain, setShowChain]   = useState(chain.length > 0)
+  const [saving, setSaving]         = useState(false)
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -87,23 +110,37 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Profile name is required'); return }
+    if (!chainValid) { toast.error('Fix approval chain errors before saving.'); return }
+
     setSaving(true)
     try {
       const payload = {
         ...form,
-        project_id: isEdit ? (profile.project_id || null) : (selectedProjectId ? Number(selectedProjectId) : null),
+        project_id: isEdit
+          ? (profile.project_id || null)
+          : (selectedProjectId ? Number(selectedProjectId) : null),
         tolerance_threshold: Number(form.tolerance_threshold),
-        date_window_days: Number(form.date_window_days),
-        due_days: Number(form.due_days),
-        assigned_preparer: form.assigned_preparer ? Number(form.assigned_preparer) : null,
-        assigned_reviewer: form.assigned_reviewer ? Number(form.assigned_reviewer) : null,
-        assigned_approver: form.assigned_approver ? Number(form.assigned_approver) : null,
-        assigned_certifier: form.assigned_certifier ? Number(form.assigned_certifier) : null,
-        workflow_config: { require_preparer:true, require_reviewer:true,
-          require_approver: ['HIGH','CRITICAL'].includes(form.risk_classification),
-          require_certifier: form.risk_classification === 'CRITICAL', sod_enforced:true },
+        date_window_days:    Number(form.date_window_days),
+        due_days:            Number(form.due_days),
+        assigned_preparer:   form.assigned_preparer  ? Number(form.assigned_preparer)  : null,
+        assigned_reviewer:   form.assigned_reviewer  ? Number(form.assigned_reviewer)  : null,
+        assigned_approver:   form.assigned_approver  ? Number(form.assigned_approver)  : null,
+        assigned_certifier:  form.assigned_certifier ? Number(form.assigned_certifier) : null,
+        // Strip internal _id keys before persisting
+        approval_chain_json: chain.length
+          ? JSON.stringify(chain.map(({ _id, ...s }) => s))
+          : null,
+        workflow_config: {
+          require_preparer:  true,
+          require_reviewer:  true,
+          require_approver:  ['HIGH','CRITICAL'].includes(form.risk_classification),
+          require_certifier: form.risk_classification === 'CRITICAL',
+          sod_enforced:      true,
+          multi_level:       chain.length > 0,
+        },
         matching_rules: { primary:'EXACT', fallback:['TOLERANCE','DATE_WINDOW','FUZZY'] },
       }
+
       if (isEdit) {
         await enterpriseAPI.updateProfile(profile.id, payload)
         toast.success('Profile updated')
@@ -111,6 +148,7 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
         await enterpriseAPI.createProfile(payload)
         toast.success('Profile created')
       }
+
       qc.invalidateQueries({ queryKey: ['enterprise-profiles'] })
       onSaved()
     } catch (e) {
@@ -134,9 +172,10 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
     }}>
       <div style={{
         background:'var(--surface-1)', border:'1px solid var(--border-1)',
-        borderRadius:14, width:'100%', maxWidth:560,
-        maxHeight:'90vh', overflow:'auto', padding:24,
+        borderRadius:14, width:'100%', maxWidth:600,
+        maxHeight:'92vh', overflow:'auto', padding:24,
       }}>
+        {/* Header */}
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
           <div>
             <p style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'0.10em', color:'var(--text-tertiary)' }}>
@@ -155,7 +194,7 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
           {/* Name */}
           <Field label="Profile Name *">
             <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)}
-              placeholder="e.g. Bank Recon – MFG-US – 2025-06" />
+              placeholder="e.g. Bank Recon – MFG-US – 2026-06" />
           </Field>
 
           {/* Type + Frequency */}
@@ -172,7 +211,7 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
             </Field>
           </div>
 
-          {/* Risk + Due Days */}
+          {/* Risk + Thresholds */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
             <Field label="Risk Classification">
               <select className="input text-xs" value={form.risk_classification} onChange={(e) => set('risk_classification', e.target.value)}>
@@ -189,16 +228,16 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
             </Field>
           </div>
 
-          {/* User assignments */}
+          {/* Single-level workflow assignments */}
           <div style={{ background:'var(--surface-2)', borderRadius:10, padding:14 }}>
             <p style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.08em', color:'var(--text-tertiary)', marginBottom:10 }}>
               Workflow Assignments (SoD enforced)
             </p>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               {[
-                ['Preparer', 'assigned_preparer', preparers],
-                ['Reviewer', 'assigned_reviewer', reviewers],
-                ['Approver', 'assigned_approver', approvers],
+                ['Preparer',  'assigned_preparer',  preparers],
+                ['Reviewer',  'assigned_reviewer',  reviewers],
+                ['Approver',  'assigned_approver',  approvers],
                 ['Certifier', 'assigned_certifier', certifiers],
               ].map(([label, key, pool]) => (
                 <Field key={key} label={label}>
@@ -209,6 +248,64 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
                 </Field>
               ))}
             </div>
+            <p style={{ fontSize:10, color:'var(--text-tertiary)', marginTop:8 }}>
+              Used for simple single-approver flows. For multi-level approvals, configure the chain below.
+            </p>
+          </div>
+
+          {/* ── Approval Chain Builder ── */}
+          <div style={{
+            border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden',
+          }}>
+            {/* Collapsible header */}
+            <button
+              onClick={() => setShowChain(v => !v)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '11px 14px', background: chain.length > 0 ? 'rgba(99,102,241,0.06)' : 'var(--surface-2)',
+                border: 'none', cursor: 'pointer', borderBottom: showChain ? '1px solid var(--border-0)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <GitMerge size={13} color={chain.length > 0 ? '#6366f1' : 'var(--text-tertiary)'} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: chain.length > 0 ? '#6366f1' : 'var(--text-secondary)' }}>
+                  Multi-Level Approval Chain
+                </span>
+                {chain.length > 0 && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 4,
+                    background: '#6366f118', color: '#6366f1', border: '1px solid #6366f133',
+                  }}>
+                    {chain.length} step{chain.length !== 1 ? 's' : ''} configured
+                  </span>
+                )}
+                {chain.length === 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                    — Optional. Leave empty for single-approver flow.
+                  </span>
+                )}
+                {!chainValid && (
+                  <span style={{ fontSize: 10, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertTriangle size={10} /> Chain has errors
+                  </span>
+                )}
+              </div>
+              {showChain
+                ? <ChevronUp size={14} color="var(--text-tertiary)" />
+                : <ChevronDown size={14} color="var(--text-tertiary)" />
+              }
+            </button>
+
+            {showChain && (
+              <div style={{ padding: 14 }}>
+                <ApprovalChainBuilder
+                  chain={chain}
+                  onChange={setChain}
+                  onValidation={setChainValid}
+                  users={users}
+                />
+              </div>
+            )}
           </div>
 
           <Field label="Due in (days after period end)">
@@ -217,9 +314,15 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
           </Field>
         </div>
 
+        {/* Footer */}
         <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:20 }}>
           <button className="btn-secondary text-xs" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="btn-primary text-xs" onClick={handleSave} disabled={saving}>
+          <button
+            className="btn-primary text-xs"
+            onClick={handleSave}
+            disabled={saving || !chainValid}
+            title={!chainValid ? 'Fix approval chain errors before saving' : undefined}
+          >
             {saving ? 'Saving…' : (isEdit ? 'Update Profile' : 'Create Profile')}
           </button>
         </div>
@@ -228,7 +331,7 @@ function ProfileFormModal({ profile, users, onClose, onSaved }) {
   )
 }
 
-// ── Clone Modal ───────────────────────────────────────────────
+// ── Clone Modal ────────────────────────────────────────────────────────────
 function CloneModal({ profile, onClose, onDone }) {
   const [name, setName] = useState(`${profile.name} (Copy)`)
   const [busy, setBusy] = useState(false)
@@ -258,10 +361,10 @@ function CloneModal({ profile, onClose, onDone }) {
   )
 }
 
-// ── Rollover Modal ────────────────────────────────────────────
+// ── Rollover Modal ─────────────────────────────────────────────────────────
 function RolloverModal({ profile, onClose, onDone }) {
   const [period, setPeriod] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy]     = useState(false)
   const qc = useQueryClient()
   const handle = async () => {
     setBusy(true)
@@ -281,7 +384,7 @@ function RolloverModal({ profile, onClose, onDone }) {
           Clones this profile for the next calendar period, creates close tasks, and opens a new certification workflow.
           Leave period blank to auto-detect.
         </p>
-        <label className="label">Next Period (optional, e.g. 2025-07)</label>
+        <label className="label">Next Period (optional, e.g. 2026-07)</label>
         <input className="input mb-4" value={period} onChange={(e) => setPeriod(e.target.value)} placeholder="Auto-detect" />
         <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
           <button className="btn-secondary text-xs" onClick={onClose}>Cancel</button>
@@ -292,13 +395,15 @@ function RolloverModal({ profile, onClose, onDone }) {
   )
 }
 
-// ── Profile Card ──────────────────────────────────────────────
+// ── Profile Card ───────────────────────────────────────────────────────────
 function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const preparer  = users.find((u) => u.id === profile.assigned_preparer)
   const reviewer  = users.find((u) => u.id === profile.assigned_reviewer)
   const approver  = users.find((u) => u.id === profile.assigned_approver)
   const certifier = users.find((u) => u.id === profile.assigned_certifier)
+
+  const chain = useMemo(() => parseChain(profile.approval_chain_json), [profile.approval_chain_json])
 
   return (
     <div style={{
@@ -314,6 +419,17 @@ function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) 
             </p>
             <RiskBadge risk={profile.risk_classification || 'MEDIUM'} />
             <StateBadge state={profile.lifecycle_state || 'OPEN'} />
+            {chain.length > 0 && (
+              <span style={{
+                fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 4,
+                background: 'rgba(99,102,241,0.12)', color: '#6366f1',
+                border: '1px solid rgba(99,102,241,0.25)',
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}>
+                <GitMerge size={9} />
+                {chain.length}-step chain
+              </span>
+            )}
           </div>
           <p style={{ fontSize:11, color:'var(--text-tertiary)' }}>
             {(profile.reconciliation_type||'').replace(/_/g,' ')} · {profile.frequency} · Due in {profile.due_days ?? 5}d
@@ -342,11 +458,11 @@ function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) 
       {/* Expanded detail */}
       {expanded && (
         <div style={{ borderTop:'1px solid var(--border-0)', padding:'10px 14px', background:'var(--surface-1)' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8, marginBottom: chain.length > 0 ? 12 : 0 }}>
             {[
-              ['Preparer', preparer?.username],
-              ['Reviewer', reviewer?.username],
-              ['Approver', approver?.username],
+              ['Preparer',  preparer?.username],
+              ['Reviewer',  reviewer?.username],
+              ['Approver',  approver?.username],
               ['Certifier', certifier?.username],
             ].map(([role, name]) => (
               <div key={role}>
@@ -357,6 +473,41 @@ function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) 
               </div>
             ))}
           </div>
+
+          {/* Approval chain summary */}
+          {chain.length > 0 && (
+            <div style={{
+              marginTop: 8, padding: '8px 12px', borderRadius: 8,
+              background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)',
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#6366f1', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <GitMerge size={10} /> Multi-Level Approval Chain ({chain.length} steps)
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                {chain.map((step, i) => {
+                  const stepUsers = users.filter(u => step.users?.includes(u.id))
+                  const isParallel = step.approval_type === 'PARALLEL'
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {i > 0 && <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>→</span>}
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 9999,
+                        background: isParallel ? 'rgba(139,92,246,0.12)' : 'rgba(59,130,246,0.12)',
+                        color: isParallel ? '#8b5cf6' : '#3b82f6',
+                        border: `1px solid ${isParallel ? 'rgba(139,92,246,0.3)' : 'rgba(59,130,246,0.3)'}`,
+                      }}>
+                        {stepUsers.length === 0
+                          ? `Step ${i + 1} (empty)`
+                          : stepUsers.map(u => u.username).join(isParallel ? ' + ' : ', ')
+                        }
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <div style={{ display:'flex', gap:16, marginTop:10 }}>
             <span style={{ fontSize:11, color:'var(--text-tertiary)' }}>Tolerance: {profile.tolerance_threshold ?? 0}%</span>
             <span style={{ fontSize:11, color:'var(--text-tertiary)' }}>Date window: {profile.date_window_days ?? 0}d</span>
@@ -367,18 +518,18 @@ function ProfileCard({ profile, users, onEdit, onClone, onRollover, onDelete }) 
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────
+// ── Main Page ──────────────────────────────────────────────────────────────
 export default function ReconciliationProfiles() {
   const qc = useQueryClient()
   const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
-  const [showCreate, setShowCreate] = useState(false)
-  const [editProfile, setEditProfile] = useState(null)
-  const [cloneProfile, setCloneProfile] = useState(null)
+  const [showCreate, setShowCreate]         = useState(false)
+  const [editProfile, setEditProfile]       = useState(null)
+  const [cloneProfile, setCloneProfile]     = useState(null)
   const [rolloverProfile, setRolloverProfile] = useState(null)
-  const [filterRisk, setFilterRisk] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [filterState, setFilterState] = useState('')
-  const [search, setSearch] = useState('')
+  const [filterRisk, setFilterRisk]         = useState('')
+  const [filterType, setFilterType]         = useState('')
+  const [filterState, setFilterState]       = useState('')
+  const [search, setSearch]                 = useState('')
 
   const { data: profiles = [], isLoading } = useQuery({
     queryKey: ['enterprise-profiles', selectedProjectId || 'all'],
@@ -392,26 +543,24 @@ export default function ReconciliationProfiles() {
   const deleteMutation = useMutation({
     mutationFn: enterpriseAPI.deleteProfile,
     onSuccess: () => { toast.success('Profile deleted'); qc.invalidateQueries({ queryKey: ['enterprise-profiles'] }) },
-    onError: (e) => toast.error(e?.response?.data?.detail || 'Delete failed'),
+    onError:   (e) => toast.error(e?.response?.data?.detail || 'Delete failed'),
   })
 
-  const filtered = useMemo(() => {
-    return profiles.filter((p) => {
-      if (filterRisk && p.risk_classification !== filterRisk) return false
-      if (filterType && p.reconciliation_type !== filterType) return false
-      if (filterState && p.lifecycle_state !== filterState) return false
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-  }, [profiles, filterRisk, filterType, filterState, search])
+  const filtered = useMemo(() => profiles.filter((p) => {
+    if (filterRisk  && p.risk_classification !== filterRisk)  return false
+    if (filterType  && p.reconciliation_type !== filterType)  return false
+    if (filterState && p.lifecycle_state     !== filterState) return false
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  }), [profiles, filterRisk, filterType, filterState, search])
 
-  // Summary KPIs
-  const kpis = useMemo(() => {
-    const open = profiles.filter((p) => !['CLOSED','CERTIFIED'].includes(p.lifecycle_state||'')).length
-    const certified = profiles.filter((p) => ['CERTIFIED','CLOSED'].includes(p.lifecycle_state||'')).length
-    const high = profiles.filter((p) => ['HIGH','CRITICAL'].includes(p.risk_classification||'')).length
-    return { total: profiles.length, open, certified, high }
-  }, [profiles])
+  const kpis = useMemo(() => ({
+    total:     profiles.length,
+    open:      profiles.filter((p) => !['CLOSED','CERTIFIED'].includes(p.lifecycle_state||'')).length,
+    certified: profiles.filter((p) => ['CERTIFIED','CLOSED'].includes(p.lifecycle_state||'')).length,
+    high:      profiles.filter((p) => ['HIGH','CRITICAL'].includes(p.risk_classification||'')).length,
+    chained:   profiles.filter((p) => p.approval_chain_json).length,
+  }), [profiles])
 
   return (
     <div className="h-full flex flex-col">
@@ -429,20 +578,24 @@ export default function ReconciliationProfiles() {
       <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background:'var(--surface-0)' }}>
 
         {/* KPI strip */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
           {[
-            ['Total Profiles', kpis.total, Layers, 'var(--accent)'],
-            ['Open', kpis.open, Clock, 'var(--warn)'],
-            ['Certified', kpis.certified, CheckCircle2, 'var(--ok)'],
-            ['High / Critical Risk', kpis.high, ShieldAlert, 'var(--bad)'],
+            ['Total Profiles',     kpis.total,     Layers,       'var(--accent)'],
+            ['Open',               kpis.open,      Clock,        'var(--warn)'],
+            ['Certified',          kpis.certified, CheckCircle2, 'var(--ok)'],
+            ['High / Critical',    kpis.high,      ShieldAlert,  'var(--bad)'],
+            ['Multi-Level Chains', kpis.chained,   GitMerge,     '#6366f1'],
           ].map(([label, val, Icon, color]) => (
             <div key={label} style={{
               background:'var(--surface-2)', border:'1px solid var(--border-1)',
               borderRadius:10, padding:'12px 16px',
               display:'flex', alignItems:'center', gap:12,
             }}>
-              <div style={{ width:34, height:34, borderRadius:8, background:`${color}18`, border:`1px solid ${color}33`,
-                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <div style={{
+                width:34, height:34, borderRadius:8,
+                background:`${color}18`, border:`1px solid ${color}33`,
+                display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+              }}>
                 <Icon style={{ width:15, height:15, color }} />
               </div>
               <div>

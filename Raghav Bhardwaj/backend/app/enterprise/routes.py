@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-
 from ..database import get_db
 from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
@@ -694,12 +693,26 @@ def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: in
     """Drilldown data for a specific level (entity/account/recon/exception)"""
     return service.analytics_drilldown(db, level=level, key=key, limit=limit, user_id=current_user.id)
 
+"""
+from ..services.risk_scoring_engine import score_all_profiles, get_risk_dashboard
 
 @router.post("/risk/calculate")
-def calculate_risk(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER]))):
-    """Trigger risk scoring batch run (async/cron in prod)"""
-    return service.calculate_risk_scores(db, actor_id=current_user.id)
-
+def calculate_risk(
+    db: Session = Depends(get_db),
+    current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER])),
+):
+    \"\"\"
+    Trigger a live risk scoring run across all active profiles.
+    Scores are persisted back to reconciliation_profiles.risk_score.
+    \"\"\"
+    results, errors = score_all_profiles(db, active_only=True, persist=True)
+    return {
+        "scored":  len(results),
+        "errors":  len(errors),
+        "results": results[:50],   # cap response size
+        "error_details": errors,
+    }
+"""
 
 @router.get("/risk/heatmap")
 def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, PREPARER, CERTIFIER, AUDITOR]))):
@@ -1260,7 +1273,12 @@ def risk_dashboard_real(
     db: Session = Depends(get_db),
     current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, PREPARER])),
 ):
-    return service.get_risk_dashboard_real(db)
+    """
+    Live risk dashboard. Uses cached risk_score when < 10 min old,
+    re-scores live otherwise.
+    """
+    from ..services.risk_scoring_engine import get_risk_dashboard
+    return get_risk_dashboard(db)
 
 
 # ── Profile transactions (match groups + items) ───────────────

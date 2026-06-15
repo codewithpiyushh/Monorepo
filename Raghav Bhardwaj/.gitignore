@@ -20,7 +20,7 @@ htmlcov/
 # Virtual environments
 .venv/
 venv/
-backend/venv/
+backend/.venv/
 backend/.venv_test/
 
 # Node
@@ -43,14 +43,17 @@ frontend/.env
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
 backend/drms.db
 
-# Uploads / generated exports
+# Uploads / exports / generated artifacts
 backend/uploads/
 *.csv
 *.xlsx
+structure.txt
 
-# Build artifacts
+# Build / coverage output
 build/
 dist/
 coverage/
@@ -60,13 +63,3 @@ coverage/
 
 # Keep sample evidence folder structure if needed
 !evidences/.gitkeep
-
-.env
-*.db
-*.db-wal
-*.db-shm
-uploads/
-node_modules/
-__pycache__/
-.venv/
-dist/

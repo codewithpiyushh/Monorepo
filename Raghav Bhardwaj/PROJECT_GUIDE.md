@@ -2,6 +2,14 @@
 
 - **Purpose:**: High-level description of the reconciliation application, roles, and user flows so new contributors can quickly understand and use the project.
 
+**Current Status**
+- The active source of truth for the latest repo state is [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+- This guide explains the application structure and workflows; the status file explains what is already built and what is still missing.
+- Current build status at the time of this update:
+  - Backend Python syntax check: passing.
+  - Frontend production build: passing.
+  - Remaining work: tests, migration rollout, and final QA for the new variance workflow.
+
 **Project Overview**
 - **What it is:**: A reconciliation platform that lets teams upload source/target datasets, map fields, define matching rules, run executions to reconcile transactions, manage exceptions, and run certification workflows.
 - **Stack:**: Backend: FastAPI + SQLAlchemy (Python). Frontend: React + Vite + TanStack Query. DB: MySQL / SQLite for local development.

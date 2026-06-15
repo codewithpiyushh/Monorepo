@@ -1,52 +1,62 @@
 from sqlalchemy import inspect, text
-
 from .database import engine
 
-
 def _column_exists(inspector, table_name: str, column_name: str) -> bool:
-    cols = inspector.get_columns(table_name)
-    return any(col.get("name") == column_name for col in cols)
-
+    try:
+        cols = inspector.get_columns(table_name)
+        return any(col.get("name") == column_name for col in cols)
+    except:
+        return False
 
 def apply_compat_patches() -> None:
-    """
-    Apply minimal backward-compatible schema changes for existing DBs.
-    This avoids runtime failures when code expects columns added after the
-    original table creation and no full migration framework is in place.
-    """
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
+    is_mysql = "mysql" in engine.url.drivername
 
-    patch_map: dict[str, list[tuple[str, str]]] = {
-        "audit_logs": [
-            ("previous_hash", "VARCHAR(128) NULL"),
-            ("entry_hash", "VARCHAR(128) NULL"),
+    # Define all required schema patches
+    patch_map = {
+        "projects": [("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0")],
+        "reconciliation_attachments": [("profile_id", "INT NULL")],
+        "match_groups": [
+            ("execution_id", "INTEGER NULL"),
         ],
         "exception_queue_records": [
-            ("classification", "VARCHAR(40) NULL"),
-            ("resolution_notes", "TEXT NULL"),
-            ("escalated_at", "DATETIME NULL"),
-            ("resolved_at", "DATETIME NULL"),
+            ("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("classification", "VARCHAR(40) NULL")
         ],
         "reconciliation_profiles": [
-            ("project_id", "INT NULL"),
-            ("assigned_approver", "INT NULL"),
-            ("assigned_certifier", "INT NULL"),
-            ("risk_classification", "VARCHAR(20) NULL"),
-            ("due_days", "INT NULL"),
-            ("lifecycle_state", "VARCHAR(30) NULL"),
+            ("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("approval_chain_json", "TEXT NULL"),
+            ("materiality_limit", "FLOAT DEFAULT 0")
         ],
+        "reconciliation_balances": [
+            ("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("unexplained_variance", "FLOAT NULL")
+        ],
+        "certification_workflows": [("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0")],
+        "ui_notifications": [("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0")],
+        "variance_snapshots": [("is_demo_data", "BOOLEAN NOT NULL DEFAULT 0")]
     }
 
-    statements: list[str] = []
-    for table_name, columns in patch_map.items():
-        if table_name not in tables:
-            continue
-        for col_name, ddl in columns:
-            if not _column_exists(inspector, table_name, col_name):
-                statements.append(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {ddl}")
+    with engine.begin() as conn:
+        for table, columns in patch_map.items():
+            if table in tables:
+                for col_name, ddl in columns:
+                    if not _column_exists(inspector, table, col_name):
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {ddl}"))
 
-    if statements:
+    # Create missing variance_snapshots table
+    if "variance_snapshots" not in tables:
         with engine.begin() as conn:
-            for stmt in statements:
-                conn.execute(text(stmt))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS variance_snapshots (
+                    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+                    profile_id INTEGER NOT NULL,
+                    period_key VARCHAR(30) NOT NULL,
+                    raw_variance FLOAT,
+                    explained_variance FLOAT,
+                    unexplained_variance FLOAT,
+                    flux_amount FLOAT,
+                    is_demo_data BOOLEAN NOT NULL DEFAULT 0
+                )
+            """))

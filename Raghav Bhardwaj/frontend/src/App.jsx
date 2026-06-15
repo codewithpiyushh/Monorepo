@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import { normalizeRole } from './utils/roles'
 import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
 
 const Login                         = lazy(() => import('./pages/Login'))
 const UnauthorizedPage              = lazy(() => import('./pages/UnauthorizedPage'))
@@ -29,9 +30,12 @@ const ReconciliationsHub            = lazy(() => import('./pages/Reconciliations
 const AdminCenter                   = lazy(() => import('./pages/AdminCenter'))
 const ReconciliationAnalyticsExplorer = lazy(() => import('./pages/ReconciliationAnalyticsExplorer'))
 const RiskDashboard                 = lazy(() => import('./pages/RiskDashboard'))
-const ReconciliationProfiles        = lazy(() => import('./pages/ReconciliationProfiles'))
+const ReconciliationProfiles        = lazy(() => import('./pages/ReconciliationProfilesPage'))
 const MyPerformance                 = lazy(() => import('./pages/MyPerformance'))
 const TransactionMatchingWorkspace  = lazy(() => import('./pages/TransactionMatchingWorkspace'))
+const BalanceReconciliationPage     = lazy(() => import('./pages/BalanceReconciliationPage'))
+const AgingDashboard                = lazy(() => import('./pages/AgingDashboard'))
+const VarianceAnalyticsDashboard     = lazy(() => import('./pages/VarianceAnalyticsDashboard'))
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -133,10 +137,23 @@ export default function App() {
             <Route path="transaction-matching-workspace" element={<TransactionMatchingWorkspace />} />
             <Route path="transaction-matching"           element={<TransactionMatchingWorkspace />} />
 
+            {/* ── Balance Reconciliation ── */}
+            <Route path="balance-reconciliation"           element={<BalanceReconciliationPage />} />
+            <Route path="balance-reconciliation/:balanceId" element={<BalanceReconciliationPage />} />
+            <Route path="aging-dashboard"                  element={<AgingDashboard />} />
+            <Route
+              path="variance-analytics"
+              element={
+                <ProtectedRoute requiredRoles={['admin', 'reviewer', 'approver', 'certifier', 'auditor']}>
+                  <VarianceAnalyticsDashboard />
+                </ProtectedRoute>
+              }
+            />
+
             {/* ── Legacy aliases ── */}
             <Route path="dashboard"                      element={<Navigate to="/command-center" replace />} />
             <Route path="governance-controls"            element={<Navigate to="/controls-governance" replace />} />
-            <Route path="balance-reconciliations-workspace" element={<Navigate to="/enterprise-ops" replace />} />
+            <Route path="balance-reconciliations-workspace" element={<Navigate to="/balance-reconciliation" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

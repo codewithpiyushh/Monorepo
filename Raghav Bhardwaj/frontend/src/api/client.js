@@ -2,7 +2,7 @@ import axios from 'axios'
 import { errorTracker } from '../services/errorTracker'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'http://localhost:8000/api/v1', 
   headers: { 'Content-Type': 'application/json' },
 })
 

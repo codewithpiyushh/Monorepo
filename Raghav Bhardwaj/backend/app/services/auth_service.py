@@ -59,7 +59,7 @@ def generate_refresh_token(db: Session, user_id: int) -> str:
     row = RefreshToken(
         user_id=user_id,
         token_hash=token_hash,
-        expires_at=datetime.utcnow() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES),
+        expires_at=datetime.utcnow() + timedelta(minutes=settings.refresh_token_expire_minutes),
         revoked=False,
     )
     db.add(row)
