@@ -379,12 +379,6 @@ def list_workflows(
             wf for wf in workflows
             if wf.status == "approved"
         ]
-    elif normalized_role == "auditor":
-        # Auditor sees all finalised workflows (read-only, enforced at route level)
-        workflows = [
-            wf for wf in workflows
-            if wf.status in {"approved", "rejected"}
-        ]
     # admin sees everything — no filter applied
 
     return workflows

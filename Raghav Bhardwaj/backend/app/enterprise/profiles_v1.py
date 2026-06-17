@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import ReconciliationProfile, User
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, AUDITOR, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from ..services import audit_service
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles-v1"])
@@ -164,7 +164,7 @@ def list_profiles(
     sort_by:    str         = Query(default="created_at", description="Column to sort by"),
     sort_dir:   str         = Query(default="desc",    description="asc | desc"),
     db:         Session     = Depends(get_db),
-    current_user            = Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user            = Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """
     Server-side paginated list with:
@@ -180,16 +180,11 @@ def list_profiles(
     role = (current_user.role or "").lower()
     if role == "preparer":
         q = q.filter(ReconciliationProfile.assigned_preparer == current_user.id)
-    elif role == "reviewer":
-        q = q.filter(or_(
-            ReconciliationProfile.assigned_reviewer == current_user.id,
-            ReconciliationProfile.assigned_approver == current_user.id,
-        ))
     elif role == "approver":
         q = q.filter(ReconciliationProfile.assigned_approver == current_user.id)
     elif role == "certifier":
         q = q.filter(ReconciliationProfile.assigned_certifier == current_user.id)
-    # admin and auditor see all — no filter
+    # admin sees all — no filter
 
     # Text search (case-insensitive, name or account_number)
     if search and search.strip():
@@ -241,7 +236,7 @@ def list_profiles(
 def get_profile(
     profile_id: int,
     db:         Session = Depends(get_db),
-    current_user        = Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user        = Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     p = _get_or_404(db, profile_id)
     return _enrich_with_users(_serialize(p), db)

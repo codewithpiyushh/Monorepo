@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR
+from ..rbac.roles import ADMIN, PREPARER, APPROVER, CERTIFIER
 from ..services import balance_service
 from ..services.balance_schemas import (
     BalanceCreate,
@@ -41,7 +41,7 @@ router = APIRouter(prefix="/api/v1/balances", tags=["balance-reconciliation"])
 @router.get("/dashboard", response_model=BalanceDashboard)
 def balance_dashboard(
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """Summary KPI widgets for the Balance Reconciliation workspace."""
     # Auditor and admin see all; others see their assigned records
@@ -67,7 +67,7 @@ def list_balances(
     sort_by:             str            = Query("created_at"),
     sort_desc:           bool           = Query(True),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """
     Paginated, filterable list of balance reconciliation records.
@@ -99,7 +99,7 @@ def list_balances(
 def get_balance(
     balance_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     return balance_service.get_balance(db, balance_id)
 
@@ -110,7 +110,7 @@ def get_balance(
 def get_balance_history(
     balance_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     return balance_service.get_balance_history(db, balance_id)
 
@@ -203,7 +203,7 @@ def reject_balance(
     balance_id: int,
     payload: BalanceActionRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER])),
+    current_user=Depends(role_required([ADMIN, APPROVER])),
 ):
     return balance_service.reject_balance(
         db, balance_id,

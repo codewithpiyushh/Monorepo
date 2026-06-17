@@ -18,17 +18,8 @@ branch_labels = None
 depends_on    = None
 
 # Tables that need the flag + optional index name
-TARGETS = [
-    ("projects",                       "ix_projects_demo"),
-    ("reconciliation_profiles",        "ix_recon_profiles_demo"),
-    ("reconciliation_balances",        "ix_recon_balances_demo"),
-    ("exception_queue_records",        "ix_exception_queue_demo"),
-    ("certification_workflows",        "ix_cert_workflows_demo"),
-    ("certification_workflow_history", None),          # history table — no index needed
-    ("ui_notifications",               "ix_ui_notif_demo"),
-    ("variance_snapshots",             None),
-    ("supporting_items",               "ix_supporting_items_demo"),
-]
+TARGETS = [("projects", "ix_projects_demo"), ("reconciliation_profiles", "ix_recon_profiles_demo"), ("reconciliation_balances", "ix_recon_balances_demo"), ("exception_queue_records", "ix_exception_queue_demo"), ("certification_workflows", "ix_cert_workflows_demo"), ("certification_workflow_history", None), # history table — no index needed
+    ("ui_notifications", "ix_ui_notif_demo"), ("variance_snapshots", ("supporting_items", "ix_supporting_items_demo")]
 
 
 def upgrade():

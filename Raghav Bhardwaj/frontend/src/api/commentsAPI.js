@@ -1,39 +1,31 @@
-/**
- * commentsAPI
- * ────────────
- * Add to frontend/src/api/index.js:
- *   export { commentsAPI } from './commentsAPI'
- *
- * Or import directly:
- *   import { commentsAPI } from '../api/commentsAPI'
- */
-import api from './client'
+// frontend/src/api/commentsAPI.js
+// In-context Comment Threads API — Phase 2 Chunk 2
+// CommentThreadPanel uses { commentsAPI } named import from this file.
+
+import client from './client'
+
+// NOTE: client.js baseURL is '/api' so paths here start with '/v1/...'
+const BASE = '/v1/comments'
 
 export const commentsAPI = {
-  /**
-   * Fetch the full comment thread for a balance.
-   * Automatically marks all comments as read for the current user.
-   * @param {number} balanceId
-   * @param {string|null} commentType  — optional filter: DISCUSSION | QUESTION | AUDITOR_NOTE | SYSTEM_EVENT
-   */
+  // List comments for a balance record, optionally filtered by type
   list: (balanceId, commentType = null) => {
-    const params = new URLSearchParams()
-    if (commentType) params.set('comment_type', commentType)
-    const qs = params.toString()
-    return api.get(`/v1/balances/${balanceId}/comments${qs ? `?${qs}` : ''}`).then(r => r.data)
+    const params = { balance_id: balanceId }
+    if (commentType && commentType !== 'ALL') params.comment_type = commentType
+    return client.get(BASE, { params }).then(r => r.data)
   },
 
-  /**
-   * Post an immutable comment.
-   * @param {number} balanceId
-   * @param {object} payload — { content, comment_type, parent_comment_id?, attachment_id? }
-   */
+  // Post a new comment
   post: (balanceId, payload) =>
-    api.post(`/v1/balances/${balanceId}/comments`, payload).then(r => r.data),
+    client.post(BASE, { balance_id: balanceId, ...payload }).then(r => r.data),
 
-  /**
-   * Mark a specific comment as read.
-   */
-  markRead: (balanceId, commentId) =>
-    api.post(`/v1/balances/${balanceId}/comments/${commentId}/read`).then(r => r.data),
+  // Mark comments as read for a balance record
+  markRead: (balanceId) =>
+    client.post(`${BASE}/mark-read`, { balance_id: balanceId }).then(r => r.data),
+
+  // Get unread count for a balance record
+  unreadCount: (balanceId) =>
+    client.get(`${BASE}/unread-count`, { params: { balance_id: balanceId } }).then(r => r.data),
 }
+
+export default commentsAPI

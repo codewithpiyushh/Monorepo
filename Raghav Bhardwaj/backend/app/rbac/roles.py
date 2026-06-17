@@ -1,27 +1,26 @@
 ADMIN     = "admin"
 PREPARER  = "preparer"
-REVIEWER  = "reviewer"
 APPROVER  = "approver"
 CERTIFIER = "certifier"
-AUDITOR   = "auditor"   # read-only compliance / internal-audit role
 
-ALL_ROLES = {ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR}
+ALL_ROLES = {ADMIN, PREPARER, APPROVER, CERTIFIER}
 
 # ---------------------------------------------------------------------------
 # Role hierarchy (higher index = more authority).
 # Used by SoD checks to ensure approvals always move UP the chain.
+# APPROVER combines review + approval in a single role that can:
+#   • Review submissions and check evidence
+#   • Approve / return / escalate after reviewing the preparer's work
 # ---------------------------------------------------------------------------
 ROLE_RANK: dict[str, int] = {
     PREPARER:  1,
-    REVIEWER:  2,
-    APPROVER:  3,
-    CERTIFIER: 4,
-    AUDITOR:   0,   # read-only — no workflow rank
+    APPROVER:  2,   # merged reviewer & approver — handles both review and approval
+    CERTIFIER: 3,
     ADMIN:     99,
 }
 
 # Roles that are permitted to make write / state-change calls
-WRITE_ROLES = {ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER}
+WRITE_ROLES = {ADMIN, PREPARER, APPROVER, CERTIFIER}
 
-# Roles that are strictly read-only on data endpoints
-READ_ONLY_ROLES = {AUDITOR}
+# Roles that are strictly read-only on data endpoints (none — auditor role removed)
+READ_ONLY_ROLES = set()

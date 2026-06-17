@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR
+from ..rbac.roles import ADMIN, PREPARER, APPROVER, CERTIFIER
 from ..services import aging_service
 from ..services.aging_schemas import (
     AgingSummaryResponse,
@@ -26,8 +26,7 @@ from ..services.aging_schemas import (
     SnapshotResult,
 )
 
-router = APIRouter(prefix="/api/v1/exceptions", tags=["aging-analysis"])
-
+router = APIRouter(tags=["aging-analysis"])
 
 # ── Summary — four bucket KPIs ────────────────────────────────────────────────
 
@@ -41,7 +40,7 @@ def aging_summary(
     date_to:             Optional[date] = Query(None),
     include_resolved:    bool           = Query(False),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """
     Four-bucket aging KPI summary.
@@ -80,7 +79,7 @@ def aging_details(
     sort_by:             str            = Query("age_days"),
     sort_desc:           bool           = Query(True),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """
     Paginated exception list with age_days, bucket, bucket_color, and profile context.
@@ -114,7 +113,7 @@ def aging_trend(
     profile_id: Optional[int] = Query(None),
     months:     int            = Query(6, ge=2, le=24),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """
     Month-over-month aging trend. Uses snapshots for historical periods,

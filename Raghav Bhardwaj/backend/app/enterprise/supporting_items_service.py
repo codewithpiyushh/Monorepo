@@ -364,8 +364,7 @@ def list_items(db: Session, balance_id: int, include_resolved: bool = True) -> d
     variance = recalculate_variance(db, balance_id)
     try:
         from ..services.variance_service import refresh_balance_variance
-
-        refresh_balance_variance(db, balance_id, actor_id=actor_id, persist=True)
+        refresh_balance_variance(db, balance_id, actor_id=None, persist=True)
     except Exception:
         pass
 

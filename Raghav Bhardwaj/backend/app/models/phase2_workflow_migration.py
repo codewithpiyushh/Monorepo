@@ -38,11 +38,7 @@ _BALANCE_COLS = [
     ("auto_certified",              "BOOLEAN",  "DEFAULT 0"),
 ]
 
-_USER_COLS = [
-    ("delegate_user_id",      "INTEGER",  None),
-    ("delegation_start_date", "DATETIME", None),
-    ("delegation_end_date",   "DATETIME", None),
-]
+_USER_COLS = [("delegate_user_id", "INTEGER", None), ("delegation_start_date", "DATETIME", ("delegation_end_date"]
 
 
 def _add_columns(conn, table: str, columns: list, existing: set) -> None:

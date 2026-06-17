@@ -6,7 +6,6 @@ client = TestClient(app)
 USERS = [
     ("approver", "approver123"),
     ("certifier", "certifier123"),
-    ("auditor", "auditor123"),
 ]
 
 ENDPOINTS = [

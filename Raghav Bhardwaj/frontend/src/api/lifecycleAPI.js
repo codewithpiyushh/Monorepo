@@ -1,34 +1,52 @@
-// frontend/src/api/lifecycleAPI.js
-// Lifecycle & Approval Chain API — Phase 2 Chunk 1 endpoints
-// Follows the same pattern as balancesAPI.js, varianceAPI.js
-
 import client from './client'
 
-const BASE = '/api/v1/lifecycle'
-
 const lifecycleAPI = {
-  // ── Approval chain validation ────────────────────────────────
-  // Validate a chain array before saving to a profile.
-  // Returns { valid: bool, errors: string[], warnings: string[] }
-  validateChain: (chain) =>
-    client.post(`${BASE}/validate-chain`, { chain }).then(r => r.data),
+  // Chain validation — maps to POST /api/v1/profiles/{id}/validate-chain
+  validateChain: (profileId, chain, preparerId = null, certifierId = null) =>
+    client.post(`/v1/profiles/${profileId}/validate-chain`, {
+      approval_chain: chain,
+      preparer_id: preparerId,
+      certifier_id: certifierId,
+      profile_id: profileId,
+    }).then(r => r.data),
 
-  // ── Save approval chain on a profile ─────────────────────────
-  // PATCH approval_chain_json onto an existing profile
-  saveChain: (profileId, chain) =>
-    client.patch(`${BASE}/profiles/${profileId}/approval-chain`, { chain }).then(r => r.data),
+  // Get live approval chain progress for the stepper UI
+  getChainStatus: (balanceId) =>
+    client.get(`/v1/balances/${balanceId}/chain-status`).then(r => r.data),
 
-  // ── Get current chain for a profile ──────────────────────────
-  getChain: (profileId) =>
-    client.get(`${BASE}/profiles/${profileId}/approval-chain`).then(r => r.data),
+  // Workflow history
+  getWorkflowHistory: (balanceId) =>
+    client.get(`/v1/balances/${balanceId}/workflow-history`).then(r => r.data),
 
-  // ── Lifecycle state transitions ───────────────────────────────
-  transition: (profileId, action, payload = {}) =>
-    client.post(`${BASE}/profiles/${profileId}/transition`, { action, ...payload }).then(r => r.data),
+  // State transitions
+  submit: (balanceId, comment) =>
+    client.post(`/v1/balances/${balanceId}/workflow/submit`, {
+      submit_comment: comment,
+    }).then(r => r.data),
 
-  // ── Auto-certification check ──────────────────────────────────
-  checkAutoCert: (profileId) =>
-    client.get(`${BASE}/profiles/${profileId}/auto-cert-eligible`).then(r => r.data),
+  approve: (balanceId, comment = null) =>
+    client.post(`/v1/balances/${balanceId}/workflow/approve`, {
+      approval_comment: comment,
+    }).then(r => r.data),
+
+  reject: (balanceId, comment) =>
+    client.post(`/v1/balances/${balanceId}/workflow/reject`, {
+      rejection_comment: comment,
+    }).then(r => r.data),
+
+  certify: (balanceId, comment = null) =>
+    client.post(`/v1/balances/${balanceId}/workflow/certify`, {
+      certification_comment: comment,
+    }).then(r => r.data),
+
+  close: (balanceId) =>
+    client.post(`/v1/balances/${balanceId}/workflow/close`).then(r => r.data),
+
+  override: (balanceId, reason) =>
+    client.post(`/v1/balances/${balanceId}/workflow/override`, {
+      reason,
+    }).then(r => r.data),
 }
 
+export { lifecycleAPI };
 export default lifecycleAPI;

@@ -1,7 +1,8 @@
 import client from './client'
 
-const ANALYTICS = '/api/v1/analytics'
-const BALANCES = '/api/v1/balances'
+// NOTE: client.js baseURL is '/api' so paths here start with '/v1/...'
+const ANALYTICS = '/v1/analytics'
+const BALANCES = '/v1/balances'
 
 const varianceAPI = {
   getVarianceFlux: (params = {}) =>

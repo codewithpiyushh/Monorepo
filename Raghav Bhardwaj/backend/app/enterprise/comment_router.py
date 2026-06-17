@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, AUDITOR, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from .comment_service import (
     create_comment,
     list_comments,
@@ -25,7 +25,7 @@ from .comment_service import (
 
 router = APIRouter(prefix="/api/v1/balances", tags=["comments"])
 
-ALL_ROLES = [ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR]
+ALL_ROLES = [ADMIN, PREPARER, APPROVER, CERTIFIER]
 
 
 # ─────────────────────────────────────────────────────────────

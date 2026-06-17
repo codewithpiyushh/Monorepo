@@ -13,7 +13,7 @@ from typing import Optional
 
 from ..database import get_db
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from .lifecycle_service import (
     approve_balance,
     assert_editable,
@@ -89,7 +89,7 @@ def approve(
     balance_id:  int,
     payload:     ApproveRequest,
     db:          Session = Depends(get_db),
-    current_user         = Depends(role_required([REVIEWER, APPROVER, ADMIN])),
+    current_user         = Depends(role_required([APPROVER, ADMIN])),
 ):
     """
     Dynamic multi-level approval:
@@ -110,7 +110,7 @@ def reject(
     balance_id:  int,
     payload:     RejectRequest,
     db:          Session = Depends(get_db),
-    current_user         = Depends(role_required([REVIEWER, APPROVER, CERTIFIER, ADMIN])),
+    current_user         = Depends(role_required([APPROVER, CERTIFIER, ADMIN])),
 ):
     """
     ANY tier → DRAFT. Resets step_index to 0. Mandatory comment.
@@ -167,7 +167,7 @@ def controller_override(
 def workflow_history(
     balance_id:  int,
     db:          Session = Depends(get_db),
-    current_user         = Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, ADMIN])),
+    current_user         = Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     return get_workflow_history(db, balance_id)
 
@@ -180,7 +180,7 @@ def workflow_history(
 def chain_status(
     balance_id:  int,
     db:          Session = Depends(get_db),
-    current_user         = Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, ADMIN])),
+    current_user         = Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     """
     Returns live approval chain progress:

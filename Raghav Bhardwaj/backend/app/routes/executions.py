@@ -5,7 +5,7 @@ from ..database import get_db, SessionLocal
 from ..schemas.schemas import ExecutionOut, ResultsPage
 from ..services import execution_service, audit_service
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, REVIEWER, PREPARER
+from ..rbac.roles import ADMIN, APPROVER, PREPARER
 from ..models.models import User
 
 router = APIRouter(prefix="/api/projects/{project_id}/executions", tags=["executions"])
@@ -58,7 +58,7 @@ def trigger_execution(
 def list_executions(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+    current_user=Depends(role_required([PREPARER, ADMIN, APPROVER])),
 ):
     return execution_service.get_executions(db, project_id)
 
@@ -68,7 +68,7 @@ def get_execution(
     project_id: int,
     execution_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+    current_user=Depends(role_required([PREPARER, ADMIN, APPROVER])),
 ):
     return execution_service.get_execution(db, execution_id, project_id)
 
@@ -81,7 +81,7 @@ def get_results(
     page: int = 1,
     page_size: int = 100,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+    current_user=Depends(role_required([PREPARER, ADMIN, APPROVER])),
 ):
     execution = execution_service.get_execution(db, execution_id, project_id)
     units, total = execution_service.get_results_grouped(

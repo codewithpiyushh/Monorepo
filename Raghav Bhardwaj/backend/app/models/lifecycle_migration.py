@@ -38,27 +38,12 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-_NEW_COLUMNS = [
-    # Ownership
-    ("current_owner_id",           "INTEGER",      None),
-    ("current_owner_role",         "VARCHAR(30)",  None),
-    ("assigned_at",                "DATETIME",     None),
-    # SLA
-    ("submitted_at",               "DATETIME",     None),
-    ("review_due_date",            "DATETIME",     None),
-    ("approval_due_date",          "DATETIME",     None),
-    ("certification_due_date",     "DATETIME",     None),
-    # Comments
-    ("submit_comment",             "TEXT",         None),
-    ("approval_comment",           "TEXT",         None),
-    ("certification_comment",      "TEXT",         None),
-    ("rejection_comment",          "TEXT",         None),
-    # Immutability lock
-    ("is_certified_locked",        "BOOLEAN",      "DEFAULT 0"),
-    ("override_log",               "TEXT",         None),
-    # Phase 3 Journal Adjustment hook
-    ("journal_adjustment_pending", "BOOLEAN",      "DEFAULT 0"),
-]
+_NEW_COLUMNS = [# Ownership
+    ("current_owner_id", "INTEGER", None), ("current_owner_role", "VARCHAR(30)", ("assigned_at", "DATETIME", # SLA
+    ("submitted_at", ("review_due_date", ("approval_due_date", ("certification_due_date", # Comments
+    ("submit_comment", "TEXT", ("approval_comment", ("certification_comment", ("rejection_comment", # Immutability lock
+    ("is_certified_locked", "BOOLEAN", "DEFAULT 0"), ("override_log", # Phase 3 Journal Adjustment hook
+    ("journal_adjustment_pending"]
 
 
 def migrate(engine: Engine) -> None:

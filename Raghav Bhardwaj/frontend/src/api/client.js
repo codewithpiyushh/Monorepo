@@ -2,9 +2,10 @@ import axios from 'axios'
 import { errorTracker } from '../services/errorTracker'
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1', 
+  baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
 })
+
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('drms_token')

@@ -8,8 +8,7 @@ from ..core.security import decode_token
 from ..core.dependencies import oauth2_scheme
 from ..models.models import User
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER
-
+from ..rbac.roles import ADMIN, PREPARER, APPROVER, CERTIFIER
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -75,7 +74,7 @@ def me(current_user=Depends(get_current_user)):
 @router.get("/users", response_model=list[UserOut])
 def list_users(
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER, APPROVER, CERTIFIER])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     return db.query(User).filter(User.is_active == True).order_by(User.username.asc()).all()
 

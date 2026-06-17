@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db, SessionLocal
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, PREPARER, APPROVER
 from .schemas import SequenceCreate, SequenceOut, SequenceStatusOut
 from . import service
 
@@ -51,7 +51,7 @@ def run_sequence(
 def sequence_status(
     sequence_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, ADMIN, REVIEWER])),
+    current_user=Depends(role_required([PREPARER, ADMIN, APPROVER])),
 ):
     sequence, step_results, logs = service.get_sequence_status(db, sequence_id)
     return SequenceStatusOut(

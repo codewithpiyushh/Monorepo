@@ -4,7 +4,8 @@
 
 import client from './client';
 
-const BASE = '/api/v1/exceptions';
+// NOTE: client.js baseURL is '/api' so paths here start with '/v1/...'
+const BASE = '/v1/exceptions';
 
 const agingAPI = {
   // Four-bucket KPI summary

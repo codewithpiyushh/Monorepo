@@ -10,8 +10,9 @@ PRAGMA foreign_keys = OFF;
 -- SET FOREIGN_KEY_CHECKS = 0;
 
 -- =============================================================================
--- BLOCK 1 ─ USER ACCOUNTS (8 users covering every DRMS role)
+-- BLOCK 1 ─ USER ACCOUNTS (5 users covering 4 DRMS roles)
 -- IDs are pinned so every downstream FK reference is deterministic.
+-- Removed: reviewer role (merged into approver), auditor role
 -- =============================================================================
 
 DELETE FROM users;
@@ -20,11 +21,8 @@ INSERT INTO users (id, username, email, hashed_password, role, is_active, create
 (1,  'admin.sys',      'admin@drms.internal',        '$2b$12$ADMIN_HASH_PLACEHOLDER_01',  'admin',     1, '2026-01-02 08:00:00'),
 (2,  'prep.alice',     'alice.chen@drms.internal',   '$2b$12$PREP1_HASH_PLACEHOLDER_02',  'preparer',  1, '2026-01-03 08:30:00'),
 (3,  'prep.bob',       'bob.kumar@drms.internal',    '$2b$12$PREP2_HASH_PLACEHOLDER_03',  'preparer',  1, '2026-01-03 09:00:00'),
-(4,  'rev.diana',      'diana.ross@drms.internal',   '$2b$12$REV1_HASH_PLACEHOLDER_04',   'reviewer',  1, '2026-01-04 08:00:00'),
-(5,  'appr.james',     'james.ford@drms.internal',   '$2b$12$APPR_HASH_PLACEHOLDER_05',   'approver',  1, '2026-01-05 08:00:00'),
-(6,  'ctrl.sarah',     'sarah.mills@drms.internal',  '$2b$12$CTRL_HASH_PLACEHOLDER_06',   'reviewer',  1, '2026-01-05 09:00:00'),
-(7,  'audit.thomas',   'thomas.grant@drms.internal', '$2b$12$AUDT_HASH_PLACEHOLDER_07',   'auditor',   1, '2026-01-06 08:00:00'),
-(8,  'cfo.margaret',   'margaret.wu@drms.internal',  '$2b$12$CFO__HASH_PLACEHOLDER_08',   'certifier', 1, '2026-01-06 09:00:00');
+(4,  'appr.james',     'james.ford@drms.internal',   '$2b$12$APPR_HASH_PLACEHOLDER_05',   'approver',  1, '2026-01-05 08:00:00'),
+(5,  'cfo.margaret',   'margaret.wu@drms.internal',  '$2b$12$CFO__HASH_PLACEHOLDER_08',   'certifier', 1, '2026-01-06 09:00:00');
 
 
 -- =============================================================================
@@ -186,7 +184,7 @@ VALUES
 
 -- =============================================================================
 -- BLOCK 5 ─ CERTIFICATION WORKFLOWS
--- Covers every workflow stage to populate every queue simultaneously.
+-- Updated: reviewer_id now merged into approver_id (single approver role handles review & approval)
 -- =============================================================================
 
 DELETE FROM certification_workflows;
@@ -196,16 +194,16 @@ INSERT INTO certification_workflows
    preparer_id, reviewer_id, approver_id, certifier_id,
    due_date, last_comment, created_at, updated_at)
 VALUES
-(1,  1,  1,  'PREPARED',     'REVIEWER',   2, 4, 5, 8, '2026-07-05', 'Bank statement tied to GL. 3 minor timing diffs noted.',               '2026-06-01 08:00:00', '2026-06-10 14:22:00'),
-(2,  2,  2,  'PREPARED',     'REVIEWER',   2, 4, 5, 8, '2026-07-05', 'AR aging matches subledger 100%. No exceptions.',                      '2026-06-01 08:10:00', '2026-06-10 15:00:00'),
-(3,  3,  3,  'UNDER_REVIEW', 'APPROVER',   3, 4, 5, 8, '2026-07-05', 'AP reviewed. 2 invoices pending PO match – flagged for approver.',      '2026-06-01 08:20:00', '2026-06-11 09:45:00'),
-(4,  4,  4,  'OPEN',         'PREPARER',   2, 4, 5, 8, '2026-07-07', 'IC entries uploaded. Awaiting EMEA confirmation.',                      '2026-06-01 08:30:00', '2026-06-08 11:00:00'),
-(5,  5,  5,  'CERTIFIED',    'CLOSED',     3, 6, 5, 8, '2026-07-03', 'Payroll fully reconciled and certified by CFO.',                        '2026-06-01 08:40:00', '2026-06-05 16:00:00'),
-(6,  6,  6,  'PREPARED',     'REVIEWER',   2, 6, 5, 8, '2026-07-07', 'Inventory count discrepancy of $1,200 noted in WH-03. Under review.',   '2026-06-01 08:50:00', '2026-06-10 10:30:00'),
-(7,  7,  7,  'UNDER_REVIEW', 'APPROVER',   2, 4, 5, 8, '2026-07-07', 'FA schedule variance: accumulated depreciation mismatch $3,450.',       '2026-06-01 09:00:00', '2026-06-11 11:00:00'),
-(8,  8,  8,  'OPEN',         'PREPARER',   3, 4, 5, 8, '2026-07-05', 'Prepaid schedule loaded. 4 accruals pending reversal confirmation.',     '2026-06-01 09:10:00', '2026-06-09 08:00:00'),
-(9,  9,  9,  'UNDER_REVIEW', 'APPROVER',   2, 4, 5, 8, '2026-07-05', 'Investment custodian report shows $128,450 unexplained variance. HIGH.', '2026-06-01 09:20:00', '2026-06-11 14:00:00'),
-(10, 10, 10, 'OPEN',         'PREPARER',   2, 4, 5, 8, '2026-07-01', 'CRITICAL: 7 fraud-pattern transactions flagged. CFO alerted.',          '2026-06-01 09:30:00', '2026-06-11 17:00:00');
+(1,  1,  1,  'PREPARED',     'APPROVER',   2, 4, 4, 5, '2026-07-05', 'Bank statement tied to GL. 3 minor timing diffs noted.',               '2026-06-01 08:00:00', '2026-06-10 14:22:00'),
+(2,  2,  2,  'PREPARED',     'APPROVER',   2, 4, 4, 5, '2026-07-05', 'AR aging matches subledger 100%. No exceptions.',                      '2026-06-01 08:10:00', '2026-06-10 15:00:00'),
+(3,  3,  3,  'UNDER_REVIEW', 'APPROVER',   3, 4, 4, 5, '2026-07-05', 'AP reviewed. 2 invoices pending PO match – flagged for approver.',      '2026-06-01 08:20:00', '2026-06-11 09:45:00'),
+(4,  4,  4,  'OPEN',         'PREPARER',   2, 4, 4, 5, '2026-07-07', 'IC entries uploaded. Awaiting EMEA confirmation.',                      '2026-06-01 08:30:00', '2026-06-08 11:00:00'),
+(5,  5,  5,  'CERTIFIED',    'CLOSED',     3, 4, 4, 5, '2026-07-03', 'Payroll fully reconciled and certified by CFO.',                        '2026-06-01 08:40:00', '2026-06-05 16:00:00'),
+(6,  6,  6,  'PREPARED',     'APPROVER',   2, 4, 4, 5, '2026-07-07', 'Inventory count discrepancy of $1,200 noted in WH-03. Under review.',   '2026-06-01 08:50:00', '2026-06-10 10:30:00'),
+(7,  7,  7,  'UNDER_REVIEW', 'APPROVER',   2, 4, 4, 5, '2026-07-07', 'FA schedule variance: accumulated depreciation mismatch $3,450.',       '2026-06-01 09:00:00', '2026-06-11 11:00:00'),
+(8,  8,  8,  'OPEN',         'PREPARER',   3, 4, 4, 5, '2026-07-05', 'Prepaid schedule loaded. 4 accruals pending reversal confirmation.',     '2026-06-01 09:10:00', '2026-06-09 08:00:00'),
+(9,  9,  9,  'UNDER_REVIEW', 'APPROVER',   2, 4, 4, 5, '2026-07-05', 'Investment custodian report shows $128,450 unexplained variance. HIGH.', '2026-06-01 09:20:00', '2026-06-11 14:00:00'),
+(10, 10, 10, 'OPEN',         'PREPARER',   2, 4, 4, 5, '2026-07-01', 'CRITICAL: 7 fraud-pattern transactions flagged. CFO alerted.',          '2026-06-01 09:30:00', '2026-06-11 17:00:00');
 
 
 -- =============================================================================
@@ -217,25 +215,25 @@ DELETE FROM certification_workflow_history;
 INSERT INTO certification_workflow_history
   (id, workflow_id, actor_id, actor_role, action, from_status, to_status, comments, created_at)
 VALUES
--- Workflow 1 (Bank – PREPARED/REVIEWER stage)
+-- Workflow 1 (Bank – PREPARED/APPROVER stage)
 (1,  1, 1, 'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'Profile created and assigned to preparer Alice.',                           '2026-06-01 08:00:00'),
 (2,  1, 2, 'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', 'Bank statement imported. 145 records matched. 3 timing diffs documented.', '2026-06-10 14:22:00'),
--- Workflow 2 (AR – PREPARED/REVIEWER stage)
+-- Workflow 2 (AR – PREPARED/APPROVER stage)
 (3,  2, 1, 'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'AR profile initialised for Q2 close.',                                      '2026-06-01 08:10:00'),
 (4,  2, 2, 'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', 'All 212 invoices reconciled. Zero exceptions.',                            '2026-06-10 15:00:00'),
 -- Workflow 3 (AP – UNDER_REVIEW/APPROVER stage)
 (5,  3, 1, 'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'AP profile initialised.',                                                   '2026-06-01 08:20:00'),
 (6,  3, 3, 'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', '2 invoices flagged: duplicate PO numbers INV-4421 and INV-4422.',          '2026-06-09 16:00:00'),
-(7,  3, 4, 'REVIEWER', 'REVIEW',   'UNDER_REVIEW',  'UNDER_REVIEW', 'Confirmed duplicate. Escalating to approver for write-off decision.',       '2026-06-11 09:45:00'),
+(7,  3, 4, 'APPROVER', 'REVIEW',   'UNDER_REVIEW',  'REVIEWED',     'Confirmed duplicate. Reviewing for approval decision.',                     '2026-06-11 09:45:00'),
 -- Workflow 5 (Payroll – CERTIFIED/CLOSED)
 (8,  5, 1, 'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'Payroll profile June 2026.',                                                '2026-06-01 08:40:00'),
 (9,  5, 3, 'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', 'All 320 employee records matched. Zero variance.',                         '2026-06-03 17:00:00'),
-(10, 5, 6, 'REVIEWER', 'APPROVE',  'UNDER_REVIEW',  'APPROVED',     'Reviewed and approved. Clean payroll run.',                                 '2026-06-04 11:00:00'),
-(11, 5, 8, 'CERTIFIER','CERTIFY',  'APPROVED',       'CERTIFIED',    'Certified by CFO Margaret Wu. Close period locked.',                       '2026-06-05 16:00:00'),
+(10, 5, 4, 'APPROVER', 'APPROVE',  'REVIEWED',      'APPROVED',     'Reviewed and approved. Clean payroll run.',                                 '2026-06-04 11:00:00'),
+(11, 5, 5, 'CERTIFIER','CERTIFY',  'APPROVED',       'CERTIFIED',    'Certified by CFO Margaret Wu. Close period locked.',                       '2026-06-05 16:00:00'),
 -- Workflow 9 (Investment – HIGH risk, UNDER_REVIEW)
 (12, 9, 1, 'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'Investment profile loaded from custody feed.',                              '2026-06-01 09:20:00'),
 (13, 9, 2, 'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', 'ALERT: Custodian report shows $128,450 variance on CUSIP US38141GXZ77.',   '2026-06-09 14:00:00'),
-(14, 9, 4, 'REVIEWER', 'REVIEW',   'UNDER_REVIEW',  'UNDER_REVIEW', 'Pending confirmation from custodian. Do not certify until resolved.',       '2026-06-11 14:00:00'),
+(14, 9, 4, 'APPROVER', 'REVIEW',   'UNDER_REVIEW',  'REVIEWED',     'Pending confirmation from custodian. Do not certify until resolved.',       '2026-06-11 14:00:00'),
 -- Workflow 10 (Fraud – CRITICAL)
 (15, 10, 1,'ADMIN',    'PREPARE',  'OPEN',          'PREPARED',     'Fraud monitoring profile activated for Q2 anomaly scan.',                   '2026-06-01 09:30:00'),
 (16, 10, 2,'PREPARER', 'SUBMIT',   'PREPARED',      'UNDER_REVIEW', 'CRITICAL: 7 round-dollar weekend postings detected. CFO notified.',         '2026-06-11 17:00:00');
@@ -664,15 +662,12 @@ VALUES
 (4,  2, 'exception','New Exception Assigned: Bank Recon', '3 timing differences flagged in WF-Operating-Account-2026-06. Total outstanding: $26,050.',                                    'warning', 0, '/preparer/1',     'Review Exceptions',   '{"profile_id":1,"count":3}',          '2026-06-11 10:00:00'),
 (5,  2, 'exception','ESCALATION: Fraud Exception #7',     'Exception FRD-002 weekend wire $25,000 escalated to CFO. Your action is required for documentation.',                          'error',   0, '/exception/7',    'View Exception',      '{"exception_id":7}',                  '2026-06-11 16:30:00'),
 (6,  2, 'workflow', 'Workflow Submitted: Investment',     'Your submission for Investment-Portfolio-2026-06 is now UNDER_REVIEW by Diana Ross.',                                           'info',    1, '/preparer/9',     'Track Progress',      '{"profile_id":9}',                    '2026-06-11 14:00:00'),
--- Reviewer Diana (user 4) notifications
-(7,  4, 'workflow', 'Review Required: Investment Profile','Investment-Portfolio-2026-06 submitted by Alice Chen. $128,450 variance flagged. Action required.',                             'warning', 0, '/reviewer',       'Open Review Queue',   '{"profile_id":9,"workflow_id":9}',    '2026-06-11 14:00:00'),
-(8,  4, 'workflow', 'Review Required: AP Profile',       'AP-Vendor-Invoices-2026-06 escalated to Approver. Your review of duplicate invoices INV-4421/4422 needed.',                    'warning', 0, '/reviewer',       'Open Review Queue',   '{"profile_id":3,"workflow_id":3}',    '2026-06-11 09:45:00'),
--- Approver James (user 5) notifications
-(9,  5, 'workflow', 'Approval Required: AP Invoices',    'AP duplicate invoice exception requires your approval decision. Ref: INV-4421, INV-4422.',                                      'warning', 0, '/approver',       'View Approval Queue', '{"profile_id":3}',                    '2026-06-11 10:00:00'),
-(10, 5, 'alert',    'Journal Entry Requires Approval',   'Preparer submitted journal entry JNL-DRAFT-2 for $128,450 investment write-down. Pending your approval.',                       'info',    0, '/journals',       'Review Journal',      '{"adjustment_id":2}',                 '2026-06-11 14:35:00'),
--- Auditor Thomas (user 7) notifications
-(11, 7, 'alert',    'Audit Alert: CRITICAL Anomalies',   '7 fraud-pattern transactions detected across profile 10. Risk score 91.7/100. Audit trail updated.',                            'error',   0, '/audit-logs',     'View Audit Trail',    '{"profile_id":10,"exceptions":7}',    '2026-06-11 17:00:00'),
-(12, 7, 'system',   'Audit Package Ready: Payroll',      'June 2026 Payroll reconciliation audit package generated. Certification hash: c4d6e8f0.',                                       'success', 0, '/audit-logs',     'Download Package',    '{"profile_id":5}',                    '2026-06-05 16:05:00');
+-- Approver James (user 4) notifications
+(9,  4, 'workflow', 'Review Required: AP Profile',       'AP-Vendor-Invoices-2026-06 submitted by Bob Kumar. Review for duplicate invoices INV-4421/4422 needed.',                    'warning', 0, '/work-queue',     'Open Work Queue',    '{"profile_id":3,"workflow_id":3}',    '2026-06-11 09:45:00'),
+(10, 4, 'workflow', 'Approval Required: Investment',     'Investment-Portfolio-2026-06 submitted by Alice Chen. $128,450 variance flagged. Your approval needed.',                     'warning', 0, '/work-queue',     'Open Work Queue',    '{"profile_id":9,"workflow_id":9}',    '2026-06-11 14:00:00'),
+(11, 4, 'alert',    'Journal Entry Requires Approval',   'Preparer submitted journal entry JNL-DRAFT-2 for $128,450 investment write-down. Pending your approval.',                       'info',    0, '/journals',       'Review Journal',      '{"adjustment_id":2}',                 '2026-06-11 14:35:00'),
+-- Certifier Margaret (user 5) notifications
+(12, 5, 'alert',    'Close Period: Payroll Approved',    'June 2026 Payroll reconciliation reviewed and approved. Ready for certification.',                                              'success', 0, '/close-certification', 'Certify',          '{"profile_id":5}',                    '2026-06-04 11:00:00');
 
 
 -- =============================================================================

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.models import ReconciliationBalance
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, AUDITOR, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from ..services import variance_service
 from ..services.variance_schemas import ExplanationOut, ExplanationPatch, VarianceFluxResponse, VarianceTrendRow
 
@@ -21,7 +21,7 @@ def variance_flux(
     period_key: Optional[str] = Query(None),
     top_n: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER])),
 ):
     return variance_service.get_variance_flux_summary(db, profile_id=profile_id, period_key=period_key, top_n=top_n)
 
@@ -31,7 +31,7 @@ def variance_trends(
     profile_id: Optional[int] = Query(None),
     months: int = Query(6, ge=2, le=12),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER])),
 ):
     return variance_service.get_variance_trends(db, profile_id=profile_id, months=months)
 
@@ -84,7 +84,7 @@ def save_explanation(
 def get_explanation(
     balance_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR])),
+    current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     balance = db.query(ReconciliationBalance).filter(ReconciliationBalance.id == balance_id).first()
     if not balance:

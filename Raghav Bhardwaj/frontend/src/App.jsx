@@ -44,9 +44,8 @@ function PrivateRoute({ children }) {
 
 /**
  * DefaultPageRedirect — each role lands on the page that is the start
- * of their workflow.  Previously only preparer and reviewer were handled;
- * approver, certifier, and auditor all fell through to /command-center
- * which is an admin operations page they have no business starting from.
+ * of their workflow. The APPROVER role now handles both review and approval,
+ * so approvers start from /work-queue.
  */
 function DefaultPageRedirect() {
   const user = useAuthStore((s) => s.user)
@@ -55,17 +54,11 @@ function DefaultPageRedirect() {
   // Preparer → their reconciliation worklist
   if (role === 'preparer')  return <Navigate to="/my-reconciliations" replace />
 
-  // Reviewer → their review queue (submissions awaiting first-pass review)
-  if (role === 'reviewer')  return <Navigate to="/work-queue" replace />
-
-  // Approver → their approval queue (reviewed items awaiting final sign-off)
-  if (role === 'approver')  return <Navigate to="/approver-queue" replace />
+  // Approver → work queue (merged review + approval, started from /work-queue)
+  if (role === 'approver')  return <Navigate to="/work-queue" replace />
 
   // Certifier → the close certification page (their primary job)
   if (role === 'certifier') return <Navigate to="/close-certification" replace />
-
-  // Auditor → the audit trail (their read-only home base)
-  if (role === 'auditor')   return <Navigate to="/audit" replace />
 
   // Admin → command centre
   return <Navigate to="/command-center" replace />

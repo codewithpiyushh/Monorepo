@@ -2,9 +2,11 @@
 // Balance Reconciliation Engine — API methods
 // Follows the same patterns as profilesAPI.js and index.js
 
+// NOTE: client.js baseURL is '/api' so paths here start with '/v1/...'
+
 import client from './client';
 
-const BASE = '/api/v1/balances';
+const BASE = '/v1/balances';
 
 const balancesAPI = {
   // ── Dashboard ─────────────────────────────────────────────────────────

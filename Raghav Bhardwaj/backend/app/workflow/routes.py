@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, AUDITOR, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from . import service
 from .schemas import WorkflowActionRequest, WorkflowAssignRequest, WorkflowAttachmentOut, WorkflowOut
 
@@ -13,8 +13,8 @@ router = APIRouter(prefix="/api/workflow", tags=["workflow"])
 
 
 # ---------------------------------------------------------------------------
-# READ endpoints — preparers, reviewers, approvers, certifiers, auditors can
-#                  all see workflows relevant to them.
+# READ endpoints — preparers, approvers, certifiers can all see workflows
+#                  relevant to them.
 # ---------------------------------------------------------------------------
 
 @router.get("", response_model=List[WorkflowOut])
@@ -22,7 +22,7 @@ def list_workflows(
     reconciliation_id: int | None = None,
     project_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR, ADMIN])),
+    current_user=Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     return service.list_workflows(
         db,
@@ -37,7 +37,7 @@ def list_workflows(
 def get_workflow(
     workflow_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR, ADMIN])),
+    current_user=Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     return service.get_workflow(db, workflow_id)
 
@@ -82,20 +82,20 @@ def submit_workflow(
 
 
 # ---------------------------------------------------------------------------
-# REVIEW — reviewer performs first-pass check and either passes to approver
-#           or returns for rework. Reviewer is distinct from Approver.
+# REVIEW — approver performs first-pass check and either passes forward
+#           or returns for rework. Approver role now handles review & approval.
 # ---------------------------------------------------------------------------
 
 @router.post("/review", response_model=WorkflowOut)
 def review_workflow(
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([REVIEWER, ADMIN])),
+    current_user=Depends(role_required([APPROVER, ADMIN])),
 ):
     """
-    Reviewer acknowledges and passes the reconciliation to the Approver stage.
-    This is a distinct step from /approve (which is an Approver action).
-    Status transition: under_review → reviewed
+    Approver acknowledges and reviews the reconciliation submission.
+    The Approver role now handles both review and approval in a merged workflow.
+    Status transition: submitted → reviewed
     """
     return service.review_workflow(
         db,
@@ -109,12 +109,12 @@ def review_workflow(
 def return_for_rework(
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([REVIEWER, APPROVER, ADMIN])),
+    current_user=Depends(role_required([APPROVER, ADMIN])),
 ):
     """
-    Reviewer or Approver sends the reconciliation back to the preparer with
+    Approver sends the reconciliation back to the preparer with
     mandatory comments explaining what needs to be corrected.
-    Status transition: under_review | reviewed → returned_for_rework
+    Status transition: submitted | reviewed → returned_for_rework
     This is distinct from a final rejection — the preparer can correct and
     re-submit. Mirrors the BlackLine 'Return for Rework' and ARCS 'Return
     to Preparer' transitions.
@@ -128,7 +128,7 @@ def return_for_rework(
 
 
 # ---------------------------------------------------------------------------
-# APPROVE — approver gives final sign-off. Distinct role from reviewer.
+# APPROVE — approver gives final sign-off. Now merged with review role.
 #           SoD: approver must not be the same person who submitted or reviewed.
 # ---------------------------------------------------------------------------
 
@@ -136,11 +136,11 @@ def return_for_rework(
 def approve_workflow(
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([APPROVER, ADMIN])),  # was [REVIEWER, ADMIN]
+    current_user=Depends(role_required([APPROVER, ADMIN])),
 ):
     """
     Final approval — only an Approver (or Admin) can approve.
-    Reviewer role cannot approve; they can only review and pass forward.
+    The Approver role now handles both review and approval.
     """
     return service.approve_workflow(
         db,
@@ -151,14 +151,14 @@ def approve_workflow(
 
 
 # ---------------------------------------------------------------------------
-# REJECT — full rejection (with mandatory reason). Reviewer or Approver.
+# REJECT — full rejection (with mandatory reason). Approver only.
 # ---------------------------------------------------------------------------
 
 @router.post("/reject", response_model=WorkflowOut)
 def reject_workflow(
     payload: WorkflowActionRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([REVIEWER, APPROVER, ADMIN])),
+    current_user=Depends(role_required([APPROVER, ADMIN])),
 ):
     return service.reject_workflow(
         db,
@@ -169,7 +169,7 @@ def reject_workflow(
 
 
 # ---------------------------------------------------------------------------
-# ATTACHMENTS — preparer uploads; reviewer/approver/auditor can view/download.
+# ATTACHMENTS — preparer uploads; approver/certifier can view/download.
 # ---------------------------------------------------------------------------
 
 @router.post("/{workflow_id}/attachments", response_model=WorkflowAttachmentOut)
@@ -191,7 +191,7 @@ def upload_workflow_attachment(
 def list_workflow_attachments(
     workflow_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR, ADMIN])),
+    current_user=Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     return service.list_workflow_attachments(db, workflow_id)
 
@@ -200,7 +200,7 @@ def list_workflow_attachments(
 def download_workflow_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR, ADMIN])),
+    current_user=Depends(role_required([PREPARER, APPROVER, CERTIFIER, ADMIN])),
 ):
     return service.download_workflow_attachment(db, attachment_id)
 

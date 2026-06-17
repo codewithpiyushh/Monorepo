@@ -1,254 +1,383 @@
-**Project Guide**
+# DRMS — Project Guide
 
-- **Purpose:**: High-level description of the reconciliation application, roles, and user flows so new contributors can quickly understand and use the project.
+**Purpose:** Complete reference for the Data Reconciliation Management System — architecture,
+roles, end-to-end workflows, API reference, and demo usage guide.
 
-**Current Status**
-- The active source of truth for the latest repo state is [PROJECT_STATUS.md](./PROJECT_STATUS.md).
-- This guide explains the application structure and workflows; the status file explains what is already built and what is still missing.
-- Current build status at the time of this update:
-  - Backend Python syntax check: passing.
-  - Frontend production build: passing.
-  - Remaining work: tests, migration rollout, and final QA for the new variance workflow.
+---
 
-**Project Overview**
-- **What it is:**: A reconciliation platform that lets teams upload source/target datasets, map fields, define matching rules, run executions to reconcile transactions, manage exceptions, and run certification workflows.
-- **Stack:**: Backend: FastAPI + SQLAlchemy (Python). Frontend: React + Vite + TanStack Query. DB: MySQL / SQLite for local development.
-- **Where to look:**: Backend source: `backend/app/`. Frontend source: `frontend/src/`.
+## Table of Contents
 
-**Architecture & Key Components**
-- **Backend (`backend/app`)**: API endpoints, services, models and migrations. Important folders:
-  - `routes/` — REST endpoints (projects, executions, enterprise, auth).
-  - `services/` — Core business logic (project creation, execution engine, enrichment, promotion).
-  - `models/` — SQLAlchemy models for Projects, Datasets, Profiles, Rules, Executions, AuditLog, etc.
-  - `migrations/` — DB migrations (keep these).
-- **Frontend (`frontend/src`)**: Pages & components for workbenches and admin console.
-  - `pages/PreparerWorkbench.jsx` — Preparer UI (upload, evidence, exceptions).
-  - `pages/ReviewerWorkbench.jsx` — Reviewer UI and certification queue.
-  - `pages/ExecutionWorkbench.jsx` — Execution UI for running reconciliations.
+1. [Project Overview](#1-project-overview)
+2. [Architecture](#2-architecture)
+3. [Roles & Responsibilities](#3-roles--responsibilities)
+4. [End-to-End Workflows](#4-end-to-end-workflows)
+5. [Demo Projects](#5-demo-projects)
+6. [Local Setup](#6-local-setup)
+7. [API Reference](#7-api-reference)
+8. [Troubleshooting](#8-troubleshooting)
 
-**Primary Roles & Responsibilities**
-- **Admin**: Manage system-level settings, create users, view enterprise profile queue, and run migrations and seeds.
-- **Preparer**: Uploads datasets, reviews matches, raises exceptions, attaches evidence, and submits for reviewer via the Preparer Workbench.
-- **Reviewer**: Reviews prepared submissions, approves/rejects/returns to preparer, and manages certification actions via the Reviewer Workbench.
-- **Approver / Certifier**: Approve final certified results and close the reconciliation according to workflow rules.
-- **Executor** (system role): Runs reconciliation executions (matching engine), applies mappings and rules, and generates match groups.
+---
 
-**End-to-End Flows (high level)**
-1. **Project Creation & Enrichment**
-   - Create a Project via API or UI. The backend `project_service` will auto-seed default datasets/mappings/rules and create a reconciliation profile in many flows.
-   - Seeded data includes source/target datasets, mapping definitions, matching rules, and a default certification workflow.
-2. **Upload Datasets**
-   - Preparer uploads `source` and `target` datasets (CSV) to the Project datasets endpoint/UI.
-   - Datasets are stored and parsed into transactions.
-3. **Mappings & Rules**
-   - Define mappings that link source fields → target fields.
-   - Add matching rules (key fields, match fields, tolerances, date windows) using the Rules endpoint or UI.
-4. **Run Execution**
-   - Trigger a reconciliation execution (via UI or `/api/projects/{id}/executions`). The execution engine runs the matching algorithm and persists match groups.
-   - Monitor execution via the Executions endpoint and the Execution Workbench.
-5. **Promote Execution → Enterprise Profile**
-   - If you want the full preparer/reviewer/certification lifecycle, promote the execution to an enterprise profile (via the execution promote endpoint or UI button).
-   - Until promotion, user-facing workbenches operate in `legacy mode` (limited feature set) and show the legacy banner.
-6. **Preparer Workflow**
-   - Preparer reviews matches, resolves exceptions, attaches evidence, and submits the profile for reviewer.
-7. **Reviewer & Certification Workflow**
-   - Reviewer inspects submissions, approves/rejects or returns to preparer.
-   - Certification workflow advances through PREPARER → REVIEWER → APPROVER → CERTIFIER stages depending on workflow configuration.
+## 1. Project Overview
 
-**Why you see “legacy mode”**
-- The UI detects `legacy mode` when a page is opened for a single `projectId` execution route (e.g., `/preparer/:projectId`). That route is a direct execution view that is not yet promoted. To access the full enterprise workbenches, promote the execution to an enterprise profile.
+DRMS is an enterprise financial reconciliation platform that lets teams:
 
-**Local Setup & Run (quick)**
-1. Create Python virtualenv and install backend deps:
+- Upload **source** and **target** datasets (CSV)
+- Define **field mappings** and **matching rules**
+- Run **execution engines** that match transactions and generate match groups
+- Manage **exceptions** with aging, escalation, and investigation workflows
+- Track **balance reconciliations** with variance analysis
+- Drive a **multi-role certification lifecycle** (Preparer → Reviewer → Approver → Certifier)
+- Provide **auditors** with a complete, tamper-evident audit trail
+
+**Stack:**
+
+| Component | Technology |
+|-----------|-----------|
+| Backend   | FastAPI 0.115 + SQLAlchemy 2.x + Python 3.11 |
+| Frontend  | React 18 + Vite 5 + TanStack Query + Tailwind CSS |
+| Database  | MySQL (production) / SQLite (local dev) |
+| Auth      | JWT HS256 + RBAC middleware |
+
+---
+
+## 2. Architecture
+
+### Backend — `backend/app/`
+
+```
+app/
+├── main.py                   FastAPI app, lifespan, demo startup
+├── database.py               DB engine & session factory
+├── core/config.py            Settings (DATABASE_URL, DEMO_MODE, …)
+├── models/models.py          SQLAlchemy ORM models
+├── routes/                   REST endpoints
+│   ├── auth.py               Login / token
+│   ├── projects.py           Project CRUD
+│   ├── datasets.py           CSV upload
+│   ├── mappings.py           Field mappings
+│   ├── rules.py              Matching rules
+│   ├── executions.py         Run & poll executions
+│   ├── balances.py           Balance workspace
+│   ├── variance.py           Variance analytics
+│   ├── aging.py              Exception aging
+│   ├── export.py             Excel/CSV exports
+│   └── audit.py              Audit logs
+├── enterprise/               Enterprise profile module
+│   ├── routes.py             Enterprise profile endpoints
+│   ├── service.py            Full enterprise service (1200+ lines)
+│   ├── lifecycle_service.py  Balance lifecycle state machine
+│   ├── lifecycle_router.py   Balance & profile v1 routes
+│   ├── profiles_v1.py        Profile v1 endpoints
+│   ├── supporting_items_*    Evidence & supporting items
+│   └── comment_*             Comment threads
+├── services/
+│   ├── execution_service.py  Execution orchestration
+│   ├── matching_engine.py    Core matching algorithm
+│   ├── balance_service.py    Balance reconciliation
+│   ├── variance_service.py   Variance engine
+│   ├── aging_service.py      Exception aging
+│   ├── risk_scoring_engine.py Risk scoring
+│   ├── demo_seed.py          10-project enterprise matrix seeder
+│   └── demo_manager.py       Demo mode startup controller
+├── rbac/                     Role-based access control
+├── scheduler/                Background job scheduler
+├── sequence/                 Close sequence management
+└── workflow/                 Workflow routes
+```
+
+### Frontend — `frontend/src/`
+
+```
+src/
+├── App.jsx                   Routes for all roles
+├── components/
+│   ├── Layout.jsx            Sidebar + navigation (role-aware)
+│   ├── UploadStep.jsx        Dataset upload wizard step
+│   ├── MappingStep.jsx       Field mapping wizard step
+│   ├── RulesStep.jsx         Rules builder wizard step
+│   ├── ExecuteStep.jsx       Execution run wizard step
+│   ├── balance/              Balance workspace components
+│   ├── analytics/            Chart components
+│   ├── exception/            Exception components
+│   └── profile/              Profile card components
+└── pages/
+    ├── Login.jsx
+    ├── CommandCenter.jsx        Admin ops dashboard
+    ├── PreparerWorkbench.jsx    Preparer main UI
+    ├── ApproverWorkbench.jsx    Approver queue (merged review + approval)
+    ├── CloseCertificationPage.jsx  Certifier sign-off
+    ├── BalanceReconciliationPage.jsx  Balance workspace
+    ├── VarianceAnalyticsDashboard.jsx Variance charts
+    ├── AgingDashboard.jsx       Exception aging
+    ├── RiskDashboard.jsx        Risk heat map
+    ├── ExceptionWorkbench.jsx   Exception management
+    ├── ExecutiveDashboard.jsx   KPI overview
+    ├── ReconciliationProfilesPage.jsx  Profile list
+    ├── AdminCenter.jsx          User & settings admin
+    ├── AuditLogs.jsx            Admin audit trail view
+    └── WorkQueue.jsx            Approver work queue (review + approval)
+```
+
+---
+
+## 3. Roles & Responsibilities
+
+| Role | Landing Page | Key Capabilities |
+|------|-------------|-----------------|
+| **Admin** | `/command-center` | User management, system config, seed data, view all profiles, audit trail access |
+| **Preparer** | `/my-reconciliations` | Upload data, map fields, run execution, resolve exceptions, attach evidence, submit |
+| **Approver** | `/work-queue` | Review submissions & evidence, approve / return / escalate, manage reconciliations |
+| **Certifier** | `/close-certification` | Final sign-off, issue close certification |
+
+### Role-based Route Protection
+
+The `ProtectedRoute` component wraps role-sensitive pages.
+`DefaultPageRedirect` ensures each role lands on the correct start page after login.
+
+---
+
+## 4. End-to-End Workflows
+
+### 4a. Transaction Reconciliation (Project Flow)
+
+```
+1. Admin creates project (name, description)
+2. Preparer uploads source CSV + target CSV
+3. Preparer defines field mappings (source_col → target_col)
+4. Preparer configures matching rules (exact / tolerance / date_diff / fuzzy)
+5. System runs execution → matching engine produces match groups
+6. Preparer reviews match groups, resolves exceptions, adds evidence
+7. Admin promotes execution → Enterprise Profile
+8. Full certification lifecycle begins (see 4b)
+```
+
+### 4b. Certification Lifecycle
+
+```
+OPEN
+ └→ [Preparer] submits reconciliation
+     PREPARED / SUBMITTED
+      └→ [Reviewer] first-pass review
+          UNDER_REVIEW
+           └→ [Approver] second-level approval
+               APPROVED
+                └→ [Certifier] final sign-off
+                    CERTIFIED  ✔
+```
+
+At each stage, the actor can **Approve**, **Return** (send back one level), or **Escalate**.
+
+### 4c. Balance Reconciliation Flow
+
+```
+1. Profile has source_balance + target_balance
+2. System calculates variance_amount and variance_severity_classification:
+   - BALANCED (0 variance)
+   - WITHIN_THRESHOLD (≤ threshold)
+   - MATERIAL_VARIANCE (> threshold, ≤ materiality limit)
+   - CRITICAL_VARIANCE (> materiality limit)
+3. Preparer must provide root-cause narrative for MATERIAL/CRITICAL
+4. Variance analytics dashboard shows explained / unexplained / flux by period
+5. Submission is blocked until narrative gate is satisfied
+```
+
+### 4d. Exception Aging
+
+Exceptions are bucketed by days-outstanding:
+- **0–30 days** — Current
+- **31–60 days** — Aged
+- **61–90 days** — Escalate-eligible
+- **90+ days** — Critical / overdue
+
+---
+
+## 5. Demo Projects
+
+Run `backend/scripts/seed_demo_projects.py` (backend must be running) to create 5 showcase projects:
+
+| # | Name | Scenario | Interesting Data Points |
+|---|------|----------|------------------------|
+| 1 | **Bank Reconciliation — US Corporate** | GL vs Bank Statement | Interest income unmatched; 1-day date drift on fee |
+| 2 | **Accounts Receivable — EMEA** | Invoices vs Receipts | CHF FX rounding variance (INV-004); 2 outstanding + 1 disputed invoice |
+| 3 | **Accounts Payable — Global** | AP Ledger vs Vendor Invoices | AWS duplicate payment (PAY-010 duplicates PAY-002); 1 new unmatched vendor |
+| 4 | **Intercompany — APAC** | Entity A vs Entity B | Multi-currency SGD/HKD with USD equivalent matching; unbooked accrual |
+| 5 | **Payroll — North America** | HR Extract vs Bank Transfer | Unknown employee transfer (EMP-099); CA vs US payroll separation |
+
+> The demo matrix seeder (`demo_seed.py`) creates 10 additional enterprise profiles on startup when `DEMO_MODE=true`.
+
+### Demo User Credentials
+
+| Role | Username | Password |
+|------|----------|----------|
+| admin | admin | admin123 |
+| preparer | preparer | preparer123 |
+| reviewer | reviewer | reviewer123 |
+| approver | approver | approver123 |
+| certifier | certifier | certifier123 |
+| auditor | auditor | auditor123 |
+
+---
+
+## 6. Local Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- MySQL 8.x (or use SQLite for local dev by changing `DATABASE_URL`)
+
+### Backend
+
 ```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-2. Init DB & run migrations (or use the demo bootstrap):
-```powershell
-python -c "from app.database import init_db; init_db()"
-# or run the bootstrap that seeds demo data
-python scripts\bootstrap_demo_database.py
-```
-3. Run backend server:
-```powershell
+
+# Configure .env (DATABASE_URL, SECRET_KEY, DEMO_MODE)
+# For quick local dev with SQLite:
+#   DATABASE_URL=sqlite:///./drms_demo.db
+#   DEMO_MODE=false
+
 uvicorn app.main:app --reload --port 8000
 ```
-4. Start frontend dev server:
-```bash
+
+On startup, `main.py` will:
+1. Run DB migrations automatically
+2. Seed 4 demo users (all roles: admin, preparer, approver, certifier)
+3. If `DEMO_MODE=true`: purge old demo data and re-seed 10-project matrix
+
+### Frontend
+
+```powershell
 cd frontend
 npm install
 npm run dev
+# Available at http://localhost:5173
 ```
 
-**Important API Endpoints**
-- `POST /api/projects` — create project
-- `POST /api/projects/{id}/datasets` — upload dataset (source/target)
-- `POST /api/projects/{id}/mappings` — create mappings
-- `POST /api/projects/{id}/rules` — add matching rules
-- `POST /api/projects/{id}/executions` — start an execution
-- `POST /api/projects/{id}/executions/{exec_id}/promote` — promote execution to enterprise profile
+### Seed 5 Full-Flow Demo Projects
 
-**Troubleshooting / Notes**
-- If the UI shows the legacy banner, check whether you opened a `projectId` route. Promote the execution or navigate via the enterprise profiles list to access full workbenches.
-- Generated artifacts (node_modules, .venv, SQLite demo DBs) are safe to delete if you want a fresh start; they can be recreated with `npm install` and virtualenv + requirements.
-- Use `backend/scripts/bootstrap_demo_database.py` to seed a full demo flow quickly (users, profiles, workflows).
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python scripts/seed_demo_projects.py
+```
 
-**Next steps you can ask me to do**
-- Add role-by-role sample screenshots and a short checklist for each role.
-- Generate a shorter `README.md` with one-click dev commands.
-- Remove any remaining demo artifacts or create a fresh starter repo branch.
+This creates all 5 projects via the REST API — with source/target datasets, mappings,
+rules, a triggered execution, and promotion to Enterprise Profile.
 
 ---
-Generated by the project assistant. If you want this written into `README.md` instead, tell me and I will move it.
- 
-**Role Checklists (quick actions per role)**
 
-- **Admin**
-   1. Create or manage users via the Admin Center (or `POST /api/users`).
-   2. Seed demo data using `backend/scripts/bootstrap_demo_database.py` if starting fresh.
-   3. Monitor enterprise profile queue and assign owners.
-   4. Review system logs and run migrations from `backend/migrations/`.
+## 7. API Reference
 
-- **Preparer**
-   1. Create or select a Project (UI or `POST /api/projects`).
-   2. Upload `source` and `target` datasets via the Preparer Workbench or `POST /api/projects/{id}/datasets`.
-   3. Open the Preparer Workbench (if not legacy) and resolve match groups, add evidence, and submit.
+**Base URL:** `http://localhost:8000`  
+**Auth:** `Authorization: Bearer <token>` (obtain via `POST /api/auth/login`)  
+**Swagger UI:** `http://localhost:8000/api/docs`
 
-- **Reviewer**
-   1. Access the Review Queue (Enterprise profiles) — do not open the legacy `projectId` execution route.
-   2. Review prepared submissions and use the certification actions to Approve/Reject/Escalate.
-   3. Use reviewer dashboard metrics to prioritize high-risk profiles.
+### Auth
 
-- **Approver / Certifier**
-   1. Inspect the certification workflow assigned to a profile.
-   2. Approve or request additional evidence as necessary.
-   3. Close the profile once certification criteria are met.
-
-- **Executor**
-   1. Trigger executions (`POST /api/projects/{id}/executions`).
-   2. Monitor execution progress and logs, then promote completed runs when ready.
-
-**Sample API Calls**
-Below are common API examples. Replace `BASE_URL` with `http://localhost:8000` for local dev and supply an `Authorization: Bearer <token>` header where required.
-
-- Create a project
-```bash
-curl -X POST "${BASE_URL}/api/projects" \
-   -H "Authorization: Bearer $TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{"name":"My Project","description":"Demo"}'
+```
+POST /api/auth/login           { username, password } → { access_token }
+GET  /api/users/me             Current user profile
+GET  /api/users                All users (admin)
 ```
 
-- Upload a CSV dataset (source or target)
-```bash
-curl -X POST "${BASE_URL}/api/projects/{project_id}/datasets" \
-   -H "Authorization: Bearer $TOKEN" \
-   -F "dataset_type=source" \
-   -F "file=@/path/to/source.csv;type=text/csv"
+### Projects
+
+```
+GET  /api/projects             List projects
+POST /api/projects             Create project
+GET  /api/projects/{id}        Get project details
 ```
 
-- Create mappings
-```bash
-curl -X POST "${BASE_URL}/api/projects/{project_id}/mappings" \
-   -H "Authorization: Bearer $TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{"mappings": [{"source_field":"account","target_field":"account"}]}'
+### Datasets & Mappings
+
+```
+POST /api/projects/{id}/datasets    Upload CSV (multipart: file + dataset_type)
+POST /api/projects/{id}/mappings    Create mappings [{ source_column, target_column, is_key_field }]
+POST /api/projects/{id}/rules       Add rule { name, rule_type, config }
 ```
 
-- Add a matching rule
-```bash
-curl -X POST "${BASE_URL}/api/projects/{project_id}/rules" \
-   -H "Authorization: Bearer $TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{"name":"Default rule","key_fields":["account"],"match_fields":["reference","amount"]}'
+### Executions
+
+```
+POST /api/projects/{id}/executions                  Trigger execution
+GET  /api/projects/{id}/executions/{eid}            Get execution status
+POST /api/projects/{id}/executions/{eid}/promote    Promote to Enterprise Profile
 ```
 
-- Start an execution
-```bash
-curl -X POST "${BASE_URL}/api/projects/{project_id}/executions" \
-   -H "Authorization: Bearer $TOKEN"
+### Enterprise Profiles
+
+```
+GET  /api/enterprise/profiles                       List all profiles
+GET  /api/enterprise/profiles/{pid}                 Get profile detail
+POST /api/v1/profiles/{pid}/lifecycle/submit        Preparer submits
+POST /api/v1/profiles/{pid}/lifecycle/review        Reviewer action
+POST /api/v1/profiles/{pid}/lifecycle/approve       Approver action
+POST /api/v1/profiles/{pid}/lifecycle/certify       Certifier sign-off
 ```
 
-- Promote execution to enterprise profile
-```bash
-curl -X POST "${BASE_URL}/api/projects/{project_id}/executions/{exec_id}/promote" \
-   -H "Authorization: Bearer $TOKEN" \
-   -H "Content-Type: application/json" \
-   -d '{}' 
+### Balance & Variance
+
+```
+GET  /api/v1/balances/profiles/{pid}/balances       Balance workspace data
+POST /api/v1/balances/profiles/{pid}/balances       Create/update balance
+GET  /api/v1/analytics/variance/{pid}               Variance analytics
+GET  /api/v1/analytics/variance/{pid}/snapshots     Period snapshots
+```
+
+### Exceptions & Aging
+
+```
+GET  /api/v1/exceptions/aging                       Exception aging buckets
+GET  /api/v1/exceptions/queue                       Exception queue
+```
+
+### Export & Audit
+
+```
+GET  /api/export/project/{id}                       Export project data (Excel)
+GET  /api/audit/logs                                Audit trail
 ```
 
 ---
-If you want, I can now generate `README.md` (condensed quickstart) and add role-specific screenshots placeholders. Let me know which option you prefer.
 
-**Access Denied — Approver / Certifier / Auditor**
+## 8. Troubleshooting
 
-If you (or users) see a `403 Access Denied` page when trying to perform actions as an **Approver**, **Certifier**, or **Auditor**, check the following common causes and resolutions:
+### "Legacy Mode" banner in the UI
 
-- 1) Role assignment: Ensure the user account has the correct role in the system. Check the `users` table or use the Admin Center to confirm the `role` field includes `approver`, `certifier`, or `auditor` as appropriate.
+Appears when you navigate to `/projects/:projectId/preparer` (direct execution route).
+The execution has not been promoted yet.
 
-   - How to check (API):
-      - `GET /api/users` — list users and verify the `role` value for the user account.
+**Fix:** Promote the execution via `POST /api/projects/{id}/executions/{eid}/promote`
+or use the **Promote** button in the Execution Workbench.
 
-- 2) Profile-level assignment: Even with the correct role, a user must be assigned to the enterprise profile to act on it. Verify the reconciliation profile has `assigned_approver`, `assigned_certifier`, or `assigned_certifier` fields set to the user's id.
+### 403 Access Denied for Approver/Certifier
 
-   - How to check (DB): inspect the `reconciliation_profiles` row for the profile and ensure the assigned fields reference the correct user id.
+Check in order:
+1. **Role correct?** `GET /api/users` — verify the `role` field.
+2. **Profile assignment?** `assigned_approver` / `assigned_certifier` must match the user's `id`.
+3. **Workflow stage?** The certification workflow must be at the stage that allows the action.
+4. **Legacy mode?** Promote the execution first.
 
-- 3) Workflow stage & lifecycle: The certification workflow must be at a stage that permits the role's action. If a workflow is not in the expected stage (PREPARED → UNDER_REVIEW → APPROVER → CERTIFIER), actions by later roles will be blocked.
+### Database migration errors
 
-   - How to check (API):
-      - `GET /api/enterprise/certification/{profile_id}` or the `cert-workflows-all` endpoint to inspect status and current stage.
+If you see column-not-found errors, the auto-migrations in `main.py` lifespan may have been
+skipped. Re-run the backend with a fresh DB or run each migration manually:
 
-- 4) Legacy mode vs Enterprise profile: If you are viewing a legacy `projectId` execution route (UI shows "legacy mode" banner), many enterprise actions (certification and approver/certifier flows) are disabled. Promote the execution to an enterprise profile to enable full functionality.
+```python
+from app.database import engine
+from app.models.profile_migration import migrate
+migrate(engine)
+```
 
-- 5) Permissions middleware and RBAC configuration: The backend enforces role checks in routes. If a custom change was made to middleware, double-check `app/services/auth_service.py` and route decorators that authorize actions.
+### Demo data not appearing
 
-Quick remediation checklist:
+Ensure `DEMO_MODE=true` in `backend/.env` and restart the backend.
+The demo manager purges old demo records and re-seeds on every restart.
 
-- Verify user role: `GET /api/users` → confirm `role`.
-- Verify profile assignment: query `reconciliation_profiles` → `assigned_approver` / `assigned_certifier` values.
-- Check workflow status: `GET /api/projects/{id}/executions/{exec_id}/status` or certification endpoints.
-- If on a legacy execution route, promote the execution: `POST /api/projects/{id}/executions/{exec_id}/promote`.
+---
 
-If you want, I can run quick read-only checks in your local dev environment (list users, show profile rows) if you grant me permission to run the commands here.
-
-**Role-specific Screenshots — placeholders & capture instructions**
-
-I added placeholders below that you can replace with real images. Suggested filenames and capture steps are included so any new user can reproduce them exactly.
-
-- `screenshots/preparer_workbench.png` — Preparer Workbench (home view)
-   - What to capture: Top of Preparer Workbench showing PageHeader and active profile selection.
-   - How to capture: Open the Preparer Workbench in the browser, sign in as `preparer`, navigate to the active profile, press `PrtScn` or use OS snipping tool. Save as `preparer_workbench.png` at `frontend/public/screenshots/`.
-
-- `screenshots/reviewer_workbench.png` — Reviewer Workbench (certificate queue)
-   - What to capture: Reviewer queue with certification list and a highlighted submission.
-   - How to capture: Sign in as `reviewer`, open Review Queue, expand a certification item, capture, and save as `reviewer_workbench.png`.
-
-- `screenshots/execution_workbench.png` — Execution Workbench (running execution)
-   - What to capture: Execution progress bar / execution results summary.
-   - How to capture: Start an execution as an executor/admin, open Execution Workbench, capture the progress/results, and save as `execution_workbench.png`.
-
-- `screenshots/approver_action.png` — Approver action modal (approve/return)
-   - What to capture: Approval modal or action buttons available to `approver`.
-   - How to capture: Log in as an `approver` assigned to a profile, navigate to the certification item in reviewer queue, open the approval modal, capture, and save as `approver_action.png`.
-
-- `screenshots/certifier_action.png` — Certifier action view
-   - What to capture: Certifier approval buttons and final sign-off UI.
-   - How to capture: Log in as `certifier`, open the certification item at the certifier stage, capture, and save as `certifier_action.png`.
-
-- `screenshots/auditor_view.png` — Auditor read-only view
-   - What to capture: Auditor's dashboard showing audit trails or logs (if available).
-   - How to capture: Log in as `auditor`, open the enterprise audit view or profile history, capture the timeline, and save as `auditor_view.png`.
-
-Recommended capture settings
-
-- Resolution: 1365x768 or larger for consistent layout.
-- Format: PNG, max quality.
-- Filenames: use the exact names above and place under `frontend/public/screenshots/`.
-
-Adding placeholders
-
-If you want, I will create the `frontend/public/screenshots/` folder and add placeholder files and a brief caption in `PROJECT_GUIDE.md` that references them. Tell me to proceed and I will add the folder and placeholder images (transparent PNGs) and update the guide to point to them.
-
+*Generated: 2026-06-16 — update this file when major features are added or changed.*

@@ -5,9 +5,10 @@ import clsx from 'clsx'
 import {
   AlertTriangle, BarChart3, CalendarCheck2, CheckCircle2,
   ClipboardList, Command, FolderOpen, LogOut, Moon, Repeat,
-  Shield, Sun, ShieldAlert, Scale, User, Search, ChevronRight,
+  Shield, Sun, ShieldAlert, Scale, User, Search, ChevronRight, ChevronDown,
   LayoutDashboard, Settings, ChevronsLeft, ChevronsRight,
-  Grid2x2, List, Plus, Clock,
+  Grid2x2, List, Plus, Clock, Repeat2, FileCheck2, Database,
+  TrendingUp, BookOpen, Lock, Archive, Sliders,
 } from 'lucide-react'
 import NotificationCenter from './NotificationCenter'
 import { useAuthStore } from '../store/authStore'
@@ -38,40 +39,89 @@ const PAGE_META = {
   '/executive-dashboard':     { label: 'Executive Dashboard',       section: 'Analytics' },
 }
 
-/* Nav groups — shown when sidebar is expanded */
+/* ─── Admin sidebar — new grouped structure with collapsible sections ─── */
+const ADMIN_NAV = [
+  // Direct link
+  {
+    kind: 'link',
+    to: '/command-center',
+    icon: LayoutDashboard,
+    label: 'Home',
+    tip: 'Home / Command Center',
+  },
+  // ── RECONCILIATION dropdown ──
+  {
+    kind: 'group',
+    label: 'Reconciliation',
+    defaultOpen: true,
+    items: [
+      { to: '/exception-ops',         icon: AlertTriangle,   label: 'Matching',              tip: 'Transaction Matching' },
+      { to: '/enterprise-center',     icon: Scale,           label: 'Recon Hub',             tip: 'Reconciliation Hub' },
+      { to: '/balance-reconciliation',icon: Database,        label: 'Balance Reconciliation',tip: 'Balance Reconciliation' },
+    ],
+  },
+  // ── ANALYTICS dropdown ──
+  {
+    kind: 'group',
+    label: 'Analytics',
+    defaultOpen: false,
+    items: [
+      { to: '/analytics-explorer', icon: BarChart3,     label: 'Analytics Dashboard', tip: 'Analytics Explorer' },
+      { to: '/risk-dashboard',     icon: ShieldAlert,   label: 'Risk Dashboard',      tip: 'Risk Dashboard' },
+      { to: '/variance-analytics', icon: TrendingUp,    label: 'Variance Analytics',  tip: 'Variance Analytics' },
+      { to: '/aging-dashboard',    icon: Clock,         label: 'Aging Analysis',      tip: 'Aging Analysis' },
+    ],
+  },
+  // Direct link
+  {
+    kind: 'link',
+    to: '/close-certification',
+    icon: CalendarCheck2,
+    label: 'Close Management',
+    tip: 'Close Certification',
+  },
+  // ── CONFIGURATION dropdown ──
+  {
+    kind: 'group',
+    label: 'Configuration',
+    defaultOpen: false,
+    items: [
+      { to: '/reconciliation-profiles', icon: FolderOpen, label: 'Profiles',          tip: 'Reconciliation Profiles' },
+      { to: '/rule-builder',            icon: Sliders,    label: 'Rules Engine',       tip: 'Rule Builder' },
+      { to: null,                       icon: CheckCircle2, label: 'Approval Chains',  tip: 'Approval Chains (coming soon)', disabled: true },
+      { to: null,                       icon: Shield,     label: 'Risk Configuration', tip: 'Risk Configuration (coming soon)', disabled: true },
+    ],
+  },
+  // ── GOVERNANCE dropdown ──
+  {
+    kind: 'group',
+    label: 'Governance',
+    defaultOpen: false,
+    items: [
+      { to: '/audit', icon: ClipboardList, label: 'Audit Trail',        tip: 'Audit Trail' },
+      { to: null,     icon: BookOpen,      label: 'Compliance',         tip: 'Compliance (coming soon)', disabled: true },
+      { to: null,     icon: Archive,       label: 'Evidence Retention', tip: 'Evidence Retention (coming soon)', disabled: true },
+    ],
+  },
+  // Direct link
+  {
+    kind: 'link',
+    to: '/admin',
+    icon: Settings,
+    label: 'Administration',
+    tip: 'Admin Center',
+  },
+]
+
+/* Flat list of all routable items (for collapsed icon-only mode) */
 const ADMIN_NAV_GROUPS = [
   {
-    section: 'Operations',
-    items: [
-      { to: '/command-center',     icon: LayoutDashboard, tip: 'Home / Projects',       label: 'Home' },
-      { to: '/exception-ops',      icon: AlertTriangle,   tip: 'Matching & Exceptions', label: 'Matching' },
-      { to: '/enterprise-center',  icon: Scale,           tip: 'Reconciliation Hub',    label: 'Recon Hub' },
-    ],
-  },
-  {
-    section: 'Analytics',
-    items: [
-      { to: '/analytics-explorer', icon: BarChart3,       tip: 'Analytics',              label: 'Analytics' },
-    ],
-  },
-  {
-    section: 'Close Management',
-    items: [
-      { to: '/close-certification',icon: CalendarCheck2,  tip: 'Close Certification',   label: 'Close Cert' },
-      { to: '/controls-governance',icon: Shield,          tip: 'Controls & Governance', label: 'Controls' },
-    ],
-  },
-  {
     section: 'Admin',
-    items: [
-      { to: '/reconciliation-profiles', icon: FolderOpen,  tip: 'Reconciliation Profiles', label: 'Profiles' },
-      { to: '/balance-reconciliation',  icon: Scale,       tip: 'Balance Reconciliation',  label: 'Balance Recon' },
-      { to: '/aging-dashboard',         icon: Clock,       tip: 'Aging Analysis',          label: 'Aging Analysis' },
-      { to: '/variance-analytics',      icon: BarChart3,   tip: 'Variance Analytics',      label: 'Variance Analytics' },
-      { to: '/rule-builder',       icon: ShieldAlert,     tip: 'Rule Builder',          label: 'Rule Builder' },
-      { to: '/audit',              icon: ClipboardList,   tip: 'Audit Trail',           label: 'Audit Trail' },
-      { to: '/admin',              icon: Settings,        tip: 'Admin Center',          label: 'Admin' },
-    ],
+    items: ADMIN_NAV.flatMap(entry =>
+      entry.kind === 'link'
+        ? [{ to: entry.to, icon: entry.icon, label: entry.label, tip: entry.tip }]
+        : entry.items.filter(i => i.to).map(i => ({ to: i.to, icon: i.icon, label: i.label, tip: i.tip }))
+    ),
   },
 ]
 
@@ -87,40 +137,20 @@ const PREPARER_NAV_GROUPS = [
 ]
 
 /**
- * REVIEWER — first-pass validation queue.
- * Reviewer sees submissions awaiting review and the audit trail (to
- * verify history before acting). They do NOT see the approver queue
- * or close certification — those are downstream steps.
- */
-const REVIEWER_NAV_GROUPS = [
-  {
-    section: 'Review',
-    items: [
-      { to: '/work-queue',             icon: FolderOpen,    tip: 'Review Queue — submissions awaiting first-pass review', label: 'Review Queue' },
-      { to: '/balance-reconciliation', icon: Scale,         tip: 'Balance Reconciliation', label: 'Balance Recon' },
-      { to: '/aging-dashboard',        icon: Clock,         tip: 'Aging Analysis',         label: 'Aging Analysis' },
-      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',     label: 'Variance Analytics' },
-      { to: '/audit',                  icon: ClipboardList, tip: 'Audit Trail', label: 'Audit Trail' },
-    ],
-  },
-]
-
-/**
- * APPROVER — final sign-off queue.
- * Approver sees items that have already been reviewed and are waiting
- * for final approval. Distinct from reviewer — this is the second
- * independent control in the SOX two-step approval chain.
+ * APPROVER — merged reviewer & approver role.
+ * Approver can review submissions, check evidence, and approve / return / escalate.
+ * No separate reviewer or approver queues — approver sees both review and approval work.
  */
 const APPROVER_NAV_GROUPS = [
   {
     section: 'Approval',
     items: [
-      { to: '/approver-queue',         icon: CheckCircle2,   tip: 'Approver Queue — reviewed items awaiting final sign-off', label: 'Approver Queue' },
+      { to: '/work-queue',             icon: FolderOpen,    tip: 'Review & Approval Queue — submissions awaiting action', label: 'Work Queue' },
+      { to: '/approver-queue',         icon: CheckCircle2,   tip: 'Approver Queue — items ready for final sign-off', label: 'Approver Queue' },
       { to: '/balance-reconciliation', icon: Scale,          tip: 'Balance Reconciliation', label: 'Balance Recon' },
       { to: '/aging-dashboard',        icon: Clock,          tip: 'Aging Analysis',         label: 'Aging Analysis' },
       { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',     label: 'Variance Analytics' },
       { to: '/analytics-explorer',     icon: BarChart3,      tip: 'Analytics',    label: 'Analytics' },
-      { to: '/audit',                  icon: ClipboardList,  tip: 'Audit Trail',  label: 'Audit Trail' },
     ],
   },
 ]
@@ -144,29 +174,147 @@ const CERTIFIER_NAV_GROUPS = [
   },
 ]
 
-/**
- * AUDITOR — read-only compliance view.
- * Auditor can browse the audit trail, finalized reconciliations,
- * reconciliation profiles, and analytics. No write operations.
- */
-const AUDITOR_NAV_GROUPS = [
-  {
-    section: 'Audit & Compliance',
-    items: [
-      { to: '/aging-dashboard',        icon: Clock,         tip: 'Aging Analysis',           label: 'Aging Analysis' },
-      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',       label: 'Variance Analytics' },
-      { to: '/audit',                icon: ClipboardList, tip: 'Audit Trail',              label: 'Audit Trail' },
-      { to: '/reconciliation-profiles', icon: FolderOpen, tip: 'Reconciliation Profiles',  label: 'Profiles' },
-      { to: '/analytics-explorer',   icon: BarChart3,     tip: 'Analytics',                label: 'Analytics' },
-      { to: '/risk-dashboard',       icon: ShieldAlert,   tip: 'Risk Dashboard',           label: 'Risk' },
-    ],
-  },
-]
-
 /* Flat list for collapsed (icon-only) mode */
 const flatItems = (groups) => groups.flatMap((g) => g.items)
 
 const SIDEBAR_COLLAPSED_KEY = 'drms_sidebar_collapsed'
+
+/* ─── AdminNav — new collapsible admin sidebar ─── */
+function AdminNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      ADMIN_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
+    )
+  )
+  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
+
+  const navItemStyle = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: isActive ? '#FFE600' : SB_TEXT_DIM,
+    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+    fontWeight: isActive ? 600 : 500,
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    textDecoration: 'none', position: 'relative',
+    transition: 'color 100ms, background 100ms',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+  })
+
+  const subItemStyle = (isActive) => ({
+    ...navItemStyle(isActive),
+    paddingLeft: 28,
+    height: 30,
+    fontSize: 12,
+  })
+
+  const disabledStyle = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 30, borderRadius: 6,
+    padding: '0 10px 0 28px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {ADMIN_NAV.map((entry, idx) => {
+        const showDivider = idx > 0
+
+        if (entry.kind === 'link') {
+          const Icon = entry.icon
+          return (
+            <div key={entry.to}>
+              {showDivider && <Divider />}
+              <NavLink
+                to={entry.to}
+                title={entry.tip}
+                style={({ isActive }) => navItemStyle(isActive)}
+                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )
+        }
+
+        // kind === 'group'
+        const isOpen = openGroups[entry.label]
+        return (
+          <div key={entry.label}>
+            {showDivider && <Divider />}
+            <button
+              onClick={() => toggle(entry.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', height: 32,
+                padding: '0 10px', margin: '1px 2px',
+                borderRadius: 6, border: 'none',
+                background: 'transparent',
+                color: SB_TEXT_DIM,
+                cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+              {isOpen
+                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
+                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
+            </button>
+
+            {isOpen && entry.items.map(item => {
+              const ItemIcon = item.icon
+              if (item.disabled || !item.to) {
+                return (
+                  <div key={item.label} style={disabledStyle} title={item.tip}>
+                    <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                  </div>
+                )
+              }
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.tip}
+                  style={({ isActive }) => subItemStyle(isActive)}
+                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function Layout() {
   const location  = useLocation()
@@ -200,10 +348,8 @@ export default function Layout() {
     : null
 
   const navGroups = role === 'preparer'  ? PREPARER_NAV_GROUPS
-    : role === 'reviewer'  ? REVIEWER_NAV_GROUPS
     : role === 'approver'  ? APPROVER_NAV_GROUPS
     : role === 'certifier' ? CERTIFIER_NAV_GROUPS
-    : role === 'auditor'   ? AUDITOR_NAV_GROUPS
     : ADMIN_NAV_GROUPS
 
   const navFlat = flatItems(navGroups)
@@ -246,10 +392,8 @@ export default function Layout() {
     const seq = [
       { role: 'admin',    username: 'admin',     password: 'admin123' },
       { role: 'preparer', username: 'preparer',  password: 'preparer123' },
-      { role: 'reviewer', username: 'reviewer',  password: 'reviewer123' },
       { role: 'approver', username: 'approver',  password: 'approver123' },
       { role: 'certifier', username: 'certifier', password: 'certifier123' },
-      { role: 'auditor',  username: 'auditor',   password: 'auditor123' },
     ]
     const idx    = seq.findIndex((e) => e.role === (user?.role || 'admin').toLowerCase())
     const target = seq[(idx + 1 + seq.length) % seq.length]
@@ -410,73 +554,76 @@ export default function Layout() {
               ))}
             </div>
           ) : (
-            /* ── EXPANDED: grouped with section labels ── */
+            /* ── EXPANDED nav ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {navGroups.map((group) => (
-                <div key={group.section} style={{ marginBottom: 6 }}>
-                  {/* Section label */}
-                  <p style={{
-                    fontSize: 9.5, fontWeight: 700,
-                    letterSpacing: '0.12em', textTransform: 'uppercase',
-                    color: SB_TEXT_DIM,
-                    padding: '8px 10px 3px',
-                    margin: 0,
-                  }}>
-                    {group.section}
-                  </p>
+              {role === 'admin' ? (
+                /* Admin: new collapsible-group structure */
+                <AdminNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+              ) : (
+                /* Other roles: original flat group render */
+                navGroups.map((group) => (
+                  <div key={group.section} style={{ marginBottom: 6 }}>
+                    <p style={{
+                      fontSize: 9.5, fontWeight: 700,
+                      letterSpacing: '0.12em', textTransform: 'uppercase',
+                      color: SB_TEXT_DIM,
+                      padding: '8px 10px 3px',
+                      margin: 0,
+                    }}>
+                      {group.section}
+                    </p>
 
-                  {/* Items */}
-                  {group.items.map(({ to, icon: Icon, label }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      style={({ isActive }) => ({
-                        display: 'flex', alignItems: 'center', gap: 9,
-                        height: 34,
-                        borderRadius: 6,
-                        padding: '0 10px',
-                        margin: '1px 2px',
-                        color: isActive ? '#FFE600' : SB_TEXT_DIM,
-                        background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
-                        border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
-                        fontWeight: isActive ? 600 : 500,
-                        fontSize: 12.5,
-                        fontFamily: 'Inter, sans-serif',
-                        textDecoration: 'none',
-                        position: 'relative',
-                        transition: 'color 100ms, background 100ms',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                      })}
-                      onMouseEnter={(e) => {
-                        if (!e.currentTarget.classList.contains('active-link')) {
-                          e.currentTarget.style.color   = SB_TEXT
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color   = ''
-                        e.currentTarget.style.background = ''
-                      }}
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {/* EY Yellow left accent bar */}
-                          {isActive && (
-                            <span style={{
-                              position: 'absolute', left: 0, top: 7, bottom: 7,
-                              width: 3, borderRadius: '0 2px 2px 0',
-                              background: '#FFE600',
-                            }} />
-                          )}
-                          <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </div>
-              ))}
+                    {group.items.map(({ to, icon: Icon, label }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        style={({ isActive }) => ({
+                          display: 'flex', alignItems: 'center', gap: 9,
+                          height: 34,
+                          borderRadius: 6,
+                          padding: '0 10px',
+                          margin: '1px 2px',
+                          color: isActive ? '#FFE600' : SB_TEXT_DIM,
+                          background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+                          border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+                          fontWeight: isActive ? 600 : 500,
+                          fontSize: 12.5,
+                          fontFamily: 'Inter, sans-serif',
+                          textDecoration: 'none',
+                          position: 'relative',
+                          transition: 'color 100ms, background 100ms',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                        })}
+                        onMouseEnter={(e) => {
+                          if (!e.currentTarget.classList.contains('active-link')) {
+                            e.currentTarget.style.color   = SB_TEXT
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color   = ''
+                          e.currentTarget.style.background = ''
+                        }}
+                      >
+                        {({ isActive }) => (
+                          <>
+                            {isActive && (
+                              <span style={{
+                                position: 'absolute', left: 0, top: 7, bottom: 7,
+                                width: 3, borderRadius: '0 2px 2px 0',
+                                background: '#FFE600',
+                              }} />
+                            )}
+                            <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </div>
+                ))
+              )}
             </div>
           )}
         </nav>

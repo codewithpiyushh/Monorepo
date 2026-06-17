@@ -40,14 +40,7 @@ CREATE TABLE IF NOT EXISTS supporting_items (
 """
 
 # MySQL: CREATE INDEX does not support IF NOT EXISTS — use information_schema guard
-CREATE_INDEXES_SQL = [
-    ("ix_si_balance_id",   "supporting_items", "balance_id"),
-    ("ix_si_profile_id",   "supporting_items", "profile_id"),
-    ("ix_si_exception_id", "supporting_items", "exception_id"),
-    ("ix_si_is_resolved",  "supporting_items", "is_resolved"),
-    ("ix_si_item_type",    "supporting_items", "item_type"),
-    ("ix_si_materiality",  "supporting_items", "materiality_classification"),
-]
+CREATE_INDEXES_SQL = [("ix_si_balance_id", "supporting_items", "balance_id"), ("ix_si_profile_id", "profile_id"), ("ix_si_exception_id", "exception_id"), ("ix_si_is_resolved", "is_resolved"), ("ix_si_item_type", "item_type"), ("ix_si_materiality", "materiality_classification")]
 
 
 def _create_index_if_missing(conn, index_name: str, table: str, column: str) -> None:

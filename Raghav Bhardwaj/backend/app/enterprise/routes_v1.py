@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, REVIEWER, PREPARER
+from ..rbac.roles import ADMIN, PREPARER, APPROVER
 from .schemas import ProfileCreate, ProfileUpdate, MatchRequest, ScheduleReportRequest
 from . import repository, service
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1/enterprise", tags=["enterprise-v1"])
 
 
 @router.get("/profiles")
-def list_profiles(project_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER, PREPARER]))):
+def list_profiles(project_id: int | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, APPROVER, PREPARER]))):
     return repository.list_profiles(db, project_id=project_id)
 
 

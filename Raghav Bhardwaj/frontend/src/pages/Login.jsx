@@ -8,10 +8,8 @@ import { useAuthStore } from '../store/authStore'
 const DEMO_ACCOUNTS = [
   { label: 'Admin', username: 'admin', password: 'admin123' },
   { label: 'Preparer', username: 'preparer', password: 'preparer123' },
-  { label: 'Reviewer', username: 'reviewer', password: 'reviewer123' },
   { label: 'Approver', username: 'approver', password: 'approver123' },
   { label: 'Certifier', username: 'certifier', password: 'certifier123' },
-  { label: 'Auditor', username: 'auditor', password: 'auditor123' },
 ]
 
 const BRAND_POINTS = [
@@ -28,7 +26,7 @@ const BRAND_POINTS = [
   {
     icon: SlidersHorizontal,
     title: 'Role aware',
-    text: 'Preparer, reviewer, approver, certifier, auditor, and admin views.',
+    text: 'Preparer, approver, certifier, and admin views.',
   },
 ]
 
@@ -97,7 +95,7 @@ export default function Login() {
               <span>DRMS</span>
             </div>
             <div className="login-brand-copy">
-              <p className="login-ey-label">Ernst & Young</p>
+              <p className="login-drms-label">DRMS</p>
               <h1>Data Reconciliation Management System</h1>
               <p className="login-brand-description">
                 A compact entry point for reconciliation, variance management,

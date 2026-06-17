@@ -973,33 +973,6 @@ def create_close_calendar(db: Session, payload: dict, actor_id: int | None):
     audit_service.log_action(db, "CLOSE_CALENDAR_CREATED", user_id=actor_id, entity_type="close_calendar", entity_id=row.id)
     return row
 
-
-def lock_period(db: Session, calendar_id: int, actor_id: int | None):
-    row = repository.get_close_calendar(db, calendar_id)
-    if not row:
-        raise ValueError("Calendar period not found")
-    row.is_locked = True
-    row.locked_by = actor_id
-    row.locked_at = datetime.utcnow()
-    row.status = "CLOSED"
-    db.commit()
-    db.refresh(row)
-    return row
-
-
-def unlock_period(db: Session, calendar_id: int, actor_id: int | None):
-    row = repository.get_close_calendar(db, calendar_id)
-    if not row:
-        raise ValueError("Calendar period not found")
-    row.is_locked = False
-    row.locked_by = None
-    row.locked_at = None
-    row.status = "REOPENED"
-    db.commit()
-    db.refresh(row)
-    return row
-
-
 def create_certification_workflow(db: Session, payload: dict, actor_id: int | None):
     profile = repository.get_profile(db, payload["profile_id"])
     if not profile:
@@ -1039,19 +1012,21 @@ def action_certification_workflow(
         raise ValueError("Certification workflow not found")
     current = wf.status
     normalized_action = action.upper().strip()
-    # Each role is treated as a distinct identity — no cross-role aliasing.
-    # APPROVER and REVIEWER are separate stages with separate accountabilities.
+    # Each role is treated as a distinct identity.
+    # APPROVER now handles both review and approval in the merged workflow.
     normalized_role = (actor_role or "").lower().strip()
 
     # ---------------------------------------------------------------------------
     # Transition table — (required_role, target_status, next_stage, allowed_from_statuses)
-    # REVIEW  → only reviewer can perform  (validates completeness)
-    # APPROVE → only approver can perform  (final sign-off, distinct SOX control)
+    # APPROVER handles both review and approval:
+    #   • Can review submissions and check evidence (validates completeness)
+    #   • Can approve after review (final sign-off, distinct SOX control)
+    #   • Can return for rework or escalate if issues found
     # ---------------------------------------------------------------------------
     transitions = {
-        "PREPARE":     ("preparer",  STATUS["PREPARED"],    "REVIEWER",  {STATUS["OPEN"], STATUS["REOPENED"]}),
-        "SUBMIT":      ("preparer",  STATUS["SUBMITTED"],   "REVIEWER",  {STATUS["PREPARED"]}),
-        "REVIEW":      ("reviewer",  STATUS["REVIEWED"],    "APPROVER",  {STATUS["SUBMITTED"]}),
+        "PREPARE":     ("preparer",  STATUS["PREPARED"],    "APPROVER",  {STATUS["OPEN"], STATUS["REOPENED"]}),
+        "SUBMIT":      ("preparer",  STATUS["SUBMITTED"],   "APPROVER",  {STATUS["PREPARED"]}),
+        "REVIEW":      ("approver",  STATUS["REVIEWED"],    "APPROVER",  {STATUS["SUBMITTED"]}),
         "APPROVE":     ("approver",  STATUS["APPROVED"],    "CERTIFIER", {STATUS["REVIEWED"]}),
         "CERTIFY":     ("certifier", STATUS["CERTIFIED"],   "ADMIN",     {STATUS["APPROVED"]}),
         "CLOSE":       ("admin",     STATUS["CLOSED"],      "DONE",      {STATUS["CERTIFIED"]}),
@@ -1086,8 +1061,6 @@ def action_certification_workflow(
     if normalized_role == required_role and actor_id is not None:
         if required_role == "preparer" and wf.preparer_id and actor_id != wf.preparer_id:
             raise ValueError("Only the assigned preparer can perform this action")
-        if required_role == "reviewer" and wf.reviewer_id and actor_id != wf.reviewer_id:
-            raise ValueError("Only the assigned reviewer can perform this action")
         if required_role == "approver" and wf.approver_id and actor_id != wf.approver_id:
             raise ValueError("Only the assigned approver can perform this action")
         if required_role == "certifier" and wf.certifier_id and actor_id != wf.certifier_id:

@@ -1,77 +1,107 @@
 # Project Status
 
-Last updated: 2026-06-14
+Last updated: 2026-06-16
+
+---
 
 ## What This Project Is
 
-DRMS is a reconciliation platform with:
-- FastAPI backend and SQLAlchemy models
-- React + Vite frontend
-- RBAC roles for `admin`, `preparer`, `reviewer`, `approver`, `certifier`, and `auditor`
-- Project execution, enterprise profile, balance reconciliation, supporting items, and analytics flows
+**DRMS** (Data Reconciliation Management System) is a full-stack enterprise reconciliation platform.
 
-## Current State
+- **Backend:** FastAPI + SQLAlchemy (Python 3.11), MySQL in production, SQLite for local dev
+- **Frontend:** React 18 + Vite 5 + TanStack Query + Tailwind CSS
+- **Roles:** `admin`, `preparer`, `approver`, `certifier` (4 core roles; reviewer and auditor roles merged into approver)
+- **Auth:** JWT with RBAC middleware
 
-The repo currently contains both the original project/execution flow and the newer balance-variance workflow.
+---
 
-### Implemented Areas
-- Project creation, datasets, mappings, rules, and executions
-- Enterprise profiles, lifecycle routing, and supporting items
-- Balance reconciliation workspace
-- Variance engine with:
-  - raw variance
-  - explained variance
-  - unexplained variance
-  - flux tracking
-  - narrative gating for material/critical items
-- Variance analytics dashboard in the frontend
-- Balance narrative block in the preparer UI
+## ✅ Fully Implemented
 
-### Current Repo Notes
-- The working tree has many untracked source files under `backend/app/` and `frontend/src/`.
-- That means the code exists locally, but some of it still needs to be reviewed, committed, or intentionally ignored.
-- The frontend build now passes locally.
-- Backend Python syntax check now passes locally.
+### Core Platform
+- [x] Project creation, datasets (CSV upload), field mappings, matching rules
+- [x] Execution engine — matching algorithm (exact / tolerance / fuzzy / date_diff)
+- [x] Execution promotion to Enterprise Profile
+- [x] RBAC authentication with per-role landing pages and route protection
 
-## What Is Missing
+### Enterprise Profile & Certification Lifecycle
+- [x] Enterprise profiles with full lifecycle: `OPEN → PREPARED → SUBMITTED → UNDER_REVIEW → APPROVED → CERTIFIED`
+- [x] Certification workflows with history tracking
+- [x] Multi-role assignment: preparer / approver / certifier per profile (approver now handles review + approval)
+- [x] Supporting items (attachments and evidence) management
+- [x] Comment threads on reconciliation profiles
 
-These are the main gaps I would still treat as open:
+### Balance Reconciliation
+- [x] Balance workspace (source vs target with variance display)
+- [x] Variance engine: raw / explained / unexplained variance + flux tracking
+- [x] Narrative gating — blocks submission on `MATERIAL_VARIANCE` / `CRITICAL_VARIANCE` without explanation
+- [x] Variance analytics dashboard with period-over-period flux
+- [x] Balance history and prior-period snapshots
 
-1. Test coverage
-   - No dedicated automated tests were added for the new variance service, route, and UI flow.
-   - The submission-blocking behavior should be covered with backend tests.
+### Exception Management
+- [x] Exception queue with aging buckets (0–30d / 31–60d / 61–90d / 90d+)
+- [x] Exception investigation with escalation workflow
+- [x] Aging dashboard with risk heatmap
 
-2. End-to-end QA
-   - The new variance analytics route should be clicked through in the browser.
-   - The balance narrative block should be validated on `MATERIAL_VARIANCE` and `CRITICAL_VARIANCE` records.
+### Analytics & Reporting
+- [x] Risk dashboard with risk-scored profiles
+- [x] Reconciliation analytics explorer
+- [x] Executive dashboard (KPIs, SLA status, volume trends)
+- [x] Audit log with full event trail
+- [x] Export service (Excel / CSV export)
 
-3. Migration execution
-   - The new Alembic migration file exists, but the database still needs the actual migration run in your environment.
-   - If you are using SQLite dev mode, verify the compatibility patch path too.
+### Admin & Operations
+- [x] Admin Center (user management, system settings)
+- [x] Command Center (ops overview for admin)
+- [x] Scheduler monitoring
+- [x] Close calendar / schedule management
+- [x] Rule builder UI
+- [x] Sequence management (numbered close sequences)
 
-4. Data validation
-   - Existing balances may need a refresh so `variance_severity_classification`, `explained_variance`, `flux_amount`, and snapshot rows are populated.
-   - Any demo or seed data should be checked to make sure it produces material and critical cases.
+### Demo & Seeding
+- [x] `demo_seed.py` — 10-project Enterprise Demo Matrix (seeds on startup in DEMO_MODE)
+- [x] `seed_demo_projects.py` — **5 full-flow demo projects** seeded via REST API
+  - Bank Reconciliation — US Corporate
+  - Accounts Receivable — EMEA Region
+  - Accounts Payable — Global Vendor Payments
+  - Intercompany Reconciliation — APAC Entities
+  - Payroll Reconciliation — North America
+- [x] Demo user auto-seeding on startup (all 6 roles)
 
-5. Documentation cleanup
-   - The older quickstart and guide text still contains some legacy wording.
-   - Screenshots, user walkthroughs, and API examples can still be tightened up.
+---
 
-## Where To Look First
+## ⚠️ Known Gaps / Open Items
 
-- Backend entrypoint: `backend/app/main.py`
-- Balance workflow: `backend/app/services/balance_service.py`
-- Variance engine: `backend/app/services/variance_service.py`
-- Variance routes: `backend/app/routes/variance.py`
-- Frontend route wiring: `frontend/src/App.jsx`
-- Layout navigation: `frontend/src/components/Layout.jsx`
-- Preparer narrative block: `frontend/src/components/balance/RootCauseNarrativeBlock.jsx`
-- Variance dashboard: `frontend/src/pages/VarianceAnalyticsDashboard.jsx`
+| Area | Gap | Priority |
+|------|-----|----------|
+| Tests | No automated test suite for variance service or submission gate | Medium |
+| Tests | No integration tests for execution → promote → certify flow | Medium |
+| QA | Variance analytics route needs end-to-end browser walkthrough | Medium |
+| Migration | Alembic migration file exists but may need re-run in fresh environments | Low |
+| Docs | Screenshots placeholders in PROJECT_GUIDE.md not yet captured | Low |
 
-## Recommended Next Steps
+---
 
-1. Run the new migration against your local database.
-2. Add tests for the variance submission gate and explanation endpoints.
-3. Review the untracked source files and decide which should be committed.
-4. Update any screenshots or user docs that still reference the older state.
+## 🔑 Demo Mode
 
+Set `DEMO_MODE=true` in `backend/.env` to enable auto-seeding on every restart.
+Set `DEMO_MODE=false` (default) for production — auto-purges any lingering demo records.
+
+---
+
+## 📂 Where to Look First
+
+| Goal | File |
+|------|------|
+| App startup & demo seeding | `backend/app/main.py` |
+| Balance workflow | `backend/app/services/balance_service.py` |
+| Variance engine | `backend/app/services/variance_service.py` |
+| Matching engine | `backend/app/services/matching_engine.py` |
+| Enterprise profiles (full service) | `backend/app/enterprise/service.py` |
+| Certification lifecycle | `backend/app/enterprise/lifecycle_service.py` |
+| Frontend routing | `frontend/src/App.jsx` |
+| Sidebar navigation | `frontend/src/components/Layout.jsx` |
+| Preparer UI | `frontend/src/pages/PreparerWorkbench.jsx` |
+| Approver UI (review + approval) | `frontend/src/pages/ApproverWorkbench.jsx` |
+| Balance workspace | `frontend/src/pages/BalanceReconciliationPage.jsx` |
+| Variance dashboard | `frontend/src/pages/VarianceAnalyticsDashboard.jsx` |
+| **5-project demo seeder** | `backend/scripts/seed_demo_projects.py` |

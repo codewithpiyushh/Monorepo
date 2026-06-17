@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER
 from ..scheduler.scheduler import scheduler
 from ..enterprise import service as enterprise_service
 
@@ -23,7 +23,7 @@ def health_v1(db: Session = Depends(get_db)):
 
 
 @router.get("/scheduler/jobs")
-def scheduler_jobs(current_user=Depends(role_required([ADMIN, REVIEWER]))):
+def scheduler_jobs(current_user=Depends(role_required([ADMIN, APPROVER]))):
     jobs = []
     for job in scheduler.get_jobs():
         jobs.append({
@@ -35,5 +35,5 @@ def scheduler_jobs(current_user=Depends(role_required([ADMIN, REVIEWER]))):
 
 
 @router.get("/metrics")
-def ops_metrics(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, REVIEWER]))):
+def ops_metrics(db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, APPROVER]))):
     return enterprise_service.get_job_metrics(db, 200)

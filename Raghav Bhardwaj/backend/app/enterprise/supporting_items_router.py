@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..rbac.dependencies import role_required
-from ..rbac.roles import ADMIN, APPROVER, AUDITOR, CERTIFIER, PREPARER, REVIEWER
+from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from .supporting_items_service import (
     assert_no_blocking_items,
     carry_forward_items,
@@ -30,7 +30,7 @@ from .supporting_items_service import (
 
 router = APIRouter(prefix="/api/v1/supporting-items", tags=["supporting-items"])
 
-ALL_ROLES = [ADMIN, PREPARER, REVIEWER, APPROVER, CERTIFIER, AUDITOR]
+ALL_ROLES = [ADMIN, PREPARER, APPROVER, CERTIFIER]
 WRITE_ROLES = [ADMIN, PREPARER]
 
 
