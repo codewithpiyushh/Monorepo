@@ -2,9 +2,10 @@
 // Balance Reconciliation Workspace — Oracle ARCS-style GL vs Supporting balance view.
 // Styling and layout mirrors ReconciliationProfilesPage.jsx exactly.
 
-import React, { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Scale, Plus, RefreshCw, ChevronDown, ChevronUp,
   CheckCircle, XCircle, AlertTriangle, Clock,
@@ -63,17 +64,25 @@ function StatusBadge({ status }) {
 function KpiCard({ label, value, sub, color = 'var(--text-primary)', icon: Icon }) {
   return (
     <div style={{
-      background: 'var(--surface-1)', border: '1px solid var(--border-0)',
-      borderRadius: 10, padding: '16px 20px', flex: 1, minWidth: 130,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {Icon && <Icon size={15} color="var(--text-tertiary)" />}
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      background: 'linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)', 
+      border: '1px solid rgba(255,255,255,0.06)',
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+      borderRadius: 10, padding: '8px 12px', display: 'flex', flexDirection: 'column',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+      transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.1)' }}
+    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        {Icon && <Icon size={12} color="var(--text-tertiary)" />}
+        <span style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {label}
         </span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{sub}</div>}
+      <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={value}>
+        {value}
+      </div>
+      {sub && <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
@@ -332,7 +341,7 @@ function ActionModal({ action, balance, onClose, onDone }) {
 
 // ── Balance Row ────────────────────────────────────────────────────────────────
 
-function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved }) {
+function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighlighted }) {
   const [expanded, setExpanded] = useState(false);
   const allowedActions = ROLE_ACTIONS[role?.toLowerCase()] || [];
 
@@ -347,12 +356,18 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved }) {
 
   return (
     <div style={{
-      background: 'var(--surface-1)', border: `1px solid ${isOutOfBalance ? 'rgba(239,68,68,0.3)' : 'var(--border-0)'}`,
-      borderRadius: 10, overflow: 'hidden', marginBottom: 10,
-    }}>
+      background: isHighlighted ? 'rgba(255, 230, 0, 0.08)' : 'linear-gradient(145deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.0) 100%)', 
+      border: `1px solid ${isHighlighted ? '#FFE600' : isOutOfBalance ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.05)'}`,
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+      borderRadius: 8, overflow: 'hidden', marginBottom: 8,
+      boxShadow: '0 1px 6px rgba(0,0,0,0.03)',
+      transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)' }}
+    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 6px rgba(0,0,0,0.03)' }}>
       {/* Main Header Row */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
         onClick={() => setExpanded(e => !e)}
       >
         <div style={{ flex: 2, minWidth: 0 }}>
@@ -374,11 +389,11 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved }) {
         </div>
 
         {/* ... Rest of your existing header info (GL Balance, Supporting, etc) ... */}
-        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>GL Balance</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(balance.source_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Supporting</div><div style={{ fontSize: 14, fontWeight: 600 }}>{(balance.target_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>GL Balance</div><div style={{ fontSize: 13, fontWeight: 600 }}>{(balance.source_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Supporting</div><div style={{ fontSize: 13, fontWeight: 600 }}>{(balance.target_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
         <div style={{ flex: 1, textAlign: 'right' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Variance</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: varianceColor }}>{variance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Variance</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: varianceColor }}>{variance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}><StatusBadge status={balance.status} /></div>
         <div>{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</div>
@@ -493,6 +508,8 @@ export default function BalanceReconciliationPage() {
   const { user } = useAuthStore();
   const role = user?.role || 'preparer';
   const qc = useQueryClient();
+  const context = useOutletContext();
+  const setHeaderOverride = context?.setHeaderOverride;
 
   const [showCreate, setShowCreate]   = useState(false);
   const [actionModal, setActionModal] = useState(null);   // { action, balance }
@@ -502,6 +519,20 @@ export default function BalanceReconciliationPage() {
   const [filterStatus, setFilterStatus]   = useState('');
   const [filterPeriod, setFilterPeriod]   = useState('');
   const [page, setPage]                   = useState(1);
+  const navigate = useNavigate();
+  const { balanceId } = useParams();
+
+  const singleItemQuery = useQuery({
+    queryKey: ['balance-single', balanceId],
+    queryFn: () => balancesAPI.get(balanceId),
+    enabled: !!balanceId,
+  });
+
+  useEffect(() => {
+    if (singleItemQuery.data && balanceId && !historyDrawer) {
+      setHistoryDrawer(singleItemQuery.data);
+    }
+  }, [singleItemQuery.data, balanceId]);
 
   // ── Queries ──────────────────────────────────────────────────────────────
   const dashQ = useQuery({
@@ -542,33 +573,53 @@ export default function BalanceReconciliationPage() {
 
   const canCreate = ['admin', 'preparer'].includes(role.toLowerCase());
 
+  useEffect(() => {
+    if (setHeaderOverride) {
+      setHeaderOverride(
+        <header className="bl-header">
+          <div className="flex flex-col min-w-0 flex-shrink-0">
+            <h1 className="bl-header-title" style={{ fontSize: 20 }}>Balance Reconciliation</h1>
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, fontWeight: 500 }}>GL vs Supporting balance reconciliation workspace</p>
+          </div>
+          <div className="flex-1" />
+          {canCreate && (
+            <button
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 14px', borderRadius: 8, border: 'none',
+                background: '#FFE600', color: '#1a1a2e', fontWeight: 700,
+                cursor: 'pointer', fontSize: 12, transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <Plus size={14} /> New Balance Recon
+            </button>
+          )}
+        </header>
+      );
+      return () => setHeaderOverride(null);
+    }
+  }, [setHeaderOverride, canCreate]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
-      <PageHeader
-        title="Balance Reconciliation"
-        subtitle="GL vs Supporting balance reconciliation workspace"
-        icon={<Scale size={22} />}
-        actions={canCreate ? (
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '9px 20px', borderRadius: 9, border: 'none',
-              background: '#FFE600', color: '#1a1a2e', fontWeight: 700,
-              cursor: 'pointer', fontSize: 13,
-            }}
-          >
-            <Plus size={15} /> New Balance Recon
-          </button>
-        ) : null}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ padding: '20px 28px', maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+
 
       {/* KPI Dashboard */}
       {dashQ.isLoading ? (
-        <Skeleton height={80} style={{ marginBottom: 24 }} />
+        <Skeleton height={50} style={{ marginBottom: 16 }} />
       ) : (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(8, 1fr)', 
+          gap: 10, 
+          marginBottom: 16 
+        }}>
           <KpiCard label="Total"            value={dash.total || 0}               icon={FileText} />
           <KpiCard label="Balanced"         value={dash.balanced || 0}            icon={CheckCircle} color="#22c55e" />
           <KpiCard label="Out of Balance"   value={dash.out_of_balance || 0}      icon={XCircle}    color={dash.out_of_balance > 0 ? '#ef4444' : undefined} />
@@ -577,7 +628,7 @@ export default function BalanceReconciliationPage() {
           <KpiCard label="Certified"        value={dash.certified || 0}           icon={Award}      color="#22c55e" />
           <KpiCard
             label="Total Variance"
-            value={`$${(dash.total_variance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+            value={`$${(dash.total_variance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             icon={DollarSign}
             color={dash.total_variance > 0 ? '#ef4444' : '#22c55e'}
           />
@@ -587,9 +638,9 @@ export default function BalanceReconciliationPage() {
 
       {/* Filters */}
       <div style={{
-        display: 'flex', gap: 10, alignItems: 'center', marginBottom: 18,
-        padding: '12px 16px', background: 'var(--surface-1)',
-        border: '1px solid var(--border-0)', borderRadius: 10,
+        display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12,
+        padding: '8px 12px', background: 'var(--surface-1)',
+        border: '1px solid var(--border-0)', borderRadius: 8,
       }}>
         <Filter size={14} color="var(--text-tertiary)" />
         <select
@@ -634,11 +685,12 @@ export default function BalanceReconciliationPage() {
       </div>
 
       {/* List */}
-      {listQ.isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[1, 2, 3].map(i => <Skeleton key={i} height={70} />)}
-        </div>
-      ) : items.length === 0 ? (
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }} className="slim-scroll">
+        {listQ.isLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1, 2, 3].map(i => <Skeleton key={i} height={50} />)}
+          </div>
+        ) : items.length === 0 ? (
         <EmptyState
           icon={<Scale size={40} />}
           title="No balance reconciliations found"
@@ -658,41 +710,53 @@ export default function BalanceReconciliationPage() {
                 qc.invalidateQueries({ queryKey: ['balance-list'] });
                 qc.invalidateQueries({ queryKey: ['balance-dashboard'] });
               }}
+              isHighlighted={balanceId && Number(balanceId) === balance.id}
             />
           ))}
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
+          <div style={{ 
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+            marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-0)' 
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+              Showing {Math.min((page - 1) * 20 + 1, total)} to {Math.min(page * 20, total)} of {total} records
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 style={{
-                  padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-1)',
-                  background: 'transparent', color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 12,
+                  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
+                  background: 'var(--surface-1)', color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
                 }}
               >
                 ← Prev
               </button>
-              <span style={{ padding: '6px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                {page} / {totalPages}
-              </span>
+              <div style={{ 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                minWidth: 26, padding: '0 6px', fontSize: 11, fontWeight: 600,
+                background: 'var(--surface-2)', borderRadius: 6, color: 'var(--text-primary)'
+              }}>
+                {page}
+              </div>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
+                disabled={page === totalPages || totalPages === 0}
                 style={{
-                  padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-1)',
-                  background: 'transparent', color: page === totalPages ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: page === totalPages ? 'not-allowed' : 'pointer', fontSize: 12,
+                  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
+                  background: 'var(--surface-1)', color: (page === totalPages || totalPages === 0) ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                  cursor: (page === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
                 }}
               >
                 Next →
               </button>
             </div>
-          )}
+          </div>
         </>
       )}
+      </div>
 
       {/* Modals */}
       {showCreate && (
@@ -714,9 +778,13 @@ export default function BalanceReconciliationPage() {
       {historyDrawer && (
         <HistoryDrawer
           balance={historyDrawer}
-          onClose={() => setHistoryDrawer(null)}
+          onClose={() => {
+            setHistoryDrawer(null);
+            if (balanceId) navigate('/balance-reconciliation', { replace: true });
+          }}
         />
       )}
+      </div>
     </div>
   );
 }

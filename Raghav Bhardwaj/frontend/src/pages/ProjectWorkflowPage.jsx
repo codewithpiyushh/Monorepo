@@ -201,8 +201,8 @@ export default function ProjectWorkflowPage() {
           <LoadingState label="Loading workflow..." />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-5" style={{ background: 'var(--surface-0)' }}>
-          <div className="card overflow-hidden">
+        <div className="flex-1 overflow-auto p-5 flex flex-col" style={{ background: 'var(--surface-0)' }}>
+          <div className="card overflow-hidden flex flex-col grow shrink-0 basis-auto min-h-min">
             {renderStep()}
           </div>
         </div>

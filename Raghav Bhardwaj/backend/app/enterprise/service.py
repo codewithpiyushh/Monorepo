@@ -1603,16 +1603,26 @@ def run_enterprise_validations(db: Session, batch_id: str, profile_id: int | Non
     return {"batch_id": batch_id, "checks_run": created, "failed": failed}
 
 
-def classify_exception(db: Session, exception_id: int, classification: str, comments: str | None, actor_id: int | None):
+def classify_exception(db: Session, exception_id: int, classification: str | None, root_cause: str | None, severity: str | None, comments: str | None, actor_id: int | None):
     ex = db.query(ExceptionQueueRecord).filter(ExceptionQueueRecord.id == exception_id).first()
     if not ex:
         raise ValueError("Exception not found")
-    ex.classification = classification
+    if classification is not None:
+        ex.classification = classification
+    if root_cause is not None:
+        ex.root_cause = root_cause
+    if severity is not None:
+        ex.severity = severity
     if comments:
         ex.comments = comments
+        ex.root_cause_detail = comments
     ex.updated_at = datetime.utcnow()
     db.commit()
-    audit_service.log_action(db, "EXCEPTION_CLASSIFIED", user_id=actor_id, entity_type="exception", entity_id=ex.id, metadata={"classification": classification})
+    audit_service.log_action(db, "EXCEPTION_CLASSIFIED", user_id=actor_id, entity_type="exception", entity_id=ex.id, metadata={
+        "classification": classification,
+        "root_cause": root_cause,
+        "severity": severity,
+    })
     return ex
 
 

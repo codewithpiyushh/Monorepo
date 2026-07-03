@@ -18,6 +18,7 @@ from ..models.models import (
 )
 from ..schemas.schemas import ProjectCreate, ProjectUpdate
 from ..rbac.roles import ADMIN
+from ..rbac.rls import apply_profile_rls
 
 
 def create_project(db: Session, payload: ProjectCreate, user_id: int) -> Project:
@@ -259,9 +260,21 @@ def _create_certification_workflow(db: Session, profile_id: int, calendar_id: in
     return workflow
 
 
-def get_projects(db: Session, skip: int = 0, limit: int = 100) -> List[Project]:
+def get_projects(db: Session, current_user: Optional[User] = None, skip: int = 0, limit: int = 100) -> List[Project]:
+    query = db.query(Project)
+    
+    if current_user and (current_user.role or "").lower() != "admin":
+        profile_query = db.query(ReconciliationProfile.project_id)
+        profile_query = apply_profile_rls(profile_query, current_user, profile_model=ReconciliationProfile)
+        valid_project_ids = [row[0] for row in profile_query.distinct().all() if row[0] is not None]
+        
+        if valid_project_ids:
+            query = query.filter(Project.id.in_(valid_project_ids))
+        else:
+            query = query.filter(False)
+            
     return (
-        db.query(Project)
+        query
         .order_by(Project.updated_at.desc())
         .offset(skip)
         .limit(limit)

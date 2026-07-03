@@ -408,9 +408,9 @@ def run_enterprise_validation(payload: ValidationRunRequest, db: Session = Depen
 
 
 @router.post("/exceptions/classify")
-def classify_exception(payload: ExceptionClassifyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, APPROVER]))):
+def classify_exception(payload: ExceptionClassifyRequest, db: Session = Depends(get_db), current_user=Depends(role_required([PREPARER, APPROVER, ADMIN]))):
     try:
-        return service.classify_exception(db, payload.exception_id, payload.classification, payload.comments, current_user.id)
+        return service.classify_exception(db, payload.exception_id, payload.classification, payload.root_cause, payload.severity, payload.comments, current_user.id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -693,7 +693,6 @@ def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: in
     """Drilldown data for a specific level (entity/account/recon/exception)"""
     return service.analytics_drilldown(db, level=level, key=key, limit=limit, user_id=current_user.id)
 
-"""
 from ..services.risk_scoring_engine import score_all_profiles, get_risk_dashboard
 
 @router.post("/risk/calculate")
@@ -701,10 +700,10 @@ def calculate_risk(
     db: Session = Depends(get_db),
     current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER, PREPARER])),
 ):
-    \"\"\"
+    """
     Trigger a live risk scoring run across all active profiles.
     Scores are persisted back to reconciliation_profiles.risk_score.
-    \"\"\"
+    """
     results, errors = score_all_profiles(db, active_only=True, persist=True)
     return {
         "scored":  len(results),
@@ -712,7 +711,7 @@ def calculate_risk(
         "results": results[:50],   # cap response size
         "error_details": errors,
     }
-"""
+
 
 @router.get("/risk/heatmap")
 def risk_heatmap(entity: str | None = None, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, APPROVER, PREPARER, CERTIFIER]))):
@@ -1267,7 +1266,7 @@ def risk_dashboard_real(
     re-scores live otherwise.
     """
     from ..services.risk_scoring_engine import get_risk_dashboard
-    return get_risk_dashboard(db)
+    return get_risk_dashboard(db, current_user=current_user)
 
 
 # ── Profile transactions (match groups + items) ───────────────

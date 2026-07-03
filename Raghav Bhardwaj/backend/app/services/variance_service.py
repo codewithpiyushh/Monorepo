@@ -7,8 +7,9 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..models.models import ReconciliationBalance, ReconciliationProfile, VarianceSnapshot
+from ..models.models import ReconciliationBalance, ReconciliationProfile, VarianceSnapshot, User
 from . import audit_service
+from ..rbac.rls import apply_profile_rls
 
 
 CLASS_BALANCED = "BALANCED"
@@ -321,12 +322,16 @@ def get_variance_flux_summary(
     profile_id: Optional[int] = None,
     period_key: Optional[str] = None,
     top_n: int = 10,
+    current_user: Optional[User] = None,
 ) -> dict:
-    query = db.query(ReconciliationBalance).filter(ReconciliationBalance.status != "DRAFT")
+    query = db.query(ReconciliationBalance).join(ReconciliationProfile, ReconciliationBalance.profile_id == ReconciliationProfile.id).filter(ReconciliationBalance.status != "DRAFT")
     if profile_id is not None:
         query = query.filter(ReconciliationBalance.profile_id == profile_id)
     if period_key:
         query = query.filter(ReconciliationBalance.period_key == period_key)
+        
+    if current_user:
+        query = apply_profile_rls(query, current_user, profile_model=ReconciliationProfile)
 
     balances = query.all()
     profile_ids = sorted({b.profile_id for b in balances if b.profile_id})
@@ -398,11 +403,27 @@ def get_variance_trends(
     db: Session,
     profile_id: Optional[int] = None,
     months: int = 6,
+    current_user: Optional[User] = None,
 ) -> list[dict]:
     period_keys = _period_keys(months)
     query = db.query(VarianceSnapshot).filter(VarianceSnapshot.period_key.in_(period_keys))
     if profile_id is not None:
         query = query.filter(VarianceSnapshot.profile_id == profile_id)
+        
+    if current_user:
+        # Subquery to find valid profile_ids
+        profile_query = db.query(ReconciliationProfile.id)
+        profile_query = apply_profile_rls(profile_query, current_user, profile_model=ReconciliationProfile)
+        valid_profile_ids = [row[0] for row in profile_query.all()]
+        
+        if valid_profile_ids:
+            query = query.filter(VarianceSnapshot.profile_id.in_(valid_profile_ids))
+        else:
+            return [{**{
+                "period_key": p, "raw_variance": 0.0, "explained_variance": 0.0,
+                "unexplained_variance": 0.0, "flux_amount": 0.0, "flux_percentage": 0.0,
+                "risk_score": 0.0, "classification": CLASS_BALANCED,
+            }} for p in period_keys]
 
     snapshots = query.order_by(VarianceSnapshot.period_key.asc()).all()
     rows = {

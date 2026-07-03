@@ -4,7 +4,7 @@ import { authAPI, executionsAPI, exportsAPI, mappingsAPI, workflowAPI } from '..
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import { Download, ChevronDown, ChevronRight, Trash2, Rocket, X, ChevronRight as ArrowRight } from 'lucide-react'
-import TransactionTable from './results/TransactionTable'
+import ARCSWorkbench from './results/ARCSWorkbench'
 import DetailDrawer from './results/DetailDrawer'
 import { normalizeRole } from '../utils/roles'
 
@@ -556,7 +556,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
   }, [activeExec?.started_at])
 
   return (
-    <div className="px-4 lg:px-6 py-3 space-y-3 w-full min-w-0">
+    <div className="px-4 lg:px-6 py-3 flex flex-col grow shrink-0 min-h-min w-full gap-3">
 
       {/* ── Promote success banner ── */}
       {promoteResult && (
@@ -580,7 +580,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
         />
       )}
 
-      <div className="card px-3 py-3">
+      <div className="card px-3 py-3 shrink-0">
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Entity</p><p className="text-slate-100 font-medium">{pov.entity}</p></div>
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Account</p><p className="text-slate-100 font-medium">{pov.account}</p></div>
@@ -597,7 +597,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
         </div>
       </div>
 
-      <div className="card p-3 space-y-2">
+      <div className="card p-3 flex flex-col gap-2 shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="oracle-panel-title text-sm">Role Queue and Workflow Actions</p>
           <div className="flex items-center gap-2">
@@ -656,7 +656,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
         </div>
       </div>
 
-      <div className="card p-4">
+      <div className="card p-4 shrink-0">
           <div className="sticky top-0 z-20 bg-surface-900/95 backdrop-blur pb-3 mb-3 border-b border-surface-700/50">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-lg font-semibold text-slate-100">Results</div>
@@ -685,7 +685,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
           </div>
           </div>
 
-          <div className="text-xs text-slate-500 mb-3">Run {activeExec ? `#${activeExec.id}` : '-'} {selectedReconciliation ? `> ${selectedReconciliation.entity}/${selectedReconciliation.account}` : ''} {selectedTransaction ? `> Tx #${selectedTransaction.id}` : ''}</div>
+          <div className="text-xs text-slate-500 shrink-0">Run {activeExec ? `#${activeExec.id}` : '-'} {selectedReconciliation ? `> ${selectedReconciliation.entity}/${selectedReconciliation.account}` : ''} {selectedTransaction ? `> Tx #${selectedTransaction.id}` : ''}</div>
           {executionRuns.length === 0 && (
             <div className="card p-4 mb-3">
               <p className="text-sm text-slate-300">No reconciliation runs yet.</p>
@@ -696,7 +696,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
             </div>
           )}
 
-          <div className="space-y-3 min-w-0">
+          <div className="space-y-3 min-w-0 pb-4">
             {(resultView === 'overview' || resultView === 'transactions') && (
               <div className="surface-panel p-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500 mb-2">Reconciliation Groups</p>
@@ -720,14 +720,10 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
                       </button>
                       {isOpen && isSelected && groupDrilled && (
                         <div className="p-3 border-t border-surface-700">
-                          <TransactionTable
+                          <ARCSWorkbench
                             transactions={unit.transactions || []}
                             mappedColumns={mappedColumns}
-                            filter={filter}
-                            onFilterChange={setFilter}
-                            selectedTransactionId={selectedTransaction?.id}
                             onSelectTransaction={setSelectedTransaction}
-                            showAdvancedFilters={showAdvancedFilters}
                           />
                         </div>
                       )}
@@ -756,7 +752,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
           </div>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between text-xs text-slate-400 shrink-0 mt-2">
         <span>Page {page} of {totalPages}</span>
         <div className="flex gap-2">
           <button className="btn-ghost py-1 px-2 text-xs" disabled={page <= 1 || !activeExec} onClick={() => loadResults(activeExec.id, page - 1)}>Prev</button>

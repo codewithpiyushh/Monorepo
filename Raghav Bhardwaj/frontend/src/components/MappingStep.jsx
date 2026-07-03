@@ -11,6 +11,7 @@ export default function MappingStep({ project, datasets, onNext }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [autoMapping, setAutoMapping] = useState(false)
+  const [autoMapType, setAutoMapType] = useState('exact')
 
   useEffect(() => {
     loadData()
@@ -31,6 +32,7 @@ export default function MappingStep({ project, datasets, onNext }) {
         const normalized = existing.map((mapping) => ({
           source_column: mapping.source_column,
           target_column: mapping.target_column,
+          expression: mapping.expression || '',
           is_key_field: mapping.is_key_field,
           include: true,
         }))
@@ -60,6 +62,7 @@ export default function MappingStep({ project, datasets, onNext }) {
           suggestions.map((suggestion, index) => ({
             source_column: suggestion.source_column,
             target_column: suggestion.target_column,
+            expression: '',
             is_key_field: index === 0,
             include: true,
           }))
@@ -83,6 +86,7 @@ export default function MappingStep({ project, datasets, onNext }) {
       {
         source_column: unusedSrc || srcCols[0] || '',
         target_column: unusedTgt || tgtCols[0] || '',
+        expression: '',
         is_key_field: mappings.length === 0,
         include: true,
       },
@@ -150,6 +154,7 @@ export default function MappingStep({ project, datasets, onNext }) {
         selectedMappings.map((mapping) => ({
           source_column: mapping.source_column,
           target_column: mapping.target_column,
+          expression: mapping.expression,
           is_key_field: mapping.is_key_field,
         }))
       )
@@ -200,11 +205,10 @@ export default function MappingStep({ project, datasets, onNext }) {
       </div>
 
       <div className="surface-panel overflow-hidden">
-        <div className="grid grid-cols-[1fr_1fr_90px_90px_40px] gap-3 px-3 py-2 border-b border-surface-700/70 bg-surface-800/40">
+        <div className="grid grid-cols-[1fr_1fr_90px_40px] gap-3 px-3 py-2 border-b border-surface-700/70 bg-surface-800/40">
+          <span className="text-[11px] text-slate-500 uppercase tracking-wide">Target Attribute</span>
           <span className="text-[11px] text-slate-500 uppercase tracking-wide">Source Column</span>
-          <span className="text-[11px] text-slate-500 uppercase tracking-wide">Target Column</span>
-          <span className="text-[11px] text-slate-500 uppercase tracking-wide text-center">Include</span>
-          <span className="text-[11px] text-slate-500 uppercase tracking-wide text-center">Key Field</span>
+          <span className="text-[11px] text-slate-500 uppercase tracking-wide text-center">Key</span>
           <span />
         </div>
 
@@ -223,22 +227,11 @@ export default function MappingStep({ project, datasets, onNext }) {
             <div
               key={index}
               className={clsx(
-                'interactive-table-row grid grid-cols-[1fr_1fr_90px_90px_40px] gap-3 items-center px-3 py-2.5',
+                'interactive-table-row grid grid-cols-[1fr_1fr_90px_40px] gap-3 items-center px-3 py-2.5',
                 mapping.is_key_field && mapping.include ? 'bg-brand-900/20 border-l-2 border-brand-600' : 'hover:bg-surface-700/10',
                 !mapping.include && 'opacity-55'
               )}
             >
-              <select
-                className="input text-xs py-1.5 h-9"
-                value={mapping.source_column}
-                onChange={(event) => updateMapping(index, 'source_column', event.target.value)}
-              >
-                {srcCols.map((column) => (
-                  <option key={column} value={column}>
-                    {column}
-                  </option>
-                ))}
-              </select>
               <select
                 className="input text-xs py-1.5 h-9"
                 value={mapping.target_column}
@@ -250,11 +243,17 @@ export default function MappingStep({ project, datasets, onNext }) {
                   </option>
                 ))}
               </select>
-              <div className="flex justify-center">
-                <button onClick={() => toggleInclude(index)} className={clsx('key-toggle', mapping.include && 'key-toggle-on')} title="Include in reconciliation">
-                  <span className="key-toggle-knob" />
-                </button>
-              </div>
+              <select
+                className="input text-xs py-1.5 h-9"
+                value={mapping.source_column}
+                onChange={(event) => updateMapping(index, 'source_column', event.target.value)}
+              >
+                {srcCols.map((column) => (
+                  <option key={column} value={column}>
+                    {column}
+                  </option>
+                ))}
+              </select>
               <div className="flex justify-center">
                 <input
                   type="checkbox"
@@ -276,14 +275,6 @@ export default function MappingStep({ project, datasets, onNext }) {
           )})}
         </div>
       </div>
-
-      <button
-        onClick={addMapping}
-        className="w-full btn-secondary py-3 justify-center text-sm"
-      >
-        <Plus className="w-4 h-4" />
-        Add Mapping Row
-      </button>
 
       {mappings.length > 0 && !mappings.some((mapping) => mapping.is_key_field && mapping.include) && (
         <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-900/20 border border-amber-800/50 rounded-lg px-3 py-2">

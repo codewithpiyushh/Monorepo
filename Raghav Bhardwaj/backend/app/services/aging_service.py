@@ -31,6 +31,7 @@ from ..models.models import (
     UINotification,
     User,
 )
+from ..rbac.rls import apply_profile_rls
 from ..services import audit_service
 
 # ── Bucket definitions ────────────────────────────────────────────────────────
@@ -158,12 +159,20 @@ def _enrich_exceptions(
     risk_classification: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    current_user: Optional[User] = None,
 ) -> list[dict]:
     """
     Fetch exceptions and compute age + bucket + profile context.
     Returns a list of dicts ready for aggregation.
     """
-    q = db.query(ExceptionQueueRecord)
+    q = db.query(ExceptionQueueRecord).outerjoin(
+        MatchGroup, ExceptionQueueRecord.match_group_id == MatchGroup.id
+    ).outerjoin(
+        ReconciliationProfile, MatchGroup.profile_id == ReconciliationProfile.id
+    )
+
+    if current_user:
+        q = apply_profile_rls(q, current_user, profile_model=ReconciliationProfile)
 
     if not include_resolved:
         q = q.filter(ExceptionQueueRecord.status.notin_(EXCLUDED_STATUSES))
@@ -252,6 +261,7 @@ def get_aging_summary(
     date_from: Optional[date]           = None,
     date_to: Optional[date]             = None,
     include_resolved: bool              = False,
+    current_user: Optional[User]        = None,
 ) -> dict:
     """
     Returns per-bucket KPI data:
@@ -268,6 +278,7 @@ def get_aging_summary(
         risk_classification = risk_classification,
         date_from           = date_from,
         date_to             = date_to,
+        current_user        = current_user,
     )
 
     buckets: dict[str, dict] = {b: _empty_bucket_summary(b) for b in BUCKET_ORDER}
@@ -320,6 +331,7 @@ def get_aging_details(
     page_size: int                      = 50,
     sort_by: str                        = "age_days",
     sort_desc: bool                     = True,
+    current_user: Optional[User]        = None,
 ) -> dict:
     """
     Paginated, filterable exception list with aging metadata.
@@ -334,6 +346,7 @@ def get_aging_details(
         risk_classification = risk_classification,
         date_from           = date_from,
         date_to             = date_to,
+        current_user        = current_user,
     )
 
     if bucket:
@@ -363,6 +376,7 @@ def get_aging_trend(
     db: Session,
     profile_id: Optional[int]  = None,
     months: int                 = 6,
+    current_user: Optional[User] = None,
 ) -> list[dict]:
     """
     Month-over-month trend using exception_aging_snapshots.
@@ -382,6 +396,16 @@ def get_aging_trend(
     if profile_id is not None:
         q = q.filter(ExceptionAgingSnapshot.profile_id == profile_id)
     q = q.filter(ExceptionAgingSnapshot.snapshot_period.in_(periods))
+    
+    if current_user:
+        profile_query = db.query(ReconciliationProfile.id)
+        profile_query = apply_profile_rls(profile_query, current_user, profile_model=ReconciliationProfile)
+        valid_profile_ids = [row[0] for row in profile_query.all()]
+        if valid_profile_ids:
+            q = q.filter(ExceptionAgingSnapshot.profile_id.in_(valid_profile_ids))
+        else:
+            q = q.filter(False)
+            
     snapshots = q.all()
 
     # Aggregate
@@ -397,7 +421,7 @@ def get_aging_trend(
     current_period = today.strftime("%Y-%m")
     row = trend_map.get(current_period, {})
     if all(row.get(b, 0) == 0 for b in BUCKET_ORDER):
-        live = get_aging_summary(db, profile_id=profile_id)
+        live = get_aging_summary(db, profile_id=profile_id, current_user=current_user)
         for b_data in live["buckets"]:
             row[b_data["bucket"]] = b_data["exception_count"]
         trend_map[current_period] = row

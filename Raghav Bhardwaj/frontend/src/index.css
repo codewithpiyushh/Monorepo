@@ -1273,3 +1273,76 @@
     .login-card-header h2 { font-size: 1.45rem; }
   }
 }
+
+/* ─── PREMIUM ENTERPRISE UTILITIES ───────────────────────────── */
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(46, 46, 56, 0.6) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.theme-light .glass-panel {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Premium Cards with Hover Elevate */
+.premium-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-xl);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+}
+
+.premium-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  border-color: var(--border-2);
+}
+
+.theme-light .premium-card:hover {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Buttery Micro-Animations */
+.micro-anim {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.micro-anim:active {
+  transform: scale(0.97);
+}
+
+/* Premium Button Enhancements */
+.btn-primary.premium {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(255, 230, 0, 0.15);
+}
+
+.btn-primary.premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 230, 0, 0.25);
+}
+
+.btn-primary.premium::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: skewX(-20deg);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}

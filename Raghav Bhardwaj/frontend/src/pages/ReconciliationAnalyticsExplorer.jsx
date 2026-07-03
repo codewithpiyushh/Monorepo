@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useOutletContext, useNavigate, useParams } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
-import { BarChart3, CheckCircle2, Clock, Layers, ShieldAlert, TrendingUp, Users, AlertTriangle } from 'lucide-react'
+import { BarChart3, CheckCircle2, Clock, Layers, ShieldAlert, TrendingUp, Users, AlertTriangle, ChevronDown } from 'lucide-react'
 import { projectsAPI, executionsAPI, workflowAPI } from '../api'
 import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
@@ -40,15 +41,15 @@ function KpiCard({ label, value, sub, icon: Icon, color }) {
       background: 'var(--surface-2)',
       border: '1px solid var(--border-1)',
       borderRadius: 10,
-      padding: '14px 16px',
+      padding: '8px 12px',
       display: 'flex',
       alignItems: 'center',
-      gap: 12,
+      gap: 10,
     }}>
       <div style={{
-        width: 38,
-        height: 38,
-        borderRadius: 10,
+        width: 32,
+        height: 32,
+        borderRadius: 8,
         background: `${color}18`,
         border: `1px solid ${color}33`,
         display: 'flex',
@@ -56,13 +57,135 @@ function KpiCard({ label, value, sub, icon: Icon, color }) {
         justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <Icon style={{ width: 16, height: 16, color }} />
+        <Icon style={{ width: 14, height: 14, color }} />
       </div>
       <div>
-        <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{label}</p>
-        <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>{value}</p>
-        {sub ? <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</p> : null}
+        <p style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</p>
+        <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 2 }}>{value}</p>
+        {sub ? <p style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</p> : null}
       </div>
+    </div>
+  )
+}
+
+function ProjectSelectorCard({ projects, selectedProjectId, onChange }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  const selected = projects.find(p => String(p.id) === String(selectedProjectId));
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border-1)',
+      borderRadius: 10,
+      padding: '8px 12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      position: 'relative',
+      cursor: 'pointer',
+      userSelect: 'none',
+      transition: 'background 0.2s',
+    }}
+    onClick={() => setOpen(!open)}
+    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
+    onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-2)'}
+    >
+      <div style={{
+        width: 32,
+        height: 32,
+        borderRadius: 8,
+        background: `${COLORS.blue}18`,
+        border: `1px solid ${COLORS.blue}33`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <Layers style={{ width: 14, height: 14, color: COLORS.blue }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <p style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Selected Project</p>
+        <div style={{ 
+          fontSize: 18, 
+          fontWeight: 700, 
+          color: 'var(--text-primary)',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+          overflow: 'hidden',
+          paddingRight: 20,
+        }}>
+          {selected ? selected.name : 'Select a project...'}
+        </div>
+        <p style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 1 }}>live project context</p>
+      </div>
+      <ChevronDown style={{ 
+        position: 'absolute', right: 12, top: '50%', transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`, 
+        width: 14, height: 14, color: 'var(--text-tertiary)', pointerEvents: 'none', transition: 'transform 0.2s' 
+      }} />
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: 6,
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border-1)',
+          borderRadius: 8,
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
+          zIndex: 50,
+          maxHeight: 220,
+          overflowY: 'auto',
+          padding: 4,
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+        }}>
+          {projects.map(p => {
+            const isSelected = String(p.id) === String(selectedProjectId);
+            return (
+              <div 
+                key={p.id} 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(p.id);
+                  setOpen(false);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: isSelected ? 600 : 500,
+                  color: isSelected ? COLORS.blue : 'var(--text-secondary)',
+                  background: isSelected ? `${COLORS.blue}18` : 'transparent',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => { if(!isSelected) e.currentTarget.style.background = 'var(--surface-3)' }}
+                onMouseLeave={e => { if(!isSelected) e.currentTarget.style.background = 'transparent' }}
+              >
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                {isSelected && <CheckCircle2 style={{ width: 14, height: 14, color: COLORS.blue, flexShrink: 0 }} />}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -261,7 +384,7 @@ function WorkflowStatusChart({ data }) {
   return <ReactECharts option={option} style={{ height: '100%' }} notMerge />
 }
 
-function EntityTable({ data }) {
+function EntityTable({ data, onRowClick }) {
   if (!data.length) return <EmptyState title="No entity leaderboard yet" description="" />
   return (
     <table className="data-table" style={{ borderRadius: 0 }}>
@@ -276,7 +399,11 @@ function EntityTable({ data }) {
       </thead>
       <tbody>
         {data.slice(0, 12).map((row) => (
-          <tr key={row.entity}>
+          <tr 
+            key={row.entity} 
+            onClick={() => onRowClick?.(row.entity)}
+            className={onRowClick ? "cursor-pointer hover:bg-surface-700/30 transition-colors" : ""}
+          >
             <td style={{ fontWeight: 600, fontSize: 12 }}>{row.entity}</td>
             <td style={{ fontSize: 12 }}>{row.total.toLocaleString()}</td>
             <td style={{ fontSize: 12, color: COLORS.green }}>{row.matched.toLocaleString()}</td>
@@ -307,6 +434,8 @@ function bucketIssueLoad(openIssues) {
 
 export default function ReconciliationAnalyticsExplorer() {
   const { selectedProjectId, setSelectedProjectId } = useProjectStore()
+  const navigate = useNavigate()
+  const { entity, account } = useParams()
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -324,6 +453,38 @@ export default function ReconciliationAnalyticsExplorer() {
     () => projects.find((project) => String(project.id) === String(selectedProjectId)) || null,
     [projects, selectedProjectId],
   )
+
+  const context = useOutletContext();
+  const setHeaderOverride = context?.setHeaderOverride;
+
+  useEffect(() => {
+    if (setHeaderOverride) {
+      const subtitle = selectedProject 
+        ? `Live analytics for ${selectedProject.name}` 
+        : (selectedProjectId ? 'Live analytics for the selected project' : 'Select a project to view live analytics.');
+
+      setHeaderOverride(
+        <header className="bl-header">
+          <div className="flex flex-col min-w-0 flex-shrink-0">
+            <h1 className="bl-header-title" style={{ fontSize: 20 }}>Project Analytics</h1>
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, fontWeight: 500 }}>{subtitle}</p>
+          </div>
+          <div className="flex-1" />
+          {selectedProjectId && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 7px',
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              background: 'var(--accent-subtle)', color: 'var(--accent)',
+              border: '1px solid var(--accent-border)', borderRadius: 3,
+            }}>
+              Project #{selectedProjectId}
+            </span>
+          )}
+        </header>
+      );
+      return () => setHeaderOverride(null);
+    }
+  }, [setHeaderOverride, selectedProject, selectedProjectId]);
 
   const { data: executions = [], isLoading: execLoading } = useQuery({
     queryKey: ['project-analytics-executions', selectedProjectId],
@@ -410,7 +571,6 @@ export default function ReconciliationAnalyticsExplorer() {
   }, [workflows])
 
   const kpis = [
-    { label: 'Selected Project', value: selectedProject?.name || `#${selectedProjectId || 'N/A'}`, sub: 'live project context', icon: Layers, color: COLORS.blue },
     { label: 'Executions', value: executions.length, sub: latestExecution ? `Latest ${latestExecution.status}` : 'No runs yet', icon: BarChart3, color: COLORS.cyan },
     { label: 'Match Rate', value: `${latestStats.match_rate ?? 0}%`, sub: `${toNumber(latestStats.matched)} matched rows`, icon: TrendingUp, color: COLORS.green },
     { label: 'Open Issues', value: toNumber(latestStats.unmatched) + toNumber(latestStats.partial), sub: 'from latest execution', icon: AlertTriangle, color: COLORS.red },
@@ -421,7 +581,6 @@ export default function ReconciliationAnalyticsExplorer() {
   if (!selectedProjectId) {
     return (
       <div className="h-full flex flex-col">
-        <PageHeader title="Project Analytics" subtitle="Select a project to view live analytics." />
         <div className="flex-1 overflow-auto p-5">
           <EmptyState title="No active project" description="Create or select a project to drive analytics from the uploaded data." />
         </div>
@@ -432,10 +591,6 @@ export default function ReconciliationAnalyticsExplorer() {
   if (execLoading || (Number.isFinite(numericProjectId) && latestExecution && resultsLoading)) {
     return (
       <div className="h-full flex flex-col">
-        <PageHeader
-          title="Project Analytics"
-          subtitle={selectedProject ? `Live analytics for ${selectedProject.name}` : 'Live project analytics'}
-        />
         <div className="flex-1 overflow-auto p-5">
           <LoadingState label="Loading project analytics..." />
         </div>
@@ -445,14 +600,9 @@ export default function ReconciliationAnalyticsExplorer() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader
-        title="Project Analytics"
-        subtitle={selectedProject ? `Live analytics for ${selectedProject.name}` : 'Live analytics for the selected project'}
-        badge={selectedProjectId ? `Project #${selectedProjectId}` : 'No project'}
-      />
-
       <div className="flex-1 overflow-auto p-5 slim-scroll" style={{ background: 'var(--surface-0)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+          <ProjectSelectorCard projects={projects} selectedProjectId={selectedProjectId} onChange={setSelectedProjectId} />
           {kpis.map((card) => <KpiCard key={card.label} {...card} />)}
         </div>
 
@@ -476,7 +626,7 @@ export default function ReconciliationAnalyticsExplorer() {
 
         <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden' }}>
-            <EntityTable data={entityPerformance} />
+            <EntityTable data={entityPerformance} onRowClick={(entity) => navigate(`/analytics-explorer/${entity}`)} />
           </div>
           <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16 }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Run Summary</p>

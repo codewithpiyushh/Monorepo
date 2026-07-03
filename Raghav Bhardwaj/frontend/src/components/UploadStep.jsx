@@ -48,12 +48,12 @@ function StatusChip({ ok, label }) {
 ───────────────────────────────────────────────────────────────── */
 function PreviewModal({
   dsLabel, dsType, preview, classification,
-  hiddenColumns, onToggleColumn, onSelectAll, onClearAll,
+  columnClassifications, onClassifyColumn, onMarkAll,
   onClassificationChange, onClose,
 }) {
   const rows    = preview?.rows    || []
   const columns = preview?.columns || []
-  const visibleCols = columns.filter((c) => !hiddenColumns.includes(c))
+  const visibleCols = columns.filter((c) => columnClassifications[c] !== 'SKIP')
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
@@ -112,47 +112,7 @@ function PreviewModal({
           <StatusChip ok={columns.length > 0} label={`${visibleCols.length} of ${columns.length} cols`} />
         </div>
 
-        {/* Right: classification + save */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center',
-            border: '1px solid var(--border-2)',
-            borderRadius: 'var(--r-md)',
-            overflow: 'hidden',
-          }}>
-            {CLASSIFICATION_OPTIONS.map(({ value, label }) => {
-              const active = classification === value
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onClassificationChange(value)}
-                  style={{
-                    height: 28, padding: '0 12px',
-                    fontSize: 12, fontWeight: 700,
-                    background: active ? 'var(--accent-subtle)' : 'var(--surface-2)',
-                    color: active ? 'var(--accent)' : 'var(--text-tertiary)',
-                    border: 'none',
-                    borderRight: value === 'FACT' ? '1px solid var(--border-1)' : 'none',
-                    cursor: 'pointer',
-                    transition: 'background 100ms, color 100ms',
-                  }}
-                >
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={!classification}
-            className="btn-primary"
-            style={{ opacity: classification ? 1 : 0.5, cursor: classification ? 'pointer' : 'not-allowed' }}
-          >
-            Save &amp; Close
-          </button>
-        </div>
+        {/* Right side was moved to footer */}
       </div>
 
       {/* ── Sub-toolbar: col count + select/clear ── */}
@@ -172,18 +132,26 @@ function PreviewModal({
         <div style={{ marginLeft: 8, display: 'flex', gap: 8 }}>
           <button
             type="button"
-            onClick={onSelectAll}
+            onClick={() => onMarkAll('DIM')}
             style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
-            Show All
+            All DIM
           </button>
           <span style={{ color: 'var(--text-disabled)' }}>·</span>
           <button
             type="button"
-            onClick={onClearAll}
+            onClick={() => onMarkAll('FACT')}
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--ok)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            All FACT
+          </button>
+          <span style={{ color: 'var(--text-disabled)' }}>·</span>
+          <button
+            type="button"
+            onClick={() => onMarkAll('SKIP')}
             style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
-            Hide All
+            Skip All
           </button>
         </div>
       </div>
@@ -200,89 +168,65 @@ function PreviewModal({
           <thead>
             <tr style={{ background: 'var(--surface-2)' }}>
               {columns.map((col, idx) => {
-                const hidden  = hiddenColumns.includes(col)
+                const colClass = columnClassifications[col] || 'DIM'
+                const hidden  = colClass === 'SKIP'
                 const isLast  = idx === columns.length - 1
+                
+                const headerColor = colClass === 'FACT' ? 'var(--ok)' : colClass === 'DIM' ? 'var(--accent)' : 'var(--text-tertiary)'
+                const headerBg = colClass === 'FACT' ? 'rgba(34,211,160,0.05)' : colClass === 'DIM' ? 'rgba(99,102,241,0.05)' : 'var(--surface-2)'
+
                 return (
                   <th
                     key={col}
                     style={{
                       position: 'sticky', top: 0, zIndex: 2,
-                      background: 'var(--surface-2)',
-                      borderBottom: '1px solid var(--border-1)',
+                      background: headerBg,
+                      borderBottom: `2px solid ${hidden ? 'var(--border-1)' : headerColor}`,
                       borderRight: isLast ? 'none' : '1px solid var(--border-1)',
                       padding: '0 0 0 0',
-                      minWidth: 140,
+                      minWidth: 160,
                       opacity: hidden ? 0.45 : 1,
-                      transition: 'opacity 150ms',
+                      transition: 'all 150ms',
                     }}
                   >
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      padding: '6px 12px 0',
-                    }}>
-                      {/* Column name row */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between', gap: 6,
-                        marginBottom: 4,
-                      }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', padding: '8px 12px 6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 }}>
                         <span style={{
-                          fontSize: 11, fontWeight: 700,
-                          letterSpacing: '0.07em', textTransform: 'uppercase',
-                          color: hidden ? 'var(--text-disabled)' : 'var(--text-secondary)',
+                          fontSize: 11, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase',
+                          color: hidden ? 'var(--text-disabled)' : headerColor,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {col}
                         </span>
-                        {/* Eye toggle button */}
-                        <button
-                          type="button"
-                          onClick={() => onToggleColumn(col)}
-                          title={hidden ? `Show ${col}` : `Hide ${col}`}
-                          style={{
-                            flexShrink: 0,
-                            width: 20, height: 20,
-                            borderRadius: 'var(--r-xs)',
-                            border: '1px solid var(--border-1)',
-                            background: hidden ? 'var(--surface-4)' : 'var(--surface-3)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer',
-                            color: hidden ? 'var(--text-disabled)' : 'var(--accent)',
-                            transition: 'background 100ms',
-                          }}
-                        >
-                          {hidden
-                            ? <EyeOff style={{ width: 10, height: 10 }} />
-                            : <Eye    style={{ width: 10, height: 10 }} />}
-                        </button>
                       </div>
 
-                      {/* Amber checkbox row — Blackline style */}
                       <div style={{
-                        display: 'flex', alignItems: 'center', gap: 5,
-                        paddingBottom: 6,
-                        borderTop: '1px solid var(--border-0)',
-                        paddingTop: 4,
+                        display: 'flex', alignItems: 'center',
+                        background: 'var(--surface-3)', borderRadius: 'var(--r-sm)',
+                        padding: 2, gap: 2, border: '1px solid var(--border-1)',
                       }}>
-                        <input
-                          type="checkbox"
-                          checked={!hidden}
-                          onChange={() => onToggleColumn(col)}
-                          style={{
-                            width: 13, height: 13,
-                            accentColor: 'var(--accent)',
-                            cursor: 'pointer',
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span style={{
-                          fontSize: 10,
-                          color: hidden ? 'var(--text-disabled)' : 'var(--text-tertiary)',
-                          fontWeight: 500,
-                        }}>
-                          {hidden ? 'hidden' : 'visible'}
-                        </span>
+                        {['SKIP', 'DIM', 'FACT'].map((type) => {
+                          const active = colClass === type
+                          const activeColor = type === 'FACT' ? 'var(--ok)' : type === 'DIM' ? 'var(--accent)' : 'var(--text-primary)'
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => onClassifyColumn(col, type)}
+                              style={{
+                                flex: 1, height: 20, padding: 0,
+                                background: active ? (type === 'SKIP' ? 'var(--surface-4)' : 'var(--surface-1)') : 'transparent',
+                                color: active ? activeColor : 'var(--text-tertiary)',
+                                border: active ? '1px solid var(--border-2)' : '1px solid transparent',
+                                borderRadius: 'var(--r-xs)',
+                                fontSize: 9.5, fontWeight: active ? 700 : 500,
+                                cursor: 'pointer', transition: 'all 150ms',
+                              }}
+                            >
+                              {type}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   </th>
@@ -301,7 +245,8 @@ function PreviewModal({
                 onMouseLeave={(e) => e.currentTarget.style.background = rIdx % 2 === 0 ? 'var(--surface-2)' : 'var(--surface-1)'}
               >
                 {columns.map((col, cIdx) => {
-                  const hidden = hiddenColumns.includes(col)
+                  const colClass = columnClassifications[col] || 'DIM'
+                  const hidden = colClass === 'SKIP'
                   const isLast = cIdx === columns.length - 1
                   return (
                     <td
@@ -319,7 +264,7 @@ function PreviewModal({
                         textOverflow: 'ellipsis',
                         maxWidth: 220,
                         fontFamily: hidden ? 'inherit' : (
-                          ['amount','balance','count','qty','quantity'].some((k) => col.toLowerCase().includes(k))
+                          ['amount','balance','count','qty','quantity'].some((k) => col.toLowerCase().includes(k)) || colClass === 'FACT'
                             ? 'IBM Plex Mono, monospace' : 'inherit'
                         ),
                         opacity: hidden ? 0.35 : 1,
@@ -341,6 +286,24 @@ function PreviewModal({
           </div>
         )}
       </div>
+
+      {/* ── Footer ── */}
+      <div style={{
+        height: 60, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        padding: '0 20px',
+        background: 'var(--surface-1)',
+        borderTop: '1px solid var(--border-1)',
+      }}>
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-primary"
+          style={{ cursor: 'pointer', minWidth: 120 }}
+        >
+          Save &amp; Close
+        </button>
+      </div>
     </div>
   )
 }
@@ -355,16 +318,36 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
   const [connection,     setConnection]     = useState(INIT_CONNECTION)
   const [uploading,      setUploading]      = useState(false)
   const [showPreview,    setShowPreview]    = useState(false)
-  const [classification, setClassification] = useState('')
-  const [hiddenColumns,  setHiddenColumns]  = useState([])  // columns to HIDE
+  const [columnClassifications, setColumnClassifications] = useState({}) // { col: 'FACT' | 'DIM' | 'SKIP' }
 
   useEffect(() => { setDataset(existingDataset || null) }, [existingDataset])
 
   useEffect(() => {
-    if (!dataset) { setPreview(null); setHiddenColumns([]); return }
+    if (!dataset) { setPreview(null); setColumnClassifications({}); return }
     let cancelled = false
     datasetsAPI.preview(projectId, dataset.id, 50)
-      .then((pv) => { if (!cancelled) { setPreview(pv); setHiddenColumns([]) } })
+      .then((pv) => { 
+        if (!cancelled) { 
+          setPreview(pv);
+          // Smart Auto-Detection
+          const cls = {}
+          const firstRow = pv.rows?.[0] || {}
+          pv.columns?.forEach(col => {
+            const val = firstRow[col]
+            if (typeof val === 'number' || (typeof val === 'string' && !isNaN(parseFloat(val)) && val.trim() !== '')) {
+              const lower = col.toLowerCase()
+              if (lower.includes('id') || lower.includes('code') || lower.includes('num')) {
+                cls[col] = 'DIM'
+              } else {
+                cls[col] = 'FACT'
+              }
+            } else {
+              cls[col] = 'DIM'
+            }
+          })
+          setColumnClassifications(cls)
+        } 
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [dataset, projectId])
@@ -376,16 +359,6 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
 
   useEffect(() => { onReadyChange(type, ready) }, [onReadyChange, ready, type])
 
-  /* toggle single column */
-  const toggleColumn = (col) => {
-    setHiddenColumns((prev) =>
-      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
-    )
-  }
-
-  const selectAll = () => setHiddenColumns([])
-  const clearAll  = () => setHiddenColumns([...columns])
-
   const onDrop = useCallback(async (files) => {
     const file = files[0]
     if (!file) return
@@ -395,7 +368,7 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
       const pv = await datasetsAPI.preview(projectId, ds.id, 50)
       setDataset(ds)
       setPreview(pv)
-      setHiddenColumns([])
+      setColumnClassifications({})
       toast.success(`${label} uploaded — ${ds.row_count} rows`)
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Upload failed')
@@ -414,10 +387,13 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
     disabled: uploading || sourceType !== 'file',
   })
 
+  const factCount = Object.values(columnClassifications).filter(c => c === 'FACT').length
+  const dimCount = Object.values(columnClassifications).filter(c => c === 'DIM').length
+
   const chips = [
     { label: dataset ? `${dataset.row_count?.toLocaleString()} rows` : 'No file',       ok: !!dataset },
     { label: preview  ? `${columns.length} cols` : 'Preview pending',                   ok: !!preview  },
-    { label: classification || 'Classify',                                               ok: !!classification },
+    { label: ready ? `${factCount} facts · ${dimCount} dims` : 'Schema pending',        ok: ready && (factCount > 0 || dimCount > 0) },
     { label: ready ? 'Ready' : 'Pending',                                                ok: ready  },
   ]
 
@@ -635,12 +611,13 @@ function DatasetCard({ label, type, projectId, existingDataset, onUploaded, onRe
           dsLabel={label}
           dsType={type}
           preview={preview}
-          classification={classification}
-          hiddenColumns={hiddenColumns}
-          onToggleColumn={toggleColumn}
-          onSelectAll={selectAll}
-          onClearAll={clearAll}
-          onClassificationChange={setClassification}
+          columnClassifications={columnClassifications}
+          onClassifyColumn={(col, cType) => setColumnClassifications(prev => ({ ...prev, [col]: cType }))}
+          onMarkAll={(cType) => {
+            const cls = {}
+            columns.forEach(c => cls[c] = cType)
+            setColumnClassifications(cls)
+          }}
           onClose={() => setShowPreview(false)}
         />
       )}

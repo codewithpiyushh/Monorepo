@@ -1,6 +1,7 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
+import { useNotificationStore } from './store/notificationStore'
 import { normalizeRole } from './utils/roles'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -20,6 +21,7 @@ const ProjectWorkflowPage           = lazy(() => import('./pages/ProjectWorkflow
 const PreparerWorkbench             = lazy(() => import('./pages/PreparerWorkbench'))
 const ReviewerWorkbench             = lazy(() => import('./pages/ReviewerWorkbench'))
 const ApproverWorkbench             = lazy(() => import('./pages/ApproverWorkbench'))
+const ApproverDashboard             = lazy(() => import('./pages/ApproverDashboard'))
 const Schedules                     = lazy(() => import('./pages/Schedules'))
 const WorkflowPage                  = lazy(() => import('./pages/Workflow'))
 const RuleBuilder                   = lazy(() => import('./pages/RuleBuilder'))
@@ -36,6 +38,20 @@ const TransactionMatchingWorkspace  = lazy(() => import('./pages/TransactionMatc
 const BalanceReconciliationPage     = lazy(() => import('./pages/BalanceReconciliationPage'))
 const AgingDashboard                = lazy(() => import('./pages/AgingDashboard'))
 const VarianceAnalyticsDashboard     = lazy(() => import('./pages/VarianceAnalyticsDashboard'))
+const FinancialCloseCalendarPage     = lazy(() => import('./pages/FinancialCloseCalendarPage'))
+const SLAMonitorDashboard            = lazy(() => import('./pages/SLAMonitorDashboard'))
+const EscalationWorkbench            = lazy(() => import('./pages/EscalationWorkbench'))
+const FXManagementPage               = lazy(() => import('./pages/FXManagementPage'))
+const BulkOperationsCenter = lazy(() => import('./pages/BulkOperationsCenter'))
+const ApprovalChainsPage = lazy(() => import('./pages/ApprovalChainsPage'))
+const RiskConfigurationPage = lazy(() => import('./pages/RiskConfigurationPage'))
+const CompliancePolicyPage = lazy(() => import('./pages/CompliancePolicyPage'))
+const EvidenceRetentionPage = lazy(() => import('./pages/EvidenceRetentionPage'))
+const PreparerCloseManagement = lazy(() => import('./pages/PreparerCloseManagement'))
+const ApproverCloseSignoffs = lazy(() => import('./pages/ApproverCloseSignoffs'))
+const CloseReadinessPage = lazy(() => import('./pages/CloseReadinessPage'))
+const DataIngestionCenter            = lazy(() => import('./pages/DataIngestionCenter'))
+const AutoCertSettings               = lazy(() => import('./pages/AutoCertSettings'))
 
 function PrivateRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -54,17 +70,31 @@ function DefaultPageRedirect() {
   // Preparer → their reconciliation worklist
   if (role === 'preparer')  return <Navigate to="/my-reconciliations" replace />
 
-  // Approver → work queue (merged review + approval, started from /work-queue)
-  if (role === 'approver')  return <Navigate to="/work-queue" replace />
+  // Approver → their dedicated approval dashboard
+  if (role === 'approver')  return <Navigate to="/approver-dashboard" replace />
 
-  // Certifier → the close certification page (their primary job)
-  if (role === 'certifier') return <Navigate to="/close-certification" replace />
+  // Certifier → executive dashboard (their daily KPI landing page)
+  if (role === 'certifier') return <Navigate to="/executive-dashboard" replace />
 
   // Admin → command centre
   return <Navigate to="/command-center" replace />
 }
 
 export default function App() {
+  // ── SSE auto-connect / disconnect on login/logout ─────────────────────────
+  const token = useAuthStore(s => s.token)
+  const { connect, disconnect } = useNotificationStore()
+
+  useEffect(() => {
+    if (token) {
+      connect()
+    } else {
+      disconnect()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <BrowserRouter>
       <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center text-sm text-slate-400">Loading...</div>}>
@@ -97,6 +127,10 @@ export default function App() {
             <Route path="risk-dashboard/:entity/:account" element={<RiskDashboard />} />
             <Route path="close-certification"      element={<CloseCertificationPage />} />
             <Route path="controls-governance"      element={<ControlsGovernancePage />} />
+            {/* ── Certifier (all routes are in shared section above) ── */}
+            {/* /executive-dashboard, /risk-dashboard, /exception-workbench, */}
+            {/* /aging-dashboard, /variance-analytics, /close-calendar,      */}
+            {/* /audit, /controls-governance are all available above.        */}
             <Route path="platform-admin"           element={<PlatformAdminPage />} />
             <Route path="reconciliations"          element={<ReconciliationsHub />} />
             <Route path="enterprise-ops"           element={<EnterpriseOps />} />
@@ -104,6 +138,7 @@ export default function App() {
             <Route path="admin"                    element={<AdminCenter />} />
             <Route path="audit"                    element={<AuditLogs />} />
             <Route path="close-calendar"           element={<Schedules />} />
+            <Route path="financial-close-calendar" element={<FinancialCloseCalendarPage />} />
             <Route path="certification-workflow"   element={<WorkflowPage />} />
             <Route path="rule-builder"             element={<RuleBuilder />} />
 
@@ -118,6 +153,7 @@ export default function App() {
             <Route path="review-queue"             element={<Navigate to="/work-queue" replace />} />
 
             {/* ── Approver ── */}
+            <Route path="approver-dashboard"      element={<ApproverDashboard />} />
             <Route path="approver-queue"           element={<ApproverWorkbench />} />
 
             {/* ── Project-scoped workflow ── */}
@@ -130,18 +166,30 @@ export default function App() {
             <Route path="transaction-matching-workspace" element={<TransactionMatchingWorkspace />} />
             <Route path="transaction-matching"           element={<TransactionMatchingWorkspace />} />
 
+            {/* ── SLA Monitoring & Escalation (Phase 2 Chunk 4) ── */}
+            <Route path="sla-monitor"             element={<SLAMonitorDashboard />} />
+            <Route path="escalation-workbench"    element={<EscalationWorkbench />} />
+
+            {/* ── FX Management (Phase 3 Chunk 5) ── */}
+            <Route path="fx-management"           element={<FXManagementPage />} />
+
+            {/* ── Bulk Operations (Phase 3) ── */}
+            <Route path="bulk-operations"         element={<BulkOperationsCenter />} />
+            <Route path="approval-chains"         element={<ApprovalChainsPage />} />
+            <Route path="risk-configuration"      element={<RiskConfigurationPage />} />
+            <Route path="compliance-policy"       element={<CompliancePolicyPage />} />
+            <Route path="evidence-retention"      element={<EvidenceRetentionPage />} />
+            <Route path="preparer-close-management" element={<PreparerCloseManagement />} />
+            <Route path="approver-close-signoffs" element={<ApproverCloseSignoffs />} />
+            <Route path="close-readiness"         element={<CloseReadinessPage />} />
+            <Route path="auto-cert"               element={<AutoCertSettings />} />
+            <Route path="ingestion"               element={<DataIngestionCenter />} />
+
             {/* ── Balance Reconciliation ── */}
             <Route path="balance-reconciliation"           element={<BalanceReconciliationPage />} />
             <Route path="balance-reconciliation/:balanceId" element={<BalanceReconciliationPage />} />
             <Route path="aging-dashboard"                  element={<AgingDashboard />} />
-            <Route
-              path="variance-analytics"
-              element={
-                <ProtectedRoute requiredRoles={['admin', 'reviewer', 'approver', 'certifier', 'auditor']}>
-                  <VarianceAnalyticsDashboard />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="variance-analytics" element={<VarianceAnalyticsDashboard />} />
 
             {/* ── Legacy aliases ── */}
             <Route path="dashboard"                      element={<Navigate to="/command-center" replace />} />

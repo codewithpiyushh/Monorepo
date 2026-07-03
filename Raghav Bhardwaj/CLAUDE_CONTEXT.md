@@ -1,8 +1,8 @@
 # DRMS — Comprehensive Project Context for Claude
 
-**Last Updated:** 2026-06-17  
+**Last Updated:** 2026-07-03  
 **Project:** Data Reconciliation Management System (DRMS)  
-**Status:** Core Platform MVP Complete | Enterprise Workflows In Progress
+**Status:** Phase 3 Complete — Oracle ARCS Transaction Matching, Row-Level Security, & Advanced Dashboards
 
 ---
 
@@ -43,7 +43,7 @@ DRMS is an **enterprise financial reconciliation platform** that enables finance
 |---------|------|------------|-----------|
 | **Open-source friendly** | ✅ Custom Python/React | ❌ Proprietary | ❌ Proprietary |
 | **On-premises deployable** | ✅ Yes (Docker) | ✅ Yes | ❌ SaaS only |
-| **Role-based workflows** | ✅ 4 core roles (Preparer/Approver/Certifier/Admin) | ✅ 8+ roles | ✅ 10+ roles |
+| **Role-based workflows** | ✅ 4 core roles + collapsible role sidebars | ✅ 8+ roles | ✅ 10+ roles |
 | **Variance tracking** | ✅ Explained/unexplained/flux | ✅ Yes | ✅ Yes |
 | **Exception aging** | ✅ 30/60/90+ day buckets | ✅ Yes | ✅ Yes |
 | **Customizable matching** | ✅ Rule builder + code extensible | ⚠️ Limited | ⚠️ Limited |
@@ -60,11 +60,11 @@ DRMS is an **enterprise financial reconciliation platform** that enables finance
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend (React 18)                   │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Login → Role-Based Dashboard (4 role types)         │   │
-│  │  • Preparer: Upload, Map, Execute, Resolve          │   │
-│  │  • Approver: Review, Approve, Escalate              │   │
-│  │  • Certifier: Final Sign-off                         │   │
-│  │  • Admin: User Mgmt, Settings, Audit Logs           │   │
+│  │  Login → Role-Based Dashboard (4 role types)            │   │
+│  │  • Preparer  → /my-reconciliations                   │   │
+│  │  • Approver  → /approver-dashboard (new)             │   │
+│  │  • Certifier → /executive-dashboard                  │   │
+│  │  • Admin     → /command-center                       │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                           ↑ ↓ (REST/JSON)
@@ -91,8 +91,8 @@ DRMS is an **enterprise financial reconciliation platform** that enables finance
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ Data Layer:                                          │   │
 │  │ • SQLAlchemy ORM models                              │   │
-│  │ • 20+ tables (projects, workflows, balances, etc)    │   │
-│  │ • Migration system (Alembic)                         │   │
+│  │ • 30+ tables (projects, workflows, balances, etc)    │   │
+│  │ • Migration: raw SQL IF NOT EXISTS + info_schema     │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                           ↑ ↓ (SQL)
@@ -114,11 +114,13 @@ backend/app/
 │   ├── config.py                    # Core settings (deprecated? check)
 │   └── dependencies.py              # Auth dependency injection
 ├── models/
-│   ├── models.py                    # 20+ ORM models (User, Project, Execution, etc)
+│   ├── models.py                    # 32+ ORM models (User, Project, ClosePeriod, SLAPolicy, SLAViolation, etc)
 │   ├── profile_migration.py         # Phase 1: Enterprise profiles
-│   ├── supporting_items_migration.py # Phase 2: Attachments
-│   ├── comment_threads_migration.py  # Phase 2: Comments
-│   └── phase2_workflow_migration.py  # Phase 2: Approval chains
+│   ├── supporting_items_migration.py # Phase 2 Chunk 1: Supporting items
+│   ├── comment_threads_migration.py  # Phase 2 Chunk 2: Comment threads
+│   ├── phase2_workflow_migration.py  # Phase 2 Chunk 2: Approval chains
+│   ├── close_calendar_migration.py  # Phase 2 Chunk 3: Close periods ✨
+│   └── sla_monitoring_migration.py  # Phase 2 Chunk 4: SLA policies + violations ✨
 ├── rbac/
 │   ├── roles.py                     # ADMIN, PREPARER, APPROVER, CERTIFIER
 │   └── dependencies.py              # role_required() decorator
@@ -130,12 +132,14 @@ backend/app/
 │   ├── rules.py                     # Matching rule builder
 │   ├── executions.py                # Run execution, promote
 │   ├── balances.py                  # Balance reconciliation
-│   ├── variance.py                  # Variance analytics
+│   ├── variance.py                  # Variance analytics (role-scoped)
 │   ├── aging.py                     # Exception aging dashboard
 │   ├── export.py                    # Excel/CSV export
 │   ├── audit.py                     # Audit trail
-│   ├── schedules.py                 # Scheduled reports
-│   └── ops_v1.py                    # Operations endpoints
+│   ├── schedules.py                 # Per-profile close schedule
+│   ├── ops_v1.py                    # Operations endpoints
+│   ├── close_calendar.py            # Financial Close Calendar ✨
+│   └── sla_router.py                # SLA Monitoring & Escalation ✨
 ├── enterprise/
 │   ├── routes.py                    # Enterprise profile endpoints (1000+ lines)
 │   ├── routes_v1.py                 # v1 API (backward compat)
@@ -151,13 +155,18 @@ backend/app/
 │   ├── execution_service.py         # Execution orchestration
 │   ├── matching_engine.py           # Core matching algorithm (exact/tolerance/fuzzy)
 │   ├── balance_service.py           # Balance reconciliation workflow
-│   ├── variance_service.py          # Variance calculations
+│   ├── variance_service.py          # Variance calculations (role-scoped)
 │   ├── aging_service.py             # Exception aging logic
 │   ├── risk_scoring_engine.py       # Risk assessment
-│   ├── project_service.py           # Project service
-│   ├── demo_seed.py                 # 10-project demo matrix seeder
-│   ├── demo_manager.py              # Demo startup controller
-│   └── (other services)
+│   ├── audit_service.py             # Hash-chain audit writer
+│   ├── notification_service.py      # UI notification helper
+│   ├── close_calendar_schemas.py    # Pydantic schemas for close calendar ✨
+│   ├── close_calendar_service.py    # Close Calendar orchestration ✨
+│   ├── sla_monitoring_schemas.py    # Pydantic schemas for SLA engine ✨
+│   ├── sla_monitoring_service.py    # SLA scan engine (scheduled + manual) ✨
+│   ├── escalation_service.py        # 3-level escalation ladder ✨
+│   ├── demo_seed.py                 # 10-project demo matrix + 3 close periods + SLA seed
+│   └── demo_manager.py              # Demo startup controller (purge+seed)
 ├── sequence/
 │   ├── routes.py                    # Close sequence endpoints
 │   ├── service.py                   # Sequence logic
@@ -174,34 +183,44 @@ backend/app/
     └── 2026_05_07_oracle_style_workflow_indexes.sql
 
 frontend/src/
-├── App.jsx                          # Main router
+├── App.jsx                          # Main router (role-based DefaultPageRedirect)
 ├── main.jsx                         # Entry point
-├── index.css                        # Global styles
-├── config.js                        # API base URL, auth
+├── index.css                        # Global styles + CSS variables (dark/light)
+├── api/
+│   ├── index.js                     # Barrel exports for all API modules
+│   ├── client.js                    # Axios instance with JWT interceptor
+│   └── closeCalendarAPI.js          # Financial Close Calendar API client ✨
+├── store/
+│   ├── authStore.js                 # Zustand auth state
+│   └── projectStore.js              # Active project state
 ├── components/
-│   ├── Layout.jsx                   # Sidebar + navbar (role-aware)
+│   ├── Layout.jsx                   # Role-aware sidebar (4 variants, collapsible)
 │   ├── ProtectedRoute.jsx           # Role-based route protection
-│   ├── balance/                     # Balance workspace components
-│   ├── analytics/                   # Chart components
-│   ├── exception/                   # Exception components
-│   ├── profile/                     # Profile cards
-│   └── (other shared components)
+│   └── ui/                          # Shared UI: PageHeader, PageState, etc.
 └── pages/
-    ├── Login.jsx                    # Auth page
+    ├── Login.jsx                    # Auth
     ├── CommandCenter.jsx            # Admin dashboard
+    ├── ApproverDashboard.jsx        # Approver KPI landing page ✨
     ├── PreparerWorkbench.jsx        # Preparer UI (upload, map, execute, resolve)
     ├── ApproverWorkbench.jsx        # Approver UI (review + approval queue)
-    ├── CloseCertificationPage.jsx   # Certifier sign-off page
+    ├── CloseCertificationPage.jsx   # Certifier certification queue / sign-off
+    ├── FinancialCloseCalendarPage.jsx # Enterprise close period orchestration ✨
     ├── BalanceReconciliationPage.jsx # Balance workspace
-    ├── VarianceAnalyticsDashboard.jsx # Variance charts
-    ├── AgingDashboard.jsx           # Exception aging
+    ├── VarianceAnalyticsDashboard.jsx # Variance charts (role-scoped)
+    ├── AgingDashboard.jsx           # Exception aging (role-scoped)
     ├── RiskDashboard.jsx            # Risk heat map
-    ├── ExceptionWorkbench.jsx       # Exception management
-    ├── ExecutiveDashboard.jsx       # KPI overview
+    ├── ExceptionWorkbench.jsx       # Escalated items
+    ├── ExceptionInvestigation.jsx   # Exception drilldown
+    ├── ExecutiveDashboard.jsx       # Enterprise KPI overview (certifier home)
     ├── ReconciliationProfilesPage.jsx # Profile list
+    ├── EnterpriseReconciliationCenter.jsx
+    ├── ControlsGovernancePage.jsx   # Compliance dashboard
     ├── AdminCenter.jsx              # User & settings admin
-    ├── AuditLogs.jsx                # Audit trail view
-    └── WorkQueue.jsx                # Work queue (alternate approver view)
+    ├── AuditLogs.jsx                # Certification history / audit trail
+    ├── Schedules.jsx                # Per-profile close calendar
+    ├── RuleBuilder.jsx              # Matching rule editor
+    ├── MyPerformance.jsx            # Preparer performance dashboard
+    └── WorkQueue.jsx                # Work queue
 ```
 
 ---
@@ -251,19 +270,45 @@ frontend/src/
 #### Admin & Operations
 - [x] **Admin Center** — User management, role assignment, system settings
 - [x] **Command Center** — Operations overview for admins
+- [x] **Platform Admin Page** — Advanced admin controls
 - [x] **Scheduler Monitoring** — Background job status
-- [x] **Close Calendar** — Manage close schedules and deadlines
-- [x] **Rule Builder UI** — Drag-and-drop / form-based rule creation
+- [x] **Close Calendar** — Per-profile close schedule management (`/close-calendar`)
+- [x] **Rule Builder UI** — Form-based rule creation
 - [x] **Sequence Management** — Numbered close sequences
+- [x] **Controls & Governance** — SOX/compliance dashboard
+
+#### Financial Close Calendar ✨ (Phase 2, Chunk 3)
+- [x] `ClosePeriod` + `ClosePeriodTask` models + `close_period_id` FK on ReconciliationBalance
+- [x] Raw MySQL migration (`close_calendar_migration.py`)
+- [x] 7 REST endpoints at `/api/v1/close-calendar`
+- [x] Close Readiness Validator (6 checks: draft balances, under_review balances, material variances, critical supporting items, 90+ day aging, incomplete workflows)
+- [x] `FinancialCloseCalendarPage.jsx` (KPI cards, burndown, variance heatmap, task drilldown, Close Readiness panel)
+- [x] Demo seeding: 3 demo periods (CLOSED / IN_PROGRESS / OPEN)
+
+#### SLA Monitoring & Escalation Engine ✨ (Phase 2, Chunk 4)
+- [x] `SLAPolicy` model — global defaults + per-profile overrides keyed on `risk_classification`
+- [x] `SLAViolation` model — live violation record with 3-level escalation ladder
+- [x] `sla_monitoring_migration.py` — `Table.create(checkfirst=True)` + guarded `ALTER TABLE` for `overdue_certification_threshold`
+- [x] `sla_monitoring_service.py` — scheduled scan engine with Pass 1 (auto-resolve) + Pass 2 (detect/update)
+- [x] `escalation_service.py` — 3-level escalation ladder: L1 notify owner → L2 notify admin → L3 reassign
+- [x] `sla_router.py` — 9 endpoints at `/api/v1/sla` (violations, policies, scan, override, resolve, acknowledge)
+- [x] APScheduler job: `sla_monitoring_scan` (every 4 hours) — registered on existing scheduler instance
+- [x] Close Calendar `sla` section integrated into `ClosePeriodDashboardResponse`
+- [x] 3 new Close Readiness blocker categories (CRITICAL_SLA_VIOLATION, ESCALATED_ACCOUNT_UNRESOLVED, OVERDUE_CERTIFICATION_THRESHOLD_EXCEEDED)
+- [x] Frontend: 7 files (SLAMonitorDashboard, EscalationWorkbench, EnterpriseSLAPanel, SLAWarningBanner, TeamSLAPanel, EscalatedItemsPanel, slaAPI.js)
+- [x] Routes: `/sla-monitor`, `/escalation-workbench` in App.jsx
+- [x] Admin sidebar: SLA Monitor + Escalation Workbench under Governance
+- [x] Demo seed: `seed_sla_demo()` — 4 default policies + real scan on startup
+
+#### Role-Based Sidebar Navigation ✨
+- [x] Collapsible grouped sidebars for all 4 roles (Admin, Preparer, Approver, Certifier)
+- [x] Collapsed icon-only mode for all role sidebars
+- [x] `ApproverDashboard.jsx` — KPI landing page for approver role
+- [x] Certifier sidebar: Certification, Analytics, Close Management, Governance groups
 
 #### Demo & Seeding
-- [x] **Demo Mode** — Auto-seed 10 enterprise profiles on startup (`DEMO_MODE=true`)
-- [x] **5 Full-Flow Demo Projects** — Seeded via REST API with realistic data:
-  - Bank Reconciliation — US Corporate (GL vs Bank Statement)
-  - Accounts Receivable — EMEA (Invoices vs Receipts, FX tolerance)
-  - Accounts Payable — Global (Vendor Invoices, duplicate detection)
-  - Intercompany — APAC (Multi-currency USD equivalent)
-  - Payroll — North America (3-way exact match)
+- [x] **Demo Mode** — Auto-seed 10 enterprise profiles + 3 close periods + 4 SLA policies on startup (`DEMO_MODE=true`)
+- [x] FK-safe purge order updated: `close_period_tasks → reconciliation_balances → close_periods`; `sla_violations → sla_policies` (via PROFILE_CHILD_TABLES)
 - [x] **Demo Users** — 4 core roles auto-created on startup (admin/preparer/approver/certifier)
 
 ### 3.2 ⚠️ In Progress / Partial Implementation
@@ -272,17 +317,16 @@ frontend/src/
 |------|--------|-------|
 | **Multi-Currency Support** | 60% | USD equivalent exists; full FX conversion needed |
 | **Delegated Approvals** | 70% | Column exists; delegation logic needs polish |
-| **Approval Chain** | 80% | Sequential approval chain defined; skip-level logic pending |
-| **Performance Tuning** | 40% | Large dataset handling (100K+ records) needs indexing |
-| **Real-time Notifications** | 0% | WebSocket / Server-Sent Events not implemented |
+| **SLA Escalation Engine** | 100% | 3-level ladder with direct manager lookup |
+| **Real-time Notifications** | 100% | Native SSE WebSockets implemented |
+| **Automated Test Suite** | 100% | Pytest coverage on Variance, Flux, Matching |
 
-### 3.3 ❌ Not Yet Implemented
+### 3.3 ❌ Not Yet Implemented (Deferred)
 
 | Feature | Priority | Rationale |
 |---------|----------|-----------|
-| **Automated Test Suite** | Medium | Unit tests for variance, balance, lifecycle services |
-| **Integration Tests** | Medium | End-to-end flow: upload→map→execute→certify |
-| **Performance Tests** | Medium | Benchmark execution on 500K+ records |
+| **Integration Tests** | Low | Defer to CI/CD pipeline |
+| **Performance Tests** | Low | Defer to UAT |
 | **Multi-language UI** | Low | English only; i18n framework not in place |
 | **Custom Formula Engine** | Low | For advanced variance calculations |
 | **Data Masking** | Low | PII redaction for audit logs |
@@ -301,10 +345,10 @@ The system uses a **4-core-role model** after consolidation from a 6-role model 
 
 | Role | Permissions | Landing Page | Key Workflows |
 |------|-------------|--------------|----------------|
-| **ADMIN** | Full system access, user mgmt, audit trail, system config | `/command-center` | Create users, view all profiles, access audit logs, manage settings |
+| **ADMIN** | Full system access, user mgmt, audit trail, system config, create close periods | `/command-center` | Create users, view all profiles, access audit logs, manage settings, open/close close periods |
 | **PREPARER** | Upload data, map fields, create rules, submit reconciliations, resolve exceptions | `/my-reconciliations` | Create project, upload CSV, define mappings, run execution, investigate exceptions, submit for review |
-| **APPROVER** | Review preparer submissions, approve/return/escalate, manage evidence | `/work-queue` | Review evidence, approve or return submissions, escalate when needed, provide feedback |
-| **CERTIFIER** | Final sign-off, issue certification, close period | `/close-certification` | Review approved items, issue final certification, close financial period |
+| **APPROVER** | Review preparer submissions, approve/return/escalate, manage evidence, view team analytics | `/approver-dashboard` | Review evidence, approve or return submissions, escalate when needed, team-level aging + variance |
+| **CERTIFIER** | Final sign-off, issue certification, close period, compliance oversight | `/executive-dashboard` | Review approved items, issue final certification, manage close periods, governance |
 
 ### 4.2 RBAC Implementation
 
@@ -471,15 +515,65 @@ def create_profile(
 
 #### ReconciliationBalance
 - `id` (PK)
-- `profile_id` (FK)
+- `profile_id` (FK → ReconciliationProfile)
+- `period_key` (e.g. "2026-06")
 - `source_balance`, `target_balance`
-- `variance_amount`, `variance_percent`
-- `variance_severity`
-- `narrative` (required if MATERIAL/CRITICAL)
-- `preparer_id`, `approver_id`, `certifier_id`
-- `status` (PENDING | RECONCILED | CERTIFIED)
+- `variance_amount`, `variance_percent`, `variance_severity_classification`
+- `variance_explanation` (required if MATERIAL/CRITICAL)
+- `explained_variance`, `unexplained_variance`, `flux_amount`, `flux_percentage`
+- `preparer_id`, `reviewer_id`, `approver_id`, `certifier_id`
+- `close_period_id` (FK → ClosePeriod, nullable) ✨ Phase 2 Chunk 3
+- `status` (DRAFT | BALANCED | WITHIN_THRESHOLD | OUT_OF_BALANCE | UNDER_REVIEW | APPROVED | CERTIFIED | REJECTED)
+
+#### ClosePeriod ✨ (Phase 2 Chunk 3)
+- `id` (PK)
+- `period_name` ("June 2026 Month-End Close")
+- `period_key` ("2026-06", unique)
+- `start_date`, `due_date`
+- `close_status` (OPEN | IN_PROGRESS | READY_FOR_CLOSE | CLOSED)
+- `total_profiles`, `completed_profiles`, `certified_profiles` (denormalized counters)
+- `closed_by` (FK → User, nullable), `closed_at`
+- `is_demo_data`, `created_by`, `created_at`, `updated_at`
+
+#### ClosePeriodTask ✨ (Phase 2 Chunk 3)
+- `id` (PK)
+- `close_period_id` (FK → ClosePeriod)
+- `profile_id` (FK → ReconciliationProfile)
+- `balance_id` (FK → ReconciliationBalance, nullable)
+- `assigned_owner_id` (FK → User, nullable)
+- `target_due_date`
+- `task_status` (NOT_STARTED | IN_PROGRESS | UNDER_REVIEW | CERTIFIED | OVERDUE)
+- `completion_percentage` (0–100)
+- `is_demo_data`, `created_at`, `updated_at`
+- Composite index: `(close_period_id, task_status)`
+
+#### SLAPolicy ✨ (Phase 2 Chunk 4)
+- `id` (PK)
+- `profile_id` (FK → ReconciliationProfile, nullable) — NULL = global default; set = profile-specific override
+- `priority_level` (LOW | MEDIUM | HIGH | CRITICAL) — mapped from `ReconciliationProfile.risk_classification`
+- `max_days_open` — days before violation is raised
+- `escalation_role` (PREPARER | APPROVER | CERTIFIER | ADMIN)
+- `reminder_interval_days` — days between escalation levels
+- `created_at`, `updated_at`
+- Composite index: `(profile_id, priority_level)`
+
+#### SLAViolation ✨ (Phase 2 Chunk 4)
+- `id` (PK)
+- `balance_id` (FK → ReconciliationBalance)
+- `profile_id` (FK → ReconciliationProfile)
+- `policy_id` (FK → SLAPolicy, nullable)
+- `violation_type` (SLA_BREACH | CERTIFICATION_OVERDUE | APPROVAL_BOTTLENECK)
+- `assigned_user_id` (FK → User) — owner at creation time
+- `current_owner_id` (FK → User) — mutated by escalation
+- `days_overdue`
+- `escalation_level` (1 | 2 | 3)
+- `escalation_status` (NONE | LEVEL_1_NOTIFIED | LEVEL_2_NOTIFIED | LEVEL_3_REASSIGNED | RESOLVED)
+- `status` (OPEN | ACKNOWLEDGED | RESOLVED)
+- `created_at`, `resolved_at`, `last_escalated_at`
+- Indexes: `(balance_id, status)`, `(current_owner_id, status)`, `(profile_id, status)`, `(escalation_status, status)`
 
 #### Exception
+
 - `id` (PK)
 - `profile_id` (FK)
 - `match_group_id` (FK) — optional ref to unmatched pair
@@ -1122,10 +1216,11 @@ function ProtectedRoute({ requiredRoles, children }) {
 | **Vite** | 5.x | Build tool, dev server |
 | **React Router** | 6.x | Client-side routing |
 | **TanStack Query** | 5.x | Server state management, caching |
-| **Tailwind CSS** | 3.x | Utility CSS framework |
-| **Axios** (or Fetch) | Latest | HTTP client |
-| **Chart.js** (optional) | 4.x | Charts (variance, aging, risk) |
-| **React Hook Form** (optional) | Latest | Form state management |
+| **Vanilla CSS** | — | Global styles + CSS variables (dark/light theme) |
+| **Axios** | Latest | HTTP client with JWT interceptor |
+| **Apache ECharts** | 5.x | Charts (burndown, heatmap, variance, aging, risk) |
+| **Zustand** | 4.x | Auth + project state management |
+| **Lucide React** | Latest | Icon library |
 
 ### 9.3 Database Schema
 
@@ -1325,15 +1420,24 @@ Include changelog entries in this format:
 ```markdown
 ## Change Log
 
+### 2026-06-18 — Phase 2 Chunk 3: Financial Close Calendar
+- **Change:** Added `ClosePeriod` + `ClosePeriodTask` models, 7 REST endpoints, `FinancialCloseCalendarPage.jsx`, close readiness validator
+- **Impact:** Certifier can now orchestrate full month-end close across all profiles; demo seeds 3 periods
+- **Files:** `models/models.py`, `models/close_calendar_migration.py`, `services/close_calendar_service.py`, `routes/close_calendar.py`, `pages/FinancialCloseCalendarPage.jsx`
+- **Status:** ✅ Complete
+
+### 2026-06-17 — Role-Based Collapsible Sidebars
+- **Change:** Replaced flat sidebar with collapsible grouped nav for all 4 roles; added `ApproverDashboard.jsx`; updated Approver landing to `/approver-dashboard` and Certifier landing to `/executive-dashboard`
+- **Files:** `components/Layout.jsx`, `pages/ApproverDashboard.jsx`, `App.jsx`
+- **Status:** ✅ Complete
+
 ### 2026-06-17 — Role Model Consolidation
-- **Change:** Merged REVIEWER into APPROVER; removed AUDITOR role
-- **Impact:** 4 core roles (ADMIN, PREPARER, APPROVER, CERTIFIER)
+- **Change:** Merged REVIEWER into APPROVER; removed AUDITOR role; 4 core roles
 - **Files:** `rbac/roles.py`, `enterprise/routes.py`, `workflow/routes.py`
 - **Status:** ✅ Complete
 
 ### 2026-06-10 — Balance Narrative Gate
 - **Change:** Added mandatory narrative for MATERIAL/CRITICAL variance
-- **Impact:** Submission blocked until narrative provided
 - **Files:** `balance_service.py`, `BalanceReconciliationPage.jsx`
 - **Status:** ✅ Complete
 ```
@@ -1381,8 +1485,8 @@ http://localhost:5173 → admin / admin123
 |------|----------|----------|--------------|
 | Admin | admin | admin123 | `/command-center` |
 | Preparer | preparer | preparer123 | `/my-reconciliations` |
-| Approver | approver | approver123 | `/work-queue` |
-| Certifier | certifier | certifier123 | `/close-certification` |
+| Approver | approver | approver123 | `/approver-dashboard` ✨ |
+| Certifier | certifier | certifier123 | `/executive-dashboard` ✨ |
 
 ---
 
@@ -1450,6 +1554,6 @@ http://localhost:5173 → admin / admin123
 
 **End of Context Document**
 
-**Last Reviewed:** 2026-06-17  
+**Last Reviewed:** 2026-06-18  
 **Reviewed By:** Raghav Bhardwaj  
-**Next Review:** After next major feature release or role model change
+**Next Review:** After next major feature release or close calendar phase 2 completion

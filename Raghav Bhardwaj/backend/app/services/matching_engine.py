@@ -147,6 +147,7 @@ class RecordView:
     account:     str
     period:      str
     source_system: str
+    currency:    str
 
     @staticmethod
     def from_orm(r: ReconciliationRecord) -> "RecordView":
@@ -166,6 +167,7 @@ class RecordView:
             account      = str(r.account or ""),
             period       = str(r.period or ""),
             source_system = str(r.source_system or ""),
+            currency     = str(getattr(r, "currency", "USD") or "USD"),
         )
 
 
@@ -549,6 +551,22 @@ class AdvancedMatchingEngine:
             mid = len(all_records) // 2
             source_recs = [RecordView.from_orm(r) for r in all_records[:mid]]
             target_recs = [RecordView.from_orm(r) for r in all_records[mid:]]
+
+        # ── FX Conversion Engine ────────────────────────────────
+        from ..models.models import ExchangeRate
+        fx_rates = db.query(ExchangeRate).all()
+        fx_map = {(fx.from_currency, fx.to_currency): fx.rate for fx in fx_rates}
+        
+        # Base currency is USD. Convert amounts to USD for matching.
+        for r in source_recs + target_recs:
+            curr = (r.currency or "USD").upper()
+            if curr != "USD":
+                rate = fx_map.get((curr, "USD"))
+                if not rate:
+                    rate = 1.0 / fx_map.get(("USD", curr), 1.0)
+                r.amount = round(r.amount * rate, 2)
+                r.currency = "USD"
+        # ────────────────────────────────────────────────────────
 
         consumed_src: Set[int] = set()
         consumed_tgt: Set[int] = set()

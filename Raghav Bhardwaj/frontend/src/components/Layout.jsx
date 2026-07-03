@@ -8,7 +8,8 @@ import {
   Shield, Sun, ShieldAlert, Scale, User, Search, ChevronRight, ChevronDown,
   LayoutDashboard, Settings, ChevronsLeft, ChevronsRight,
   Grid2x2, List, Plus, Clock, Repeat2, FileCheck2, Database,
-  TrendingUp, BookOpen, Lock, Archive, Sliders,
+  TrendingUp, BookOpen, Lock, Archive, Sliders, Bell, DollarSign, ArrowLeftRight, CheckCheck,
+  Network, Layers, ShieldCheck,
 } from 'lucide-react'
 import NotificationCenter from './NotificationCenter'
 import { useAuthStore } from '../store/authStore'
@@ -19,8 +20,11 @@ import { useProjectStore } from '../store/projectStore'
 
 const PAGE_META = {
   '/command-center':          { label: 'Home',                      section: 'Operations' },
-  '/exception-ops':           { label: 'Transaction Matching',      section: 'Operations' },
-  '/exception-workbench':     { label: 'Exception Workbench',       section: 'Operations' },
+  '/exception-ops':                    { label: 'Exception Ops',              section: 'Operations' },
+  '/transaction-matching-workspace':   { label: 'Transaction Matching',       section: 'Reconciliation' },
+  '/bulk-operations':                  { label: 'Bulk Operations',            section: 'Reconciliation' },
+  '/exception-workbench':              { label: 'Exception Workbench',        section: 'Operations' },
+
   '/certification-workflow':  { label: 'Certification Workflow',    section: 'Close Management' },
   '/analytics-explorer':      { label: 'Analytics',                section: 'Analytics' },
   '/variance-analytics':      { label: 'Variance Analytics',       section: 'Analytics' },
@@ -29,14 +33,22 @@ const PAGE_META = {
   '/work-queue':              { label: 'Work Queue',                section: 'My Work' },
   '/my-reconciliations':      { label: 'My Reconciliations',        section: 'My Work' },
   '/my-performance':          { label: 'My Performance',            section: 'My Work' },
-  '/audit':                   { label: 'Audit Trail',               section: 'Compliance' },
   '/enterprise-center':       { label: 'Enterprise Reconciliation', section: 'Operations' },
   '/enterprise-ops':          { label: 'Enterprise Reconciliation Ops', section: 'Operations' },
-  '/close-certification':     { label: 'Close Certification',       section: 'Close Management' },
-  '/controls-governance':     { label: 'Controls & Governance',     section: 'Compliance' },
   '/rule-builder':            { label: 'Rule Builder',              section: 'Configuration' },
   '/reconciliations':         { label: 'Reconciliations',           section: 'Operations' },
   '/executive-dashboard':     { label: 'Executive Dashboard',       section: 'Analytics' },
+  '/approver-dashboard':      { label: 'Dashboard',                 section: 'Approval' },
+  '/approver-queue':          { label: 'Pending Approvals',         section: 'Approval' },
+  '/aging-dashboard':         { label: 'Aging Analysis',            section: 'Analytics' },
+  '/close-calendar':          { label: 'Close Calendar',            section: 'Close Management' },
+  '/financial-close-calendar': { label: 'Close Calendar',            section: 'Close Management' },
+  '/controls-governance':     { label: 'Compliance Dashboard',      section: 'Governance' },
+  '/audit':                   { label: 'Certification History',     section: 'Governance' },
+  '/risk-dashboard':          { label: 'Risk Analytics',            section: 'Analytics' },
+  '/close-certification':     { label: 'Certification Queue',       section: 'Certification' },
+  '/auto-cert':               { label: 'Auto-Certification',        section: 'Certification' },
+  '/ingestion':               { label: 'Data Ingestion',            section: 'Data' },
 }
 
 /* ─── Admin sidebar — new grouped structure with collapsible sections ─── */
@@ -55,11 +67,23 @@ const ADMIN_NAV = [
     label: 'Reconciliation',
     defaultOpen: true,
     items: [
-      { to: '/exception-ops',         icon: AlertTriangle,   label: 'Matching',              tip: 'Transaction Matching' },
-      { to: '/enterprise-center',     icon: Scale,           label: 'Recon Hub',             tip: 'Reconciliation Hub' },
-      { to: '/balance-reconciliation',icon: Database,        label: 'Balance Reconciliation',tip: 'Balance Reconciliation' },
+      { to: '/transaction-matching-workspace', icon: ArrowLeftRight, label: 'Transaction Matching', tip: 'Full Matching Workspace' },
+      { to: '/bulk-operations',               icon: CheckCheck,      label: 'Bulk Operations',      tip: 'Batch approve, certify, assign, export' },
+      { to: '/enterprise-center',             icon: Scale,           label: 'Recon Hub',             tip: 'Reconciliation Hub' },
+      { to: '/balance-reconciliation',        icon: Database,        label: 'Balance Reconciliation',tip: 'Balance Reconciliation' },
     ],
   },
+
+  // ── DATA dropdown ──
+  {
+    kind: 'group',
+    label: 'Data',
+    defaultOpen: false,
+    items: [
+      { to: '/ingestion', icon: Network, label: 'API Ingestion', tip: 'Data Ingestion Hub' },
+    ],
+  },
+
   // ── ANALYTICS dropdown ──
   {
     kind: 'group',
@@ -88,8 +112,9 @@ const ADMIN_NAV = [
     items: [
       { to: '/reconciliation-profiles', icon: FolderOpen, label: 'Profiles',          tip: 'Reconciliation Profiles' },
       { to: '/rule-builder',            icon: Sliders,    label: 'Rules Engine',       tip: 'Rule Builder' },
-      { to: null,                       icon: CheckCircle2, label: 'Approval Chains',  tip: 'Approval Chains (coming soon)', disabled: true },
-      { to: null,                       icon: Shield,     label: 'Risk Configuration', tip: 'Risk Configuration (coming soon)', disabled: true },
+      { to: '/fx-management',           icon: DollarSign, label: 'FX Management',      tip: 'Multi-Currency FX Rates' },
+      { to: '/approval-chains',         icon: CheckCircle2, label: 'Approval Chains',  tip: 'Approval Chains' },
+      { to: '/risk-configuration',      icon: Shield,     label: 'Risk Configuration', tip: 'Risk Configuration' },
     ],
   },
   // ── GOVERNANCE dropdown ──
@@ -98,9 +123,11 @@ const ADMIN_NAV = [
     label: 'Governance',
     defaultOpen: false,
     items: [
-      { to: '/audit', icon: ClipboardList, label: 'Audit Trail',        tip: 'Audit Trail' },
-      { to: null,     icon: BookOpen,      label: 'Compliance',         tip: 'Compliance (coming soon)', disabled: true },
-      { to: null,     icon: Archive,       label: 'Evidence Retention', tip: 'Evidence Retention (coming soon)', disabled: true },
+      { to: '/audit',              icon: ClipboardList, label: 'Audit Trail',        tip: 'Audit Trail' },
+      { to: '/sla-monitor',        icon: AlertTriangle, label: 'SLA Monitor',        tip: 'SLA Monitoring & Escalation' },
+      { to: '/escalation-workbench', icon: Bell,        label: 'Escalation Workbench', tip: 'Escalation Management' },
+      { to: '/compliance-policy',       icon: BookOpen,      label: 'Compliance',         tip: 'Compliance' },
+      { to: '/evidence-retention',      icon: Archive,       label: 'Evidence Retention', tip: 'Evidence Retention' },
     ],
   },
   // Direct link
@@ -125,59 +152,640 @@ const ADMIN_NAV_GROUPS = [
   },
 ]
 
+/* ─── Preparer sidebar — collapsible grouped structure ─── */
+const PREPARER_NAV = [
+  // Direct link — Home / Dashboard
+  {
+    kind: 'link',
+    to: '/my-reconciliations',
+    icon: LayoutDashboard,
+    label: 'Home',
+    tip: 'Home / Dashboard',
+  },
+  // ── RECONCILIATION dropdown ──
+  {
+    kind: 'group',
+    label: 'Reconciliation',
+    emoji: '🔄',
+    defaultOpen: true,
+    items: [
+      { to: '/my-reconciliations',      icon: ClipboardList, label: 'My Reconciliations', tip: 'My Reconciliations' },
+      { to: '/balance-reconciliation',  icon: Database,      label: 'Workbench',          tip: 'Balance Reconciliation Workbench' },
+    ],
+  },
+  // ── ANALYTICS dropdown ──
+  {
+    kind: 'group',
+    label: 'Analytics',
+    emoji: '📊',
+    defaultOpen: false,
+    items: [
+      { to: '/aging-dashboard',    icon: Clock,      label: 'My Aging Analysis',    tip: 'My Aging Analysis' },
+      { to: '/variance-analytics', icon: TrendingUp, label: 'My Variance Analysis', tip: 'My Variance Analysis' },
+    ],
+  },
+  // Direct link — Performance
+  {
+    kind: 'link',
+    to: '/my-performance',
+    icon: BarChart3,
+    label: 'Performance',
+    tip: 'My Performance',
+  },
+  // Direct link — Close Management (blank placeholder)
+  {
+    kind: 'link',
+    to: '/preparer-close-management',
+    icon: CalendarCheck2,
+    label: 'Close Management',
+    tip: 'Close Management',
+  },
+]
+
+/* Flat list for collapsed (icon-only) mode — preparer */
+const PREPARER_NAV_FLAT = PREPARER_NAV.flatMap(entry =>
+  entry.kind === 'link'
+    ? (entry.to ? [{ to: entry.to, icon: entry.icon, label: entry.label, tip: entry.tip }] : [])
+    : entry.items.filter(i => i.to).map(i => ({ to: i.to, icon: i.icon, label: i.label, tip: i.tip }))
+)
+
+/* Legacy flat groups — only still used by approver/certifier */
 const PREPARER_NAV_GROUPS = [
   {
     section: 'My Work',
-    items: [
-      { to: '/balance-reconciliation', icon: Scale,        tip: 'Balance Reconciliation', label: 'Balance Recon' },
-      { to: '/my-reconciliations', icon: ClipboardList, tip: 'My Reconciliations', label: 'My Reconciliations' },
-      { to: '/my-performance',     icon: BarChart3,      tip: 'My Performance',     label: 'Performance' },
-    ],
+    items: PREPARER_NAV_FLAT,
   },
 ]
 
 /**
- * APPROVER — merged reviewer & approver role.
- * Approver can review submissions, check evidence, and approve / return / escalate.
- * No separate reviewer or approver queues — approver sees both review and approval work.
+ * APPROVER — collapsible grouped sidebar structure.
+ * Home → Approval (dropdown) → Exception Management → Analytics (dropdown) → Close Sign-offs
  */
+const APPROVER_NAV = [
+  // Direct link — Home / Dashboard
+  {
+    kind: 'link',
+    to: '/approver-dashboard',
+    icon: LayoutDashboard,
+    label: 'Home',
+    tip: 'Approver Dashboard',
+  },
+  // ── APPROVAL dropdown ──
+  {
+    kind: 'group',
+    label: 'Approval',
+    emoji: '✅',
+    defaultOpen: true,
+    items: [
+      { to: '/approver-queue',     icon: FileCheck2,    label: 'Pending Approvals', tip: 'Profiles awaiting final sign-off' },
+      { to: '/exception-workbench', icon: ShieldAlert,  label: 'Escalated Items',   tip: 'Critical-risk & manually escalated items' },
+    ],
+  },
+  // Direct link — Exception Management
+  {
+    kind: 'link',
+    to: '/exception-investigation',
+    icon: AlertTriangle,
+    label: 'Exception Management',
+    tip: 'Investigate variances and validate preparer explanations',
+  },
+  // ── ANALYTICS dropdown ──
+  {
+    kind: 'group',
+    label: 'Analytics',
+    emoji: '📊',
+    defaultOpen: false,
+    items: [
+      { to: '/aging-dashboard',    icon: Clock,       label: 'Team Aging Analysis', tip: 'Track how long tasks sit in team queues' },
+      { to: '/variance-analytics', icon: TrendingUp,  label: 'Variance Analysis',   tip: 'MoM balance comparison and flux investigation' },
+    ],
+  },
+  // Direct link — Close Sign-offs
+  {
+    kind: 'link',
+    to: '/approver-close-signoffs',
+    icon: CalendarCheck2,
+    label: 'Close Sign-offs',
+    tip: 'Period-close procedural checklist',
+  },
+]
+
+/* Flat list for collapsed (icon-only) mode — approver */
+const APPROVER_NAV_FLAT = APPROVER_NAV.flatMap(entry =>
+  entry.kind === 'link'
+    ? (entry.to ? [{ to: entry.to, icon: entry.icon, label: entry.label, tip: entry.tip }] : [])
+    : entry.items.filter(i => i.to).map(i => ({ to: i.to, icon: i.icon, label: i.label, tip: i.tip }))
+)
+
+/* Legacy flat groups — only still used by certifier */
 const APPROVER_NAV_GROUPS = [
   {
     section: 'Approval',
-    items: [
-      { to: '/work-queue',             icon: FolderOpen,    tip: 'Review & Approval Queue — submissions awaiting action', label: 'Work Queue' },
-      { to: '/approver-queue',         icon: CheckCircle2,   tip: 'Approver Queue — items ready for final sign-off', label: 'Approver Queue' },
-      { to: '/balance-reconciliation', icon: Scale,          tip: 'Balance Reconciliation', label: 'Balance Recon' },
-      { to: '/aging-dashboard',        icon: Clock,          tip: 'Aging Analysis',         label: 'Aging Analysis' },
-      { to: '/variance-analytics',     icon: BarChart3,     tip: 'Variance Analytics',     label: 'Variance Analytics' },
-      { to: '/analytics-explorer',     icon: BarChart3,      tip: 'Analytics',    label: 'Analytics' },
-    ],
+    items: APPROVER_NAV_FLAT,
   },
 ]
 
 /**
- * CERTIFIER — period close sign-off.
- * Certifier's primary job is the close certification page.
- * They also need the close calendar and a read-only view of analytics.
+ * CERTIFIER — collapsible grouped sidebar structure.
+ * Home → Certification (dropdown) → Analytics (dropdown) → Close Management (dropdown) → Governance (dropdown)
  */
-const CERTIFIER_NAV_GROUPS = [
+const CERTIFIER_NAV = [
+  // Direct link — Home / Executive Dashboard
   {
-    section: 'Close Certification',
+    kind: 'link',
+    to: '/executive-dashboard',
+    icon: LayoutDashboard,
+    label: 'Home',
+    tip: 'Executive Dashboard — daily overview',
+  },
+  // ── CERTIFICATION dropdown ──
+  {
+    kind: 'group',
+    label: 'Certification',
+    emoji: '✅',
+    defaultOpen: true,
     items: [
-      { to: '/close-certification',    icon: CalendarCheck2, tip: 'Close Certification', label: 'Close Cert' },
-      { to: '/balance-reconciliation', icon: Scale,          tip: 'Balance Reconciliation', label: 'Balance Recon' },
-      { to: '/aging-dashboard',        icon: Clock,          tip: 'Aging Analysis',         label: 'Aging Analysis' },
-      { to: '/variance-analytics',     icon: BarChart3,      tip: 'Variance Analytics',     label: 'Variance Analytics' },
-      { to: '/close-calendar',         icon: CalendarCheck2, tip: 'Close Calendar',      label: 'Calendar' },
-      { to: '/analytics-explorer',     icon: BarChart3,      tip: 'Analytics',           label: 'Analytics' },
+      { to: '/close-certification', icon: FileCheck2,  label: 'Certification Queue', tip: 'All approved balances awaiting final sign-off' },
+      { to: '/auto-cert', icon: ShieldCheck, label: 'Auto-Certification Settings', tip: 'Configure auto-certification rules' },
+      { to: '/risk-dashboard',      icon: ShieldAlert, label: 'High Risk Reviews',   tip: 'HIGH/CRITICAL risk profiles and material variances' },
+      { to: '/exception-workbench', icon: AlertTriangle, label: 'Escalated Items',  tip: 'System and manually escalated items requiring intervention' },
+    ],
+  },
+  // ── ANALYTICS dropdown ──
+  {
+    kind: 'group',
+    label: 'Analytics',
+    emoji: '📊',
+    defaultOpen: false,
+    items: [
+      { to: '/variance-analytics', icon: TrendingUp, label: 'Variance Analytics', tip: 'Top variances, MoM/QoQ flux, waterfall, root cause' },
+      { to: '/aging-dashboard',    icon: Clock,      label: 'Aging Analysis',     tip: 'Exception aging buckets by entity, project, profile' },
+      { to: '/risk-dashboard',     icon: ShieldAlert, label: 'Risk Analytics',    tip: 'Enterprise risk scoring by profile and business unit' },
+    ],
+  },
+  // ── CLOSE MANAGEMENT dropdown ──
+  {
+    kind: 'group',
+    label: 'Close Management',
+    emoji: '📅',
+    defaultOpen: false,
+    items: [
+      { to: '/financial-close-calendar', icon: CalendarCheck2, label: 'Close Calendar', tip: 'Monthly / quarterly close period schedule and readiness' },
+      { to: '/close-readiness',         icon: CheckCircle2,   label: 'Close Readiness', tip: 'Validation engine: can we close the books?' },
+      { to: '/close-certification', icon: FileCheck2,   label: 'Close Sign-offs', tip: 'Final certified records, pending and returned sign-offs' },
+    ],
+  },
+  // ── GOVERNANCE dropdown ──
+  {
+    kind: 'group',
+    label: 'Governance',
+    emoji: '🛡️',
+    defaultOpen: false,
+    items: [
+      { to: '/audit',               icon: ClipboardList, label: 'Certification History',  tip: 'Complete certification audit trail for internal / external audits' },
+      { to: '/controls-governance', icon: Shield,        label: 'Compliance Dashboard', tip: 'SOX violations, policy exceptions, SoD breaches, control failures' },
     ],
   },
 ]
 
-/* Flat list for collapsed (icon-only) mode */
+/* Flat list for collapsed (icon-only) mode — certifier */
+const CERTIFIER_NAV_FLAT = CERTIFIER_NAV.flatMap(entry =>
+  entry.kind === 'link'
+    ? (entry.to ? [{ to: entry.to, icon: entry.icon, label: entry.label, tip: entry.tip }] : [])
+    : entry.items.filter(i => i.to && !i.disabled).map(i => ({ to: i.to, icon: i.icon, label: i.label, tip: i.tip }))
+)
+
+/* Legacy flat groups — kept for potential future use */
+const CERTIFIER_NAV_GROUPS = [
+  {
+    section: 'Close Certification',
+    items: CERTIFIER_NAV_FLAT,
+  },
+]
+
+/* Flat list for collapsed (icon-only) mode — for approver/certifier flat-group fallback */
 const flatItems = (groups) => groups.flatMap((g) => g.items)
 
 const SIDEBAR_COLLAPSED_KEY = 'drms_sidebar_collapsed'
+
+/* ─── CertifierNav — collapsible certifier sidebar ─── */
+function CertifierNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      CERTIFIER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
+    )
+  )
+  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
+
+  const navItemStyle = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: isActive ? '#FFE600' : SB_TEXT_DIM,
+    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+    fontWeight: isActive ? 600 : 500,
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    textDecoration: 'none', position: 'relative',
+    transition: 'color 100ms, background 100ms',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+  })
+
+  const subItemStyle = (isActive) => ({
+    ...navItemStyle(isActive),
+    paddingLeft: 28,
+    height: 30,
+    fontSize: 12,
+  })
+
+  const disabledStyle = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 30, borderRadius: 6,
+    padding: '0 10px 0 28px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {CERTIFIER_NAV.map((entry, idx) => {
+        const showDivider = idx > 0
+
+        if (entry.kind === 'link') {
+          const Icon = entry.icon
+          return (
+            <div key={entry.to}>
+              {showDivider && <Divider />}
+              <NavLink
+                to={entry.to}
+                title={entry.tip}
+                style={({ isActive }) => navItemStyle(isActive)}
+                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )
+        }
+
+        // kind === 'group'
+        const isOpen = openGroups[entry.label]
+        return (
+          <div key={entry.label}>
+            {showDivider && <Divider />}
+            <button
+              onClick={() => toggle(entry.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', height: 32,
+                padding: '0 10px', margin: '1px 2px',
+                borderRadius: 6, border: 'none',
+                background: 'transparent',
+                color: SB_TEXT_DIM,
+                cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+              {isOpen
+                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
+                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
+            </button>
+
+            {isOpen && entry.items.map(item => {
+              const ItemIcon = item.icon
+              if (item.disabled || !item.to) {
+                return (
+                  <div key={item.label} style={disabledStyle} title={item.tip}>
+                    <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                  </div>
+                )
+              }
+              return (
+                <NavLink
+                  key={item.to + item.label}
+                  to={item.to}
+                  title={item.tip}
+                  style={({ isActive }) => subItemStyle(isActive)}
+                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── ApproverNav — collapsible approver sidebar ─── */
+function ApproverNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      APPROVER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
+    )
+  )
+  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
+
+  const navItemStyle = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: isActive ? '#FFE600' : SB_TEXT_DIM,
+    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+    fontWeight: isActive ? 600 : 500,
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    textDecoration: 'none', position: 'relative',
+    transition: 'color 100ms, background 100ms',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+  })
+
+  const subItemStyle = (isActive) => ({
+    ...navItemStyle(isActive),
+    paddingLeft: 28,
+    height: 30,
+    fontSize: 12,
+  })
+
+  const disabledStyle = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {APPROVER_NAV.map((entry, idx) => {
+        const showDivider = idx > 0
+
+        if (entry.kind === 'link') {
+          if (entry.disabled || !entry.to) {
+            const DisabledIcon = entry.icon
+            return (
+              <div key={entry.label}>
+                {showDivider && <Divider />}
+                <div style={disabledStyle} title={entry.tip}>
+                  <DisabledIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                </div>
+              </div>
+            )
+          }
+          const Icon = entry.icon
+          return (
+            <div key={entry.to}>
+              {showDivider && <Divider />}
+              <NavLink
+                to={entry.to}
+                title={entry.tip}
+                style={({ isActive }) => navItemStyle(isActive)}
+                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )
+        }
+
+        // kind === 'group'
+        const isOpen = openGroups[entry.label]
+        return (
+          <div key={entry.label}>
+            {showDivider && <Divider />}
+            <button
+              onClick={() => toggle(entry.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', height: 32,
+                padding: '0 10px', margin: '1px 2px',
+                borderRadius: 6, border: 'none',
+                background: 'transparent',
+                color: SB_TEXT_DIM,
+                cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+              {isOpen
+                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
+                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
+            </button>
+
+            {isOpen && entry.items.map(item => {
+              const ItemIcon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.tip}
+                  style={({ isActive }) => subItemStyle(isActive)}
+                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── PreparerNav — collapsible preparer sidebar ─── */
+function PreparerNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      PREPARER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
+    )
+  )
+  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
+
+  const navItemStyle = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: isActive ? '#FFE600' : SB_TEXT_DIM,
+    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+    fontWeight: isActive ? 600 : 500,
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    textDecoration: 'none', position: 'relative',
+    transition: 'color 100ms, background 100ms',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+  })
+
+  const subItemStyle = (isActive) => ({
+    ...navItemStyle(isActive),
+    paddingLeft: 28,
+    height: 30,
+    fontSize: 12,
+  })
+
+  const disabledStyle = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {PREPARER_NAV.map((entry, idx) => {
+        const showDivider = idx > 0
+
+        if (entry.kind === 'link') {
+          if (entry.disabled || !entry.to) {
+            const DisabledIcon = entry.icon
+            return (
+              <div key={entry.label}>
+                {showDivider && <Divider />}
+                <div style={disabledStyle} title={entry.tip}>
+                  <DisabledIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                </div>
+              </div>
+            )
+          }
+          const Icon = entry.icon
+          return (
+            <div key={entry.to}>
+              {showDivider && <Divider />}
+              <NavLink
+                to={entry.to}
+                title={entry.tip}
+                style={({ isActive }) => navItemStyle(isActive)}
+                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )
+        }
+
+        // kind === 'group'
+        const isOpen = openGroups[entry.label]
+        return (
+          <div key={entry.label}>
+            {showDivider && <Divider />}
+            <button
+              onClick={() => toggle(entry.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', height: 32,
+                padding: '0 10px', margin: '1px 2px',
+                borderRadius: 6, border: 'none',
+                background: 'transparent',
+                color: SB_TEXT_DIM,
+                cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+              {isOpen
+                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
+                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
+            </button>
+
+            {isOpen && entry.items.map(item => {
+              const ItemIcon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.tip}
+                  style={({ isActive }) => subItemStyle(isActive)}
+                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 /* ─── AdminNav — new collapsible admin sidebar ─── */
 function AdminNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
@@ -329,7 +937,10 @@ export default function Layout() {
     ccCounts,
   } = useProjectStore()
 
-  const isCommandCenter = location.pathname.startsWith('/command-center')
+  const isCommandCenter = location.pathname === '/command-center'
+  
+  // Header Override Logic
+  const [headerOverride, setHeaderOverride] = useState(null);
 
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
@@ -352,7 +963,10 @@ export default function Layout() {
     : role === 'certifier' ? CERTIFIER_NAV_GROUPS
     : ADMIN_NAV_GROUPS
 
-  const navFlat = flatItems(navGroups)
+  const navFlat = role === 'preparer' ? PREPARER_NAV_FLAT
+    : role === 'approver' ? APPROVER_NAV_FLAT
+    : role === 'certifier' ? CERTIFIER_NAV_FLAT
+    : flatItems(navGroups)
 
   const currentPage = useMemo(() => {
     if (location.pathname.startsWith('/projects/'))
@@ -557,8 +1171,17 @@ export default function Layout() {
             /* ── EXPANDED nav ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {role === 'admin' ? (
-                /* Admin: new collapsible-group structure */
+                /* Admin: collapsible-group structure */
                 <AdminNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+              ) : role === 'preparer' ? (
+                /* Preparer: collapsible-group structure */
+                <PreparerNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+              ) : role === 'approver' ? (
+                /* Approver: collapsible-group structure */
+                <ApproverNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+              ) : role === 'certifier' ? (
+                /* Certifier: collapsible-group structure */
+                <CertifierNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
               ) : (
                 /* Other roles: original flat group render */
                 navGroups.map((group) => (
@@ -761,6 +1384,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Top header — EY Yellow 3px top strip via .bl-header class */}
+        {headerOverride ? headerOverride : (
         <header className="bl-header">
           {/* Page title */}
           <div className="flex flex-col min-w-0 flex-shrink-0">
@@ -772,30 +1396,7 @@ export default function Layout() {
             </h1>
           </div>
 
-          {/* Project selector — hidden for roles that don't operate on projects */}
-          {!isWorkflowRoute
-            && !location.pathname.startsWith('/command-center')
-            && !location.pathname.startsWith('/my-reconciliations')
-            && role !== 'preparer'
-            && role !== 'auditor'
-            && role !== 'certifier'
-            && projects.length > 0 && (
-            <div className="hidden md:flex items-center gap-2 ml-8">
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
-                Project
-              </span>
-              <select
-                className="input h-[26px] text-[12px]"
-                style={{ minWidth: 200, maxWidth: 260 }}
-                value={selectedProjectId || ''}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={String(p.id)}>{p.name} (#{p.id})</option>
-                ))}
-              </select>
-            </div>
-          )}
+
 
           <div className="flex-1" />
 
@@ -922,10 +1523,11 @@ export default function Layout() {
             )}
           </div>
         </header>
+        )}
 
         {/* Page content */}
         <div className="flex-1 min-h-0 overflow-auto" style={{ background: 'var(--surface-0)' }}>
-          <Outlet />
+          <Outlet context={{ setHeaderOverride }} />
         </div>
       </div>
     </div>

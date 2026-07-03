@@ -381,7 +381,6 @@ export default function CommandCenter() {
     retry: false,
   })
 
-  // ── Measure available space → derive page size ────────────
   const measureTileGrid = useCallback(() => {
     const el = gridRef.current
     if (!el) return
@@ -389,10 +388,12 @@ export default function CommandCenter() {
     const h = el.clientHeight
     // Responsive cols: fill width with minimum tile width
     const cols = Math.max(1, Math.floor((w + TILE_GAP) / (TILE_MIN_W + TILE_GAP)))
-    // Always show exactly 3 rows — fixed requirement
-    const rows = 3
-    // Keep tile pages bounded so the tile view still paginates on large screens.
-    setTilesPerPage(Math.max(1, Math.min(cols * rows, 12)))
+    // Responsive rows: fill available height (reserve ~50px for pagination)
+    const availableHeight = Math.max(0, h - 50)
+    const rows = Math.max(1, Math.floor((availableHeight + TILE_GAP) / (TILE_H + TILE_GAP)))
+    
+    // Fill the page entirely without arbitrary caps like 12
+    setTilesPerPage(cols * rows)
   }, [])
 
   const measureListRows = useCallback(() => {

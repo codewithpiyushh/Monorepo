@@ -177,32 +177,7 @@ export default function WorkQueue() {
       />
 
       <div style={{ flex: 1, overflow: 'auto', padding: 20 }} className="slim-scroll">
-        {/* Project Selector */}
-        <div className="card" style={{ padding: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <FolderKanban style={{ width: 16, height: 16, color: 'var(--text-secondary)', flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="label" style={{ marginBottom: 4 }}>Active Project Context</p>
-            {isLoading ? (
-              <div className="skeleton" style={{ height: 30, borderRadius: 'var(--r-md)' }} />
-            ) : (
-              <select
-                className="input"
-                style={{ maxWidth: 400 }}
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                disabled={!projects.length}
-              >
-                {projects.length === 0 && <option value="">No projects available</option>}
-                {projects.map((p) => (
-                  <option key={p.id} value={String(p.id)}>{p.name} (#{p.id})</option>
-                ))}
-              </select>
-            )}
-          </div>
-          {selectedProjectId && (
-            <span className="badge badge-success">Project #{selectedProjectId} active</span>
-          )}
-        </div>
+
 
         {/* Queue Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>

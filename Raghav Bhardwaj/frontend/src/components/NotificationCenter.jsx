@@ -2,12 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bell, CheckCircle2, Clock3, XCircle, AlertTriangle,
-  Info, CheckCheck, X,
+  Info, CheckCheck, X, Wifi,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useAuthStore } from '../store/authStore'
-import { enterpriseAPI } from '../api'
+import { useNotificationStore } from '../store/notificationStore'
+import { enterpriseAPI, notificationsAPI } from '../api'
 import { normalizeRole } from '../utils/roles'
 
 // ── Role-based action URLs ────────────────────────────────────
@@ -52,7 +53,7 @@ function relativeTime(isoStr) {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-// ── Main component ────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────
 export default function NotificationCenter({ floating = false }) {
   const navigate = useNavigate()
   const qc       = useQueryClient()
@@ -64,23 +65,46 @@ export default function NotificationCenter({ floating = false }) {
   const buttonRef = useRef(null)
   const panelRef  = useRef(null)
 
-  // ── Fetch notifications ───────────────────────────────────
-  const { data: payload } = useQuery({
-    queryKey: ['notifications', role],
+  // ── SSE-backed notification state ────────────────────────────
+  const {
+    notifications:   storeItems,
+    unreadCount:     storeUnread,
+    isConnected,
+    markRead:        storeMarkRead,
+    markAllRead:     storeMarkAllRead,
+    prependNotifications,
+    setUnreadCount,
+  } = useNotificationStore()
+
+  // Seed the store with existing notifications on first open
+  const { data: initialPayload } = useQuery({
+    queryKey: ['notifications-seed', role],
     queryFn: async () => {
-      try { return await enterpriseAPI.listNotifications(20) }
-      catch { return { items: [], unread_count: 0, total: 0 } }
+      try { return await notificationsAPI.list({ limit: 20 }) }
+      catch { return { items: [], total: 0, unread: 0 } }
     },
-    refetchInterval: 15000,
+    enabled: open && storeItems.length === 0,   // only fetch if store is empty
+    staleTime: 30_000,
   })
 
-  const items        = payload?.items        || []
-  const unreadCount  = payload?.unread_count ?? items.filter((i) => !i.is_read).length
+  useEffect(() => {
+    if (initialPayload?.items?.length && storeItems.length === 0) {
+      prependNotifications(initialPayload.items)
+      setUnreadCount(initialPayload.unread || 0)
+    }
+  }, [initialPayload]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Mark read ─────────────────────────────────────────────
+  // Merge store items with local state — SSE items arrive fresh, initial items from REST
+  const items       = storeItems
+  const unreadCount = storeUnread
+
+  // ── Mark read mutations ─────────────────────────────────────
   const markReadMutation = useMutation({
-    mutationFn: (id) => enterpriseAPI.markNotificationRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    mutationFn: (id) => notificationsAPI.markRead(id),
+    onSuccess: (_, id) => {
+      storeMarkRead(id)
+      qc.invalidateQueries({ queryKey: ['notifications-seed'] })
+    },
   })
 
   const markAllReadMutation = useMutation({
@@ -192,6 +216,21 @@ export default function NotificationCenter({ floating = false }) {
               <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
                 Notifications
               </p>
+              {/* SSE live indicator */}
+              <span title={isConnected ? 'Live — real-time updates active' : 'Polling — SSE not connected'} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 9, fontWeight: 700, color: isConnected ? '#00C891' : '#94A3B8',
+                background: isConnected ? '#00C89118' : '#94A3B818',
+                border: `1px solid ${isConnected ? '#00C89133' : '#94A3B833'}`,
+                borderRadius: 9999, padding: '1px 6px',
+              }}>
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: isConnected ? '#00C891' : '#94A3B8',
+                  boxShadow: isConnected ? '0 0 4px #00C891' : 'none',
+                }} />
+                {isConnected ? 'LIVE' : 'POLL'}
+              </span>
               {unreadCount > 0 && (
                 <span style={{
                   fontSize: 10, fontWeight: 800,
@@ -202,6 +241,7 @@ export default function NotificationCenter({ floating = false }) {
                 </span>
               )}
             </div>
+
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllReadMutation.mutate()}

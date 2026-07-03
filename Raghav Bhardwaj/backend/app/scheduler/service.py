@@ -174,6 +174,20 @@ def _run_aging_snapshot():
         db.close()
 
 
+def _run_sla_scan_job():
+    """APScheduler wrapper — SLA monitoring & escalation scan (every 4 hours)."""
+    from ..database import SessionLocal
+    from ..services.sla_monitoring_service import run_sla_scan
+    db = SessionLocal()
+    try:
+        result = run_sla_scan(db)
+        logger.info("[SLA Scheduler] Scan complete: %s", result)
+    except Exception:
+        logger.exception("[SLA Scheduler] Scan error")
+    finally:
+        db.close()
+
+
 def _register_system_jobs():
     system_jobs = [
         ("system:overdue_detection", "*/15 * * * *", "overdue_detection"),
@@ -208,6 +222,17 @@ def _register_system_jobs():
         trigger=CronTrigger(day=1, hour=0, minute=5),
         id="aging_monthly_snapshot",
         name="Monthly Aging Snapshot Writer",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+
+    # ── SLA Monitoring & Escalation Scan ────────────────────────────────
+    from apscheduler.triggers.interval import IntervalTrigger
+    scheduler.add_job(
+        _run_sla_scan_job,
+        trigger=IntervalTrigger(hours=4),
+        id="sla_monitoring_scan",
+        name="SLA Monitoring & Escalation Scan",
         replace_existing=True,
         misfire_grace_time=300,
     )

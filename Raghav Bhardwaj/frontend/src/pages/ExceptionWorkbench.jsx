@@ -32,6 +32,17 @@ const CLASS_META = {
   POLICY_RISK:   { color: '#c026d3',       label: 'Policy Risk' },
   OTHER:         { color: 'var(--accent)', label: 'Other' },
 }
+const SEVERITY_META = {
+  CRITICAL: { color: '#c026d3',     label: 'Critical' },
+  HIGH:     { color: 'var(--bad)',  label: 'High' },
+  MEDIUM:   { color: 'var(--warn)', label: 'Medium' },
+  LOW:      { color: 'var(--ok)',   label: 'Low' },
+}
+const ROOT_CAUSES = [
+  'TIMING_DIFFERENCE','DUPLICATE','SYSTEM_ERROR',
+  'MANUAL_ERROR','FX_ROUNDING','POLICY_GAP',
+  'DATA_QUALITY','AWAITING_CONFIRMATION','OTHER',
+]
 const QUEUE_TYPES = ['exception', 'unresolved', 'assigned', 'escalated']
 const STATUS_FILTERS = ['', 'OPEN', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED']
 
@@ -61,6 +72,8 @@ function ExceptionDetail({ exc, users, role, onClose, onUpdate }) {
   const [assignTo,    setAssignTo]    = useState(String(exc.assigned_to || ''))
   const [resolution,  setResolution]  = useState(exc.resolution_notes || '')
   const [classification, setClassification] = useState(exc.classification || '')
+  const [rootCause, setRootCause] = useState(exc.root_cause || '')
+  const [severity, setSeverity] = useState(exc.severity || 'MEDIUM')
   const [saving, setSaving] = useState(false)
 
   const canAssign   = ['admin'].includes(role)
@@ -76,7 +89,7 @@ function ExceptionDetail({ exc, users, role, onClose, onUpdate }) {
       if (action === 'approve')  { await enterpriseAPI.approveException({ ...payload, resolution_notes: resolution }); toast.success('Approved') }
       if (action === 'reject')   { await enterpriseAPI.rejectException(payload);  toast.success('Rejected') }
       if (action === 'escalate') { await enterpriseAPI.escalateException(payload); toast.success('Escalated') }
-      if (action === 'classify') { await enterpriseAPI.classifyException({ exception_id: exc.id, classification, comments: comment }); toast.success('Classified') }
+      if (action === 'classify') { await enterpriseAPI.classifyException({ exception_id: exc.id, classification, root_cause: rootCause, severity, comments: comment }); toast.success('Taxonomy Saved') }
       onUpdate()
     } catch (e) {
       toast.error(e?.response?.data?.detail || `${action} failed`)
@@ -103,7 +116,7 @@ function ExceptionDetail({ exc, users, role, onClose, onUpdate }) {
             </p>
             <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
               <StatusBadge status={exc.status} />
-              {exc.classification && <ClassBadge cls={exc.classification} />}
+              {exc.severity && <ClassBadge cls={exc.severity} />}
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{exc.queue_type}</span>
             </div>
           </div>
@@ -160,8 +173,23 @@ function ExceptionDetail({ exc, users, role, onClose, onUpdate }) {
             </div>
           )}
 
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label className="label">Root Cause Taxonomy</label>
+              <select className="input text-xs" value={rootCause} onChange={(e) => setRootCause(e.target.value)}>
+                <option value="">Unclassified</option>
+                {ROOT_CAUSES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="label">Severity</label>
+              <select className="input text-xs" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+                {Object.entries(SEVERITY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+          </div>
           <div>
-            <label className="label">Classification</label>
+            <label className="label">Legacy Classification (Optional)</label>
             <select className="input text-xs" value={classification} onChange={(e) => setClassification(e.target.value)}>
               <option value="">Unclassified</option>
               <option value="DATA_ISSUE">Data Issue</option>
@@ -190,8 +218,8 @@ function ExceptionDetail({ exc, users, role, onClose, onUpdate }) {
               style={{ color: '#c026d3', borderColor: '#c026d333' }}
               onClick={() => handleAction('escalate')}>Escalate</button>
           )}
-          {classification && (
-            <button className="btn-ghost text-xs" disabled={saving} onClick={() => handleAction('classify')}>Save Classification</button>
+          {(rootCause || severity || classification) && (
+            <button className="btn-ghost text-xs" disabled={saving} onClick={() => handleAction('classify')}>Save Taxonomy</button>
           )}
         </div>
       </div>
@@ -218,7 +246,12 @@ function ExcRow({ exc, onOpen }) {
         color: 'var(--text-secondary)' }}>
         {exc.profile_name || '—'}
       </td>
-      <td>{exc.classification && <ClassBadge cls={exc.classification} />}</td>
+      <td>
+        {exc.severity && <ClassBadge cls={exc.severity} />}
+      </td>
+      <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+        {exc.root_cause ? exc.root_cause.replace(/_/g, ' ') : (exc.classification || '—')}
+      </td>
       <td style={{ fontSize: 11, color: exc.mg_variance > 0 ? 'var(--warn)' : 'var(--text-tertiary)', fontWeight: exc.mg_variance > 0 ? 600 : 400 }}>
         {exc.mg_variance > 0 ? `$${Number(exc.mg_variance).toFixed(2)}` : '—'}
       </td>
@@ -352,7 +385,7 @@ export default function ExceptionWorkbench() {
               <thead>
                 <tr>
                   <th>ID</th><th>Status</th><th>Queue</th><th>Profile</th>
-                  <th>Classification</th><th>Variance</th><th>Age</th><th>Comments</th>
+                  <th>Severity</th><th>Root Cause</th><th>Variance</th><th>Age</th><th>Comments</th>
                 </tr>
               </thead>
               <tbody>

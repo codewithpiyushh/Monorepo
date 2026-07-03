@@ -25,6 +25,20 @@ export default function ExceptionInvestigation() {
   const [selectedExceptionId, setSelectedExceptionId] = useState(routeExceptionId || '')
   const [newComment, setNewComment] = useState('')
   const [classification, setClassification] = useState('PROCESS_ISSUE')
+  const [rootCause, setRootCause] = useState('TIMING_DIFFERENCE')
+  const [severity, setSeverity] = useState('MEDIUM')
+
+  const ROOT_CAUSES = [
+    'TIMING_DIFFERENCE','DUPLICATE','SYSTEM_ERROR',
+    'MANUAL_ERROR','FX_ROUNDING','POLICY_GAP',
+    'DATA_QUALITY','AWAITING_CONFIRMATION','OTHER',
+  ]
+  const SEVERITY_META = {
+    CRITICAL: { color: '#c026d3',     label: 'Critical' },
+    HIGH:     { color: 'var(--bad)',  label: 'High' },
+    MEDIUM:   { color: 'var(--warn)', label: 'Medium' },
+    LOW:      { color: 'var(--ok)',   label: 'Low' },
+  }
 
   const { data: exceptions = [], isLoading: exLoading, isError: exError, error: exErr, refetch: refetchExceptions } = useQuery({
     queryKey: ['exception-investigation-exceptions'],
@@ -216,13 +230,22 @@ export default function ExceptionInvestigation() {
                 <p className="text-sm font-semibold text-slate-100 mb-3">Resolution Actions</p>
                 <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-3">
                   <div className="space-y-2">
+                    <label className="text-xs text-slate-400 mb-1 block">Root Cause</label>
+                    <select className="input" value={rootCause} onChange={(e) => setRootCause(e.target.value)}>
+                      {ROOT_CAUSES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                    </select>
+                    <label className="text-xs text-slate-400 mb-1 mt-2 block">Severity</label>
+                    <select className="input" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+                      {Object.entries(SEVERITY_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    <label className="text-xs text-slate-400 mb-1 mt-2 block">Legacy Classification</label>
                     <select className="input" value={classification} onChange={(e) => setClassification(e.target.value)}>
                       <option value="PROCESS_ISSUE">PROCESS_ISSUE</option>
                       <option value="DATA_ISSUE">DATA_ISSUE</option>
                       <option value="POLICY_RISK">POLICY_RISK</option>
                       <option value="OTHER">OTHER</option>
                     </select>
-                    <button className="btn-secondary w-full" onClick={() => classifyMutation.mutate({ exception_id: selectedException.id, classification, comments: 'Classified from workspace' })} disabled={classifyMutation.isPending}>Classify</button>
+                    <button className="btn-secondary w-full mt-3" onClick={() => classifyMutation.mutate({ exception_id: selectedException.id, classification, root_cause: rootCause, severity, comments: 'Classified from workspace' })} disabled={classifyMutation.isPending}>Save Taxonomy</button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <button className="btn-secondary" onClick={() => actionMutation.mutate({ type: 'resolve', payload: { exception_id: selectedException.id, comments: 'Resolved from investigation workspace' } })} disabled={actionMutation.isPending}>Resolve</button>

@@ -2,8 +2,9 @@
 // Exception Aging Analysis Dashboard
 // Styling mirrors ExceptionWorkbench.jsx and BalanceReconciliationPage.jsx exactly.
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useOutletContext } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   Clock, AlertTriangle, AlertOctagon, ShieldAlert,
@@ -78,53 +79,53 @@ function AgingKpiCard({ bucket, data, isSelected, onClick }) {
     <div
       onClick={() => onClick(isSelected ? null : bucket)}
       style={{
-        flex: 1, minWidth: 160, cursor: 'pointer',
-        padding: '18px 20px', borderRadius: 12,
+        flex: 1, minWidth: 140, cursor: 'pointer',
+        padding: '12px 14px', borderRadius: 10,
         background: isSelected ? meta.bg : 'var(--surface-1)',
-        border: `2px solid ${isSelected ? meta.color : 'var(--border-0)'}`,
+        border: `1px solid ${isSelected ? meta.color : 'var(--border-0)'}`,
         transition: 'all 0.18s ease',
-        boxShadow: isSelected ? `0 0 0 3px ${meta.color}22` : 'none',
+        boxShadow: isSelected ? `0 0 0 2px ${meta.color}22` : 'none',
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{
-            width: 30, height: 30, borderRadius: 8,
+            width: 26, height: 26, borderRadius: 6,
             background: meta.bg, border: `1px solid ${meta.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Icon size={15} color={meta.color} />
+            <Icon size={13} color={meta.color} />
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: meta.color, letterSpacing: 0.3 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, letterSpacing: 0.2 }}>
               {meta.severity.toUpperCase()}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{meta.label}</div>
+            <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{meta.label}</div>
           </div>
         </div>
         {isSelected && (
           <div style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+            fontSize: 8, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
             background: meta.color, color: '#fff',
           }}>ACTIVE</div>
         )}
       </div>
 
       {/* Count */}
-      <div style={{ fontSize: 32, fontWeight: 800, color: count > 0 ? meta.color : 'var(--text-tertiary)', lineHeight: 1, marginBottom: 10 }}>
+      <div style={{ fontSize: 24, fontWeight: 800, color: count > 0 ? meta.color : 'var(--text-tertiary)', lineHeight: 1, marginBottom: 8 }}>
         {count}
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
           <span style={{ color: 'var(--text-tertiary)' }}>Total Amount</span>
           <span style={{ fontWeight: 600, color: amount > 0 ? meta.color : 'var(--text-secondary)' }}>
             ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
           <span style={{ color: 'var(--text-tertiary)' }}>Avg Age</span>
           <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
             {avgAge} days
@@ -133,9 +134,9 @@ function AgingKpiCard({ bucket, data, isSelected, onClick }) {
       </div>
 
       {/* Progress bar */}
-      <div style={{ marginTop: 10, height: 3, background: 'var(--border-0)', borderRadius: 2 }}>
+      <div style={{ marginTop: 8, height: 2, background: 'var(--border-0)', borderRadius: 1 }}>
         <div style={{
-          height: '100%', borderRadius: 2,
+          height: '100%', borderRadius: 1,
           background: count > 0 ? meta.color : 'var(--border-0)',
           width: '100%', opacity: count > 0 ? 1 : 0.2,
         }} />
@@ -335,6 +336,7 @@ function ExceptionRow({ exc }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AgingDashboard() {
+  const { setHeaderOverride } = useOutletContext() || {}
   const { user } = useAuthStore()
   const role = normalizeRole(user?.role)
   const qc = useQueryClient()
@@ -425,78 +427,90 @@ export default function AgingDashboard() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────
+  // Override Layout Header
+  useEffect(() => {
+    if (setHeaderOverride) {
+      setHeaderOverride(
+        <header className="bl-header" style={{ padding: '0 24px' }}>
+          <div className="flex flex-col min-w-0 flex-shrink-0">
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)', lineHeight: 1, fontFamily: 'Inter, sans-serif' }}>
+              ANALYTICS
+            </p>
+            <div className="flex items-center gap-3 mt-[2px]">
+              <h1 className="bl-header-title">Exception Aging Analysis</h1>
+            </div>
+          </div>
+          
+          <div className="flex-1" />
+
+          {summary && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginRight: 24, borderRight: '1px solid var(--border-1)', paddingRight: 24 }}>
+              {[
+                { label: 'Exceptions',  value: summary.total_count },
+                { label: 'Variance',    value: `$${(summary.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+                { label: 'Avg Age',     value: `${summary.overall_average_age}d` },
+                { label: 'Oldest',      value: `${summary.oldest_exception_days}d` },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 9, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex items-center gap-4">
+            {isAdmin && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => snapshotMut.mutate()}
+                  disabled={snapshotMut.isPending}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 8,
+                    border: '1px solid var(--border-1)', background: 'transparent',
+                    color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12, height: 32
+                  }}
+                >
+                  <BarChart2 size={13} />
+                  {snapshotMut.isPending ? 'Snapshotting…' : 'Write Snapshot'}
+                </button>
+                <button
+                  onClick={() => escalateMut.mutate()}
+                  disabled={escalateMut.isPending}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 8, border: 'none',
+                    background: '#ef4444', color: '#fff', fontWeight: 700,
+                    cursor: 'pointer', fontSize: 12, height: 32
+                  }}
+                >
+                  <Zap size={13} />
+                  {escalateMut.isPending ? 'Running…' : 'Run Escalations'}
+                </button>
+              </div>
+            )}
+          </div>
+        </header>
+      )
+    }
+    return () => setHeaderOverride?.(null)
+  }, [setHeaderOverride, isAdmin, summary, snapshotMut.isPending, escalateMut.isPending, snapshotMut.mutate, escalateMut.mutate])
+
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
-      <PageHeader
-        title="Exception Aging Analysis"
-        subtitle="Track exception age, escalations, and aging trends across reconciliation profiles"
-        icon={<Clock size={22} />}
-        actions={
-          isAdmin ? (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => snapshotMut.mutate()}
-                disabled={snapshotMut.isPending}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 8,
-                  border: '1px solid var(--border-1)', background: 'transparent',
-                  color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
-                }}
-              >
-                <BarChart2 size={13} />
-                {snapshotMut.isPending ? 'Snapshotting…' : 'Write Snapshot'}
-              </button>
-              <button
-                onClick={() => escalateMut.mutate()}
-                disabled={escalateMut.isPending}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: '#ef4444', color: '#fff', fontWeight: 700,
-                  cursor: 'pointer', fontSize: 12,
-                }}
-              >
-                <Zap size={13} />
-                {escalateMut.isPending ? 'Running…' : 'Run Escalations'}
-              </button>
-            </div>
-          ) : null
-        }
-      />
 
-      {/* Summary totals bar */}
-      {summary && (
-        <div style={{
-          display: 'flex', gap: 20, marginBottom: 24, padding: '14px 20px',
-          background: 'var(--surface-1)', border: '1px solid var(--border-0)',
-          borderRadius: 10, flexWrap: 'wrap',
-        }}>
-          {[
-            { label: 'Total Exceptions',  value: summary.total_count },
-            { label: 'Total Variance',    value: `$${(summary.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
-            { label: 'Avg Age',           value: `${summary.overall_average_age} days` },
-            { label: 'Oldest',            value: `${summary.oldest_exception_days} days` },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ flex: 1, minWidth: 120 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Summary totals merged into top bar */}
 
       {/* Four Aging KPI Cards */}
       {summaryQ.isLoading ? (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
           {BUCKET_ORDER.map(b => (
-            <div key={b} style={{ flex: 1, height: 160, background: 'var(--surface-1)', borderRadius: 12, border: '1px solid var(--border-0)' }} />
+            <div key={b} style={{ flex: 1, height: 120, background: 'var(--surface-1)', borderRadius: 10, border: '1px solid var(--border-0)' }} />
           ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           {BUCKET_ORDER.map(bucket => (
             <AgingKpiCard
               key={bucket}

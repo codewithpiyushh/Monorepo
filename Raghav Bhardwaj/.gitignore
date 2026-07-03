@@ -63,3 +63,7 @@ coverage/
 
 # Keep sample evidence folder structure if needed
 !evidences/.gitkeep
+
+CLAUDE_CONTEXT.md
+PROJECT_GUIDE.md
+PROJECT_STATUS.md

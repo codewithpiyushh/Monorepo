@@ -3,20 +3,20 @@ export default function PageHeader({ title, subtitle, badge, actions, children, 
     <div style={{ flexShrink: 0, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-1)' }}>
       {/* Title row */}
       <div style={{
-        padding: '12px 20px',
+        padding: '24px 32px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 12,
+        gap: 16,
         borderBottom: tabs ? '1px solid var(--border-0)' : 'none',
       }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 style={{
-              fontFamily: 'IBM Plex Sans Condensed, sans-serif',
-              fontSize: 16,
+              fontFamily: 'Inter, sans-serif',
+              fontSize: 24,
               fontWeight: 700,
-              letterSpacing: '-0.01em',
+              letterSpacing: '-0.02em',
               color: 'var(--text-primary)',
               margin: 0,
               lineHeight: 1.2,
@@ -40,9 +40,9 @@ export default function PageHeader({ title, subtitle, badge, actions, children, 
           </div>
           {subtitle && (
             <p style={{
-              fontSize: 12,
-              color: 'var(--text-tertiary)',
-              marginTop: 3,
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              marginTop: 4,
               lineHeight: 1.4,
             }}>
               {subtitle}

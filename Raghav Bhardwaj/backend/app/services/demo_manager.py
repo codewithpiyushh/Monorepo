@@ -53,6 +53,7 @@ PURGE_ORDER = [
     "variance_snapshots",
     "supporting_items",
     "exception_queue_records",
+    "close_period_tasks",        # NEW — references close_periods + reconciliation_balances
     "reconciliation_comments",
     "reconciliation_attachments",
     "reconciliation_records",
@@ -61,6 +62,7 @@ PURGE_ORDER = [
     "journal_adjustment_history",
     "journal_adjustments",
     "reconciliation_balances",
+    "close_periods",             # NEW — referenced by close_period_tasks + reconciliation_balances
     "certification_workflows",
     "close_tasks",
     "financial_close_calendar",
@@ -86,6 +88,8 @@ PROFILE_CHILD_TABLES = {
     "financial_close_calendar",
     "reconciliation_rule_definitions",
     "journal_adjustments",
+    "sla_violations",   # references sla_policies — purge before sla_policies
+    "sla_policies",     # profile_id FK to reconciliation_profiles
 }
 
 
@@ -155,9 +159,20 @@ def run_demo_startup(db: Session) -> None:
 
         log.info("[demo seed] Seeding 10-project Enterprise Demo Matrix…")
         try:
-            from ..services.demo_seed import seed_enterprise_demo_matrix
+            from ..services.demo_seed import seed_enterprise_demo_matrix, seed_close_periods_demo
             seed_enterprise_demo_matrix(db)
             log.info("[demo seed] ✅ Demo matrix seeded successfully.")
+
+            log.info("[demo seed] Seeding demo close periods…")
+            seed_close_periods_demo(db)
+            log.info("[demo seed] ✅ Close periods seeded successfully.")
+
+            log.info("[demo seed] Seeding SLA policies and running initial scan…")
+            try:
+                from ..services.demo_seed import seed_sla_demo
+                seed_sla_demo(db)
+            except Exception as e:
+                log.warning(f"[demo seed] SLA seed skipped (non-fatal): {e}")
         except Exception as e:
             log.error(f"[demo seed] ❌ Seed failed: {e}", exc_info=True)
 

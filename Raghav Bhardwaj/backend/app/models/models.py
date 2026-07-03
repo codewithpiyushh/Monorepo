@@ -14,11 +14,15 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(200), nullable=False)
     role = Column(String(20), default="preparer")
+    manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     projects = relationship("Project", back_populates="owner")
     audit_logs = relationship("AuditLog", back_populates="user")
+    
+    # Self-referential relationship for escalation hierarchy
+    manager = relationship("User", remote_side=[id], backref="direct_reports")
 
 
 class Project(Base):
@@ -417,6 +421,7 @@ class ReconciliationBalance(Base):
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_demo_data        = Column(Boolean, default=False, nullable=False, index=True)
+    close_period_id     = Column(Integer, ForeignKey("close_periods.id"), nullable=True, index=True)
 
     __table_args__ = (
         Index("ix_recon_balances_profile_period",  "profile_id", "period_key"),
@@ -533,9 +538,22 @@ class ExceptionQueueRecord(Base):
     match_group_id = Column(Integer, ForeignKey("match_groups.id"), nullable=False)
     queue_type = Column(String(30), nullable=False)  # exception/unresolved/assigned/escalated
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, nullable=True)
     status = Column(String(30), default="OPEN")
     comments = Column(Text, nullable=True)
+
+    # Legacy coarse classification (kept for backwards compat)
     classification = Column(String(40), nullable=True)  # DATA_ISSUE/PROCESS_ISSUE/POLICY_RISK/OTHER
+
+    # ── Root Cause Taxonomy (Phase 3) ─────────────────────────────────────────
+    root_cause        = Column(String(60), nullable=True, index=True)
+    root_cause_detail = Column(Text, nullable=True)          # free-text explanation
+    severity          = Column(String(20), nullable=True, default="MEDIUM", index=True)
+    carry_forward_period = Column(String(10), nullable=True) # e.g. '2026-05'
+    reopened_count    = Column(Integer, nullable=False, default=0)
+    resolved_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # ──────────────────────────────────────────────────────────────────────────
+
     resolution_notes = Column(Text, nullable=True)
     escalated_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
@@ -1074,3 +1092,225 @@ class CloseTask(Base):
     __table_args__ = (
         Index("ix_close_tasks_calendar_status", "calendar_id", "status"),
     )
+
+
+class ClosePeriod(Base):
+    __tablename__ = "close_periods"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    period_name         = Column(String(100), nullable=False)
+    period_key          = Column(String(30),  nullable=False, unique=True, index=True)
+    start_date          = Column(String(30),  nullable=False)
+    due_date            = Column(String(30),  nullable=False)
+    close_status        = Column(String(30),  nullable=False, default="OPEN", index=True)
+    total_profiles      = Column(Integer, nullable=False, default=0)
+    completed_profiles  = Column(Integer, nullable=False, default=0)
+    certified_profiles  = Column(Integer, nullable=False, default=0)
+    closed_by           = Column(Integer, ForeignKey("users.id"), nullable=True)
+    closed_at           = Column(DateTime, nullable=True)
+    is_demo_data        = Column(Boolean, nullable=False, default=False, index=True)
+    created_by          = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+    updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ClosePeriodTask(Base):
+    __tablename__ = "close_period_tasks"
+
+    id                    = Column(Integer, primary_key=True, index=True)
+    close_period_id       = Column(Integer, ForeignKey("close_periods.id"), nullable=False, index=True)
+    profile_id            = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    balance_id            = Column(Integer, ForeignKey("reconciliation_balances.id"), nullable=True)
+    assigned_owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    target_due_date       = Column(String(30), nullable=True)
+    task_status           = Column(String(30), nullable=False, default="NOT_STARTED", index=True)
+    completion_percentage = Column(Float, nullable=False, default=0.0)
+    is_demo_data          = Column(Boolean, nullable=False, default=False, index=True)
+    created_at            = Column(DateTime, default=datetime.utcnow)
+    updated_at            = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_close_period_tasks_period_status", "close_period_id", "task_status"),
+    )
+
+
+# ── Phase 2 Chunk 4 — SLA Monitoring & Escalation Engine ──────────────────────
+
+class SLAPolicy(Base):
+    """
+    SLA policy — how many days a balance may remain in a given lifecycle
+    state before it's considered breaching, and who owns it at that point.
+
+    profile_id IS NULL  -> global default policy for that priority_level
+    profile_id set      -> profile-specific override, takes precedence
+    """
+    __tablename__ = "sla_policies"
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    profile_id             = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=True, index=True)
+    priority_level         = Column(String(20), nullable=False, index=True)   # LOW | MEDIUM | HIGH | CRITICAL
+    max_days_open          = Column(Integer, nullable=False)
+    escalation_role        = Column(String(20), nullable=False)               # PREPARER | APPROVER | CERTIFIER | ADMIN
+    reminder_interval_days = Column(Integer, nullable=False, default=3)
+    created_at             = Column(DateTime, default=datetime.utcnow)
+    updated_at             = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_sla_policies_profile_priority", "profile_id", "priority_level"),
+    )
+
+
+class SLAViolation(Base):
+    """
+    A live record of a balance currently breaching (or having breached) its
+    applicable SLA policy. `status` tracks the violation record's own
+    open/closed lifecycle; `escalation_status` tracks how far the 3-level
+    escalation ladder has progressed.
+    """
+    __tablename__ = "sla_violations"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    balance_id        = Column(Integer, ForeignKey("reconciliation_balances.id"), nullable=False, index=True)
+    profile_id        = Column(Integer, ForeignKey("reconciliation_profiles.id"), nullable=False, index=True)
+    policy_id         = Column(Integer, ForeignKey("sla_policies.id"), nullable=True)
+
+    violation_type    = Column(String(30), nullable=False)
+    # SLA_BREACH | CERTIFICATION_OVERDUE | APPROVAL_BOTTLENECK
+
+    assigned_user_id  = Column(Integer, ForeignKey("users.id"), nullable=True)   # owner at creation time
+    current_owner_id  = Column(Integer, ForeignKey("users.id"), nullable=True)   # mutated by escalation
+
+    days_overdue      = Column(Integer, nullable=False, default=0)
+    escalation_level  = Column(Integer, nullable=False, default=1)               # 1, 2, or 3
+    escalation_status = Column(String(30), nullable=False, default="NONE", index=True)
+    # NONE | LEVEL_1_NOTIFIED | LEVEL_2_NOTIFIED | LEVEL_3_REASSIGNED | RESOLVED
+
+    status            = Column(String(20), nullable=False, default="OPEN", index=True)
+    # OPEN | ACKNOWLEDGED | RESOLVED
+
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    resolved_at       = Column(DateTime, nullable=True)
+    last_escalated_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_sla_violations_balance_status",   "balance_id",        "status"),
+        Index("ix_sla_violations_owner_status",     "current_owner_id",  "status"),
+        Index("ix_sla_violations_profile_status",   "profile_id",        "status"),
+        Index("ix_sla_violations_escalation",       "escalation_status", "status"),
+    )
+
+class IngestionJob(Base):
+    __tablename__ = "ingestion_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    dataset_type = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING", index=True)
+    records_received = Column(Integer, nullable=False, default=0)
+    records_inserted = Column(Integer, nullable=False, default=0)
+    records_failed = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AutoCertRule(Base):
+    __tablename__ = "auto_cert_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    max_variance = Column(Float, nullable=False, default=0.0)
+    allow_exceptions = Column(Boolean, nullable=False, default=False)
+    allowed_risk_levels = Column(String(100), nullable=False, default="LOW,MEDIUM")
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RiskConfig(Base):
+    __tablename__ = "risk_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    aging_weight = Column(Float, nullable=False, default=0.33)
+    materiality_weight = Column(Float, nullable=False, default=0.33)
+    account_type_weight = Column(Float, nullable=False, default=0.34)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ApprovalRule(Base):
+    __tablename__ = "approval_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    condition_field = Column(String(50), nullable=False)
+    condition_operator = Column(String(20), nullable=False)
+    condition_value = Column(String(255), nullable=False)
+    action = Column(String(50), nullable=False)
+    target_role = Column(String(50), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CompliancePolicy(Base):
+    __tablename__ = "compliance_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    control_name = Column(String(100), nullable=False)
+    category = Column(String(50), nullable=False)
+    violation_threshold = Column(Integer, nullable=False, default=0)
+    current_violations = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RetentionPolicy(Base):
+    __tablename__ = "retention_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    doc_type = Column(String(50), nullable=False)
+    retention_period_days = Column(Integer, nullable=False)
+    cold_storage_days = Column(Integer, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ArchivalJob(Base):
+    __tablename__ = "archival_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    status = Column(String(20), nullable=False, default="PENDING")
+    docs_archived = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class EntitySignoff(Base):
+    __tablename__ = "entity_signoffs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    entity_name = Column(String(100), nullable=False)
+    region = Column(String(50), nullable=True)
+    period_key = Column(String(30), nullable=False)
+    signoff_status = Column(String(30), nullable=False, default="PENDING")
+    signed_off_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    signed_off_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

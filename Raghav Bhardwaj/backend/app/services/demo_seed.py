@@ -492,3 +492,126 @@ def seed_enterprise_demo_matrix(db: Session) -> None:
         log.info(f"[demo seed] ✅ '{proj_def['name']}' — {len(proj_def['profiles'])} profiles")
 
     log.info(f"[demo seed] Complete — {len(DEMO_PROJECTS)} projects, {total_profiles} profiles.")
+
+
+def seed_close_periods_demo(db: Session) -> None:
+    """
+    Seeds 3 demo close periods (Phase 2, Chunk 3) on top of the profiles
+    and balances created by seed_enterprise_demo_matrix(). Must run AFTER
+    that function completes in the same startup pass — it reads the demo
+    profiles/balances rather than recreating them.
+    """
+    from ..models.models import ClosePeriod, ClosePeriodTask, ReconciliationProfile
+
+    try:
+        from ..models.models import ReconciliationBalance
+        has_balance = True
+    except ImportError:
+        has_balance = False
+
+    profiles = db.query(ReconciliationProfile).filter(
+        ReconciliationProfile.is_demo_data == True  # noqa: E712
+    ).all()
+    if not profiles:
+        log.warning("[demo seed] No demo profiles found — skipping close period seed.")
+        return
+
+    # offset_months=2 → oldest (closed), 0 → current (open)
+    period_defs = [
+        {"offset_months": 2, "status": "CLOSED"},
+        {"offset_months": 1, "status": "IN_PROGRESS"},
+        {"offset_months": 0, "status": "OPEN"},
+    ]
+
+    for pdef in period_defs:
+        period_key = _period(pdef["offset_months"])
+        if db.query(ClosePeriod).filter(ClosePeriod.period_key == period_key).first():
+            continue  # already seeded (idempotent across restarts)
+
+        month_label = datetime.strptime(period_key, "%Y-%m").strftime("%B %Y")
+        period_start = date.today().replace(day=1) - timedelta(days=pdef["offset_months"] * 28)
+
+        period = ClosePeriod(
+            period_name=f"{month_label} Month-End Close",
+            period_key=period_key,
+            start_date=period_start.isoformat(),
+            due_date=(period_start + timedelta(days=10)).isoformat(),
+            close_status=pdef["status"],
+            is_demo_data=True,
+        )
+        db.add(period)
+        db.flush()
+
+        tasks_created = 0
+        for idx, prof in enumerate(profiles):
+            if pdef["status"] == "CLOSED":
+                t_status, completion = "CERTIFIED", 100.0
+            elif pdef["status"] == "IN_PROGRESS":
+                t_status = ["IN_PROGRESS", "UNDER_REVIEW", "CERTIFIED", "NOT_STARTED"][idx % 4]
+                completion = {"NOT_STARTED": 0.0, "IN_PROGRESS": 45.0,
+                              "UNDER_REVIEW": 80.0, "CERTIFIED": 100.0}[t_status]
+            else:
+                t_status, completion = "NOT_STARTED", 0.0
+
+            bal_id = None
+            if has_balance:
+                bal = (
+                    db.query(ReconciliationBalance)
+                    .filter(ReconciliationBalance.profile_id == prof.id,
+                            ReconciliationBalance.period_key == period_key)
+                    .order_by(ReconciliationBalance.created_at.desc())
+                    .first()
+                )
+                if bal:
+                    bal_id = bal.id
+                    bal.close_period_id = period.id
+                    db.add(bal)
+
+            db.add(ClosePeriodTask(
+                close_period_id=period.id,
+                profile_id=prof.id,
+                balance_id=bal_id,
+                assigned_owner_id=prof.assigned_preparer,
+                target_due_date=period.due_date,
+                task_status=t_status,
+                completion_percentage=completion,
+                is_demo_data=True,
+            ))
+            tasks_created += 1
+
+        period.total_profiles = tasks_created
+        db.add(period)
+        db.commit()
+        log.info(f"[demo seed] ✅ Close period '{period.period_name}' — {tasks_created} tasks")
+
+
+def seed_sla_demo(db: Session) -> None:
+    """
+    Seeds 4 global-default SLA policies (one per priority level) and then
+    runs one real scan pass so violations appear immediately against the
+    already-seeded demo balances, rather than waiting for the scheduler's
+    first tick.
+
+    No hand-faked violation rows — every violation that appears is one the
+    real engine actually detected. Global default policies (profile_id IS NULL)
+    survive demo data resets by design.
+    """
+    from ..models.models import SLAPolicy
+    from .sla_monitoring_service import run_sla_scan
+
+    defaults = [
+        {"priority_level": "LOW",      "max_days_open": 10, "escalation_role": "PREPARER",  "reminder_interval_days": 5},
+        {"priority_level": "MEDIUM",   "max_days_open": 7,  "escalation_role": "PREPARER",  "reminder_interval_days": 3},
+        {"priority_level": "HIGH",     "max_days_open": 4,  "escalation_role": "APPROVER",  "reminder_interval_days": 2},
+        {"priority_level": "CRITICAL", "max_days_open": 2,  "escalation_role": "CERTIFIER", "reminder_interval_days": 1},
+    ]
+    for d in defaults:
+        if db.query(SLAPolicy).filter(
+            SLAPolicy.profile_id.is_(None), SLAPolicy.priority_level == d["priority_level"]
+        ).first():
+            continue
+        db.add(SLAPolicy(profile_id=None, **d))
+    db.commit()
+
+    run_sla_scan(db)  # populate real violations against demo balances
+    log.info("[demo seed] ✅ SLA default policies seeded and initial scan run.")

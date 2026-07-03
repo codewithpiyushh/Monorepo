@@ -153,7 +153,9 @@ class ExceptionStatusRequest(BaseModel):
 
 class ExceptionClassifyRequest(BaseModel):
     exception_id: int
-    classification: str
+    classification: Optional[str] = None
+    root_cause: Optional[str] = None
+    severity: Optional[str] = None
     comments: Optional[str] = None
 
 

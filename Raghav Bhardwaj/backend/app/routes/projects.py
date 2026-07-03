@@ -31,7 +31,7 @@ def list_projects(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    projects = project_service.get_projects(db)
+    projects = project_service.get_projects(db, current_user=current_user)
     return [project_service.enrich_project(p) for p in projects]
 
 

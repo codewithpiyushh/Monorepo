@@ -1,17 +1,15 @@
 # Project Status
 
-Last updated: 2026-06-16
-
----
-
-## What This Project Is
+**Last Updated:** 2026-07-03
+**Current Phase:** Phase 3 Complete (100% Enterprise Readiness)
 
 **DRMS** (Data Reconciliation Management System) is a full-stack enterprise reconciliation platform.
 
-- **Backend:** FastAPI + SQLAlchemy (Python 3.11), MySQL in production, SQLite for local dev
-- **Frontend:** React 18 + Vite 5 + TanStack Query + Tailwind CSS
-- **Roles:** `admin`, `preparer`, `approver`, `certifier` (4 core roles; reviewer and auditor roles merged into approver)
-- **Auth:** JWT with RBAC middleware
+- **Backend:** FastAPI + SQLAlchemy (Python 3.11), MySQL in production
+- **Frontend:** React 18 + Vite 5 + TanStack Query + Vanilla CSS (dark/light theme)
+- **Roles:** `admin`, `preparer`, `approver`, `certifier` (4 core roles)
+- **Auth:** JWT with RBAC middleware (`role_required()` dependency)
+- **Migration:** Raw SQL `CREATE TABLE IF NOT EXISTS` with `information_schema` guards + `Table.create(checkfirst=True)` (no Alembic)
 
 ---
 
@@ -22,69 +20,86 @@ Last updated: 2026-06-16
 - [x] Execution engine — matching algorithm (exact / tolerance / fuzzy / date_diff)
 - [x] Execution promotion to Enterprise Profile
 - [x] RBAC authentication with per-role landing pages and route protection
+- [x] Oracle ARCS-style Interactive Transaction Matching Workbench
+- [x] Data Ingestion & Bulk Operations centers
+- [x] Role-Based Row-Level Security (RLS) across all dashboards (Admin/Preparer/Reviewer/Approver/Certifier visibility scoping)
 
 ### Enterprise Profile & Certification Lifecycle
 - [x] Enterprise profiles with full lifecycle: `OPEN → PREPARED → SUBMITTED → UNDER_REVIEW → APPROVED → CERTIFIED`
 - [x] Certification workflows with history tracking
-- [x] Multi-role assignment: preparer / approver / certifier per profile (approver now handles review + approval)
+- [x] Multi-role assignment: preparer / approver / certifier per profile
+- [x] Approval chain / delegation columns (Phase 2 Chunk 2)
 - [x] Supporting items (attachments and evidence) management
 - [x] Comment threads on reconciliation profiles
+- [x] Segregation of Duties (SoD) enforcement: preparer ≠ approver ≠ certifier
 
 ### Balance Reconciliation
 - [x] Balance workspace (source vs target with variance display)
 - [x] Variance engine: raw / explained / unexplained variance + flux tracking
 - [x] Narrative gating — blocks submission on `MATERIAL_VARIANCE` / `CRITICAL_VARIANCE` without explanation
-- [x] Variance analytics dashboard with period-over-period flux
+- [x] Variance analytics dashboard with period-over-period flux (role-scoped for preparer)
 - [x] Balance history and prior-period snapshots
 
-### Exception Management
+### Exception Management & Investigation
 - [x] Exception queue with aging buckets (0–30d / 31–60d / 61–90d / 90d+)
 - [x] Exception investigation with escalation workflow
-- [x] Aging dashboard with risk heatmap
+- [x] Aging dashboard with risk heatmap (fully scoped via RLS)
+- [x] Exception workbench (escalated items view for Approvers)
+- [x] Dedicated Exception Investigation deep-dive workspace
+- [x] Work Queue prioritization module
 
 ### Analytics & Reporting
-- [x] Risk dashboard with risk-scored profiles
-- [x] Reconciliation analytics explorer
+- [x] Risk dashboard with risk-scored profiles, enterprise heat map, and drill-downs
+- [x] Reconciliation analytics explorer (projects & integrations metrics)
 - [x] Executive dashboard (KPIs, SLA status, volume trends)
-- [x] Audit log with full event trail
+- [x] Audit log with full event trail (hash-chain tamper detection)
 - [x] Export service (Excel / CSV export)
+- [x] Aging analysis dashboard
+- [x] Variance analytics dashboard (with period-over-period flux and interactive rows)
+- [x] Interactive UI row-click navigation (drills down directly into Balance / Profile context drawers)
 
-### Admin & Operations
-- [x] Admin Center (user management, system settings)
-- [x] Command Center (ops overview for admin)
-- [x] Scheduler monitoring
-- [x] Close calendar / schedule management
-- [x] Rule builder UI
-- [x] Sequence management (numbered close sequences)
+### Financial Close Calendar
+- [x] `ClosePeriod` model — period-level orchestrator
+- [x] `ClosePeriodTask` model — task-card per active profile
+- [x] `close_period_id` FK on `ReconciliationBalance`
+- [x] `overdue_certification_threshold` configuration
+- [x] Close Readiness Validator — 6 blocking checks + 3 SLA blockers
+- [x] `FinancialCloseCalendarPage.jsx` — KPI cards, burndown, variance density, EnterpriseSLAPanel
 
-### Demo & Seeding
-- [x] `demo_seed.py` — 10-project Enterprise Demo Matrix (seeds on startup in DEMO_MODE)
-- [x] `seed_demo_projects.py` — **5 full-flow demo projects** seeded via REST API
-  - Bank Reconciliation — US Corporate
-  - Accounts Receivable — EMEA Region
-  - Accounts Payable — Global Vendor Payments
-  - Intercompany Reconciliation — APAC Entities
-  - Payroll Reconciliation — North America
-- [x] Demo user auto-seeding on startup (all 6 roles)
+### SLA Monitoring & Escalation Engine
+- [x] `SLAPolicy` & `SLAViolation` models
+- [x] 3-level escalation ladder (L1 owner → L2 manager → L3 reassign)
+- [x] APScheduler background monitoring job (4h cadence)
+- [x] Full CRUD routing and dashboard integration
+
+### Enterprise Integration & Quality
+- [x] Financial Close Calendar full lifecycle and readiness enforcement
+- [x] Oracle ARCS-Style Transaction Matching Engine with AI suggestions and FX conversion
+- [x] Advanced Enterprise Dashboards with team-based RLS
+- [x] Native Server-Sent Events (SSE) Real-time Notifications
+- [x] Full Automated Test Suite (Pytest) coverage
 
 ---
 
-## ⚠️ Known Gaps / Open Items
+## 🟡 Known Gaps / Open Items
 
-| Area | Gap | Priority |
-|------|-----|----------|
-| Tests | No automated test suite for variance service or submission gate | Medium |
-| Tests | No integration tests for execution → promote → certify flow | Medium |
-| QA | Variance analytics route needs end-to-end browser walkthrough | Medium |
-| Migration | Alembic migration file exists but may need re-run in fresh environments | Low |
-| Docs | Screenshots placeholders in PROJECT_GUIDE.md not yet captured | Low |
+- **SSO/MFA:** External Identity Providers (SAML/OAuth2) and 2FA are explicitly deferred per user request.
 
 ---
 
 ## 🔑 Demo Mode
 
-Set `DEMO_MODE=true` in `backend/.env` to enable auto-seeding on every restart.
+Set `DEMO_MODE=true` in `backend/.env` to enable auto-seeding on every restart.  
 Set `DEMO_MODE=false` (default) for production — auto-purges any lingering demo records.
+
+**Demo credentials:**
+
+| Role | Username | Password | Landing Page |
+|------|----------|----------|--------------| 
+| `admin` | admin | admin123 | `/command-center` |
+| `preparer` | preparer | preparer123 | `/my-reconciliations` |
+| `approver` | approver | approver123 | `/approver-dashboard` |
+| `certifier` | certifier | certifier123 | `/executive-dashboard` |
 
 ---
 
@@ -97,11 +112,21 @@ Set `DEMO_MODE=false` (default) for production — auto-purges any lingering dem
 | Variance engine | `backend/app/services/variance_service.py` |
 | Matching engine | `backend/app/services/matching_engine.py` |
 | Enterprise profiles (full service) | `backend/app/enterprise/service.py` |
-| Certification lifecycle | `backend/app/enterprise/lifecycle_service.py` |
+| Certification lifecycle state machine | `backend/app/enterprise/lifecycle_service.py` |
+| **Financial Close Calendar service** | `backend/app/services/close_calendar_service.py` |
+| **Financial Close Calendar routes** | `backend/app/routes/close_calendar.py` |
+| **Close Calendar migration** | `backend/app/models/close_calendar_migration.py` |
+| **SLA monitoring service (scan engine)** | `backend/app/services/sla_monitoring_service.py` |
+| **SLA escalation engine** | `backend/app/services/escalation_service.py` |
+| **SLA router (API endpoints)** | `backend/app/routes/sla_router.py` |
+| **SLA migration** | `backend/app/models/sla_monitoring_migration.py` |
+| Background job scheduler | `backend/app/scheduler/service.py` |
 | Frontend routing | `frontend/src/App.jsx` |
-| Sidebar navigation | `frontend/src/components/Layout.jsx` |
+| Sidebar navigation (all roles) | `frontend/src/components/Layout.jsx` |
 | Preparer UI | `frontend/src/pages/PreparerWorkbench.jsx` |
-| Approver UI (review + approval) | `frontend/src/pages/ApproverWorkbench.jsx` |
+| Approver dashboard | `frontend/src/pages/ApproverDashboard.jsx` |
 | Balance workspace | `frontend/src/pages/BalanceReconciliationPage.jsx` |
 | Variance dashboard | `frontend/src/pages/VarianceAnalyticsDashboard.jsx` |
-| **5-project demo seeder** | `backend/scripts/seed_demo_projects.py` |
+| **Financial Close Calendar page** | `frontend/src/pages/FinancialCloseCalendarPage.jsx` |
+| **SLA Monitor dashboard** | `frontend/src/pages/SLAMonitorDashboard.jsx` |
+| **Escalation Workbench** | `frontend/src/pages/EscalationWorkbench.jsx` |

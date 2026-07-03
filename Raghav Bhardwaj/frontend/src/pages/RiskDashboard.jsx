@@ -6,8 +6,9 @@
  *   GET  /enterprise/risk/scores?profile_id={id} → per-profile factor breakdown
  *   POST /enterprise/risk/calculate        → trigger batch re-score
  */
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useOutletContext } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
 import {
   ShieldAlert, ShieldCheck, AlertTriangle, Clock,
@@ -61,52 +62,95 @@ function fmtAge(iso) {
 
 // ── Risk Gauge (progressive fill) ────────────────────────────────────────
 function RiskGauge({ score }) {
-  const palette = [
-    '#4ade80','#4ade80','#a3e635','#facc15',
-    '#facc15','#f97316','#f97316','#ea580c','#ef4444','#ef4444',
-  ]
-  const inactive = '#334155'
-  const colors = palette.map((c, i) => [(i + 1) / 10, score > i * 10 ? c : inactive])
+  const radius = 100
+  const strokeWidth = 14
+  const circumference = Math.PI * radius
+  
+  // Constrain score
+  const s = Math.max(0, Math.min(100, score || 0))
+  const dashoffset = circumference * (1 - s / 100)
 
-  const status = score < 25 ? { label: 'LOW', color: '#4ade80' }
-    : score < 50 ? { label: 'MEDIUM', color: '#facc15' }
-    : score < 75 ? { label: 'HIGH', color: '#f97316' }
+  // Status mapping
+  const status = s < 25 ? { label: 'LOW', color: '#10b981' }
+    : s < 50 ? { label: 'MEDIUM', color: '#f59e0b' }
+    : s < 75 ? { label: 'HIGH', color: '#f97316' }
     : { label: 'CRITICAL', color: '#ef4444' }
 
-  const option = {
-    ...ECHART_BASE,
-    series: [{
-      type: 'gauge', startAngle: 180, endAngle: 0,
-      min: 0, max: 100, splitNumber: 10,
-      radius: '95%', center: ['50%', '70%'],
-      axisLine: { lineStyle: { width: 24, color: colors } },
-      splitLine: { show: true, distance: -24, length: 24, lineStyle: { color: '#1e293b', width: 4 } },
-      axisTick: { show: false },
-      axisLabel: {
-        show: true, distance: 18, color: C.muted, fontSize: 10, fontWeight: 600,
-        formatter: v => v % 20 === 0 ? v : '',
-      },
-      pointer: {
-        show: true, icon: 'path://M50,0 L100,100 L0,100 Z',
-        length: '8%', width: 12, offsetCenter: [0, '-58%'],
-        itemStyle: { color: status.color },
-      },
-      title: { show: true, offsetCenter: [0, '15%'], color: C.muted, fontSize: 12, fontWeight: 700 },
-      detail: { valueAnimation: true, formatter: '{value}', color: C.text, fontSize: 38, fontWeight: 800, offsetCenter: [0, '-15%'] },
-      data: [{ value: score, name: status.label }],
-    }],
-  }
-
   return (
-    <div>
-      <ReactECharts option={option} style={{ height: 200 }} notMerge />
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: -10, paddingBottom: 12 }}>
-        {[['Low','#4ade80'],['Medium','#facc15'],['High','#f97316'],['Critical','#ef4444']].map(([l,c]) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', width: '100%' }}>
+      
+      {/* SVG Gauge Container */}
+      <div style={{ position: 'relative', width: 240, height: 140, marginTop: 16 }}>
+        <svg viewBox="0 0 240 140" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <defs>
+            <linearGradient id="riskGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="35%" stopColor="#f59e0b" />
+              <stop offset="70%" stopColor="#f97316" />
+              <stop offset="100%" stopColor="#ef4444" />
+            </linearGradient>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="8" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          {/* Background Arc */}
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            fill="none"
+            stroke="var(--surface-3)"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+
+          {/* Active Gradient Arc */}
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            fill="none"
+            stroke="url(#riskGrad)"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashoffset}
+            filter="url(#glow)"
+            style={{ transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)' }}
+          />
+        </svg>
+
+        {/* Center Labels */}
+        <div style={{ position: 'absolute', top: 75, left: 0, width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: 42, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+            {score.toFixed(1)}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: status.color, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4, textShadow: `0 0 10px ${status.color}40` }}>
+            {status.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, padding: '8px 16px', background: 'var(--surface-1)', borderRadius: 9999, border: '1px solid var(--border-0)' }}>
+        {[['Low','#10b981'],['Medium','#f59e0b'],['High','#f97316'],['Critical','#ef4444']].map(([l,c]) => (
           <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
-            <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{l}</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, boxShadow: `0 0 8px ${c}` }} />
+            <span style={{ fontSize: 11, color: 'var(--text-primary)', fontWeight: 600 }}>{l}</span>
           </div>
         ))}
+      </div>
+
+      <div style={{ width: '100%', height: 1, background: 'var(--border-0)', margin: '24px 0 16px 0' }} />
+
+      {/* Stats Row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '0 24px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>Current Score</p>
+          <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'IBM Plex Mono, monospace' }}>{fmtScore(score)}</p>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 4 }}>Risk Level</p>
+          <p style={{ fontSize: 15, fontWeight: 600, color: status.color }}>{status.label.charAt(0) + status.label.slice(1).toLowerCase()}</p>
+        </div>
       </div>
     </div>
   )
@@ -297,6 +341,7 @@ const TABS = [
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function RiskDashboard() {
   const qc = useQueryClient()
+  const { setHeaderOverride } = useOutletContext() || {}
   const [tab, setTab]               = useState('overview')
   const [search, setSearch]         = useState('')
   const [riskFilter, setRiskFilter] = useState('')
@@ -328,21 +373,30 @@ export default function RiskDashboard() {
 
   const toggleRow = useCallback(id => setExpandedId(prev => prev === id ? null : id), [])
 
-  if (isLoading) return (
-    <div className="h-full flex flex-col">
-      <PageHeader title="Risk Dashboard" subtitle="Enterprise-wide risk scoring and compliance." />
-      <LoadingState />
-    </div>
-  )
-
-  return (
-    <div className="h-full flex flex-col">
-      <PageHeader
-        title="Risk Dashboard"
-        subtitle="Live risk scores computed from match rates, exceptions, variance, and SoD checks."
-        badge={`Overall: ${fmtScore(totalScore)} / 100`}
-        actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+  // Override Layout Header
+  useEffect(() => {
+    if (setHeaderOverride) {
+      setHeaderOverride(
+        <header className="bl-header" style={{ padding: '0 24px' }}>
+          <div className="flex flex-col min-w-0 flex-shrink-0">
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)', lineHeight: 1, fontFamily: 'Inter, sans-serif' }}>
+              ANALYTICS
+            </p>
+            <div className="flex items-center gap-3 mt-[2px]">
+              <h1 className="bl-header-title">Risk Analytics</h1>
+              <span style={{ 
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, 
+                border: '1px solid var(--border-2)', background: 'rgba(255, 255, 255, 0.03)', color: '#f59e0b',
+                whiteSpace: 'nowrap'
+              }}>
+                OVERALL: {fmtScore(totalScore)} / 100
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex-1" />
+          
+          <div className="flex items-center gap-4">
             {scoredAt && (
               <span style={{ fontSize: 11, color: C.sub, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Clock style={{ width: 12, height: 12 }} />
@@ -351,7 +405,7 @@ export default function RiskDashboard() {
             )}
             <button
               className="btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', height: 32 }}
               onClick={() => recalcMutation.mutate()}
               disabled={recalcMutation.isPending}
             >
@@ -359,8 +413,20 @@ export default function RiskDashboard() {
               {recalcMutation.isPending ? 'Scoring…' : 'Recalculate'}
             </button>
           </div>
-        }
-      />
+        </header>
+      )
+    }
+    return () => setHeaderOverride?.(null)
+  }, [setHeaderOverride, totalScore, scoredAt, recalcMutation.isPending, recalcMutation.mutate])
+
+  if (isLoading) return (
+    <div className="h-full flex flex-col">
+      <LoadingState />
+    </div>
+  )
+
+  return (
+    <div className="h-full flex flex-col">
 
       <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
 

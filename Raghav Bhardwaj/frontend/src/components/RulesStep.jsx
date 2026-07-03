@@ -4,7 +4,14 @@ import toast from 'react-hot-toast'
 import { Plus, Trash2, ToggleLeft, ToggleRight, Settings2, AlertCircle } from 'lucide-react'
 import clsx from 'clsx'
 
-const RULE_TYPES = [
+const ARCS_MATCH_TYPES = [
+  { value: '1-to-1', label: '1 to 1' },
+  { value: '1-to-M', label: '1 to Many' },
+  { value: 'M-to-1', label: 'Many to 1' },
+  { value: 'M-to-M', label: 'Many to Many' },
+]
+
+const CONDITION_TYPES = [
   { value: 'exact', label: 'Exact Match' },
   { value: 'tolerance', label: 'Tolerance' },
   { value: 'fuzzy', label: 'Fuzzy / String' },
@@ -18,6 +25,7 @@ function RuleForm({ rule, srcCols, onSave, onCancel }) {
       rule_type: 'exact',
       is_active: true,
       config: {
+        arcs_match_type: '1-to-1',
         source_column: srcCols[0] || '',
         threshold: 0,
         tolerance_type: 'absolute',
@@ -60,22 +68,40 @@ function RuleForm({ rule, srcCols, onSave, onCancel }) {
           />
         </div>
         <div>
-          <label className="label">Rule Type</label>
+          <label className="label">Match Type</label>
           <select
             className="input"
-            value={form.rule_type}
-            onChange={(event) => setForm({ ...form, rule_type: event.target.value })}
+            value={form.config.arcs_match_type || '1-to-1'}
+            onChange={(event) => setConfig('arcs_match_type', event.target.value)}
           >
-            {RULE_TYPES.map((ruleType) => (
-              <option key={ruleType.value} value={ruleType.value}>
-                {ruleType.label}
+            {ARCS_MATCH_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
               </option>
             ))}
           </select>
         </div>
       </div>
 
+      <div className="pt-2 pb-1 border-b border-surface-600">
+        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Primary Condition</h4>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Condition Type</label>
+          <select
+            className="input"
+            value={form.rule_type}
+            onChange={(event) => setForm({ ...form, rule_type: event.target.value })}
+          >
+            {CONDITION_TYPES.map((ruleType) => (
+              <option key={ruleType.value} value={ruleType.value}>
+                {ruleType.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="label">Source Column</label>
           <select
@@ -158,6 +184,16 @@ function RuleForm({ rule, srcCols, onSave, onCancel }) {
             </div>
           </>
         )}
+      </div>
+
+      <div className="pt-2 flex justify-start">
+        <button
+          type="button"
+          className="btn-secondary text-xs py-1 h-7 border-dashed border-surface-500"
+          onClick={() => toast('Multi-condition rules (AND/OR logic) will be supported in v2')}
+        >
+          <Plus className="w-3 h-3" /> Add Additional Condition
+        </button>
       </div>
 
       <div className="flex items-center justify-between pt-1">
@@ -255,14 +291,14 @@ export default function RulesStep({ project, datasets, onNext }) {
     }
   }
 
-  const getRuleTypeBadge = (type) => {
+  const getMatchTypeBadge = (type) => {
     const colors = {
-      exact: 'bg-slate-700 text-slate-300',
-      tolerance: 'bg-surface-700 text-slate-300',
-      fuzzy: 'bg-surface-700 text-slate-300',
-      date_diff: 'bg-amber-900/50 text-amber-400',
+      '1-to-1': 'bg-emerald-500 text-white shadow-sm',
+      '1-to-M': 'bg-indigo-500 text-white shadow-sm',
+      'M-to-1': 'bg-indigo-500 text-white shadow-sm',
+      'M-to-M': 'bg-amber-500 text-white shadow-sm',
     }
-    return colors[type] || 'bg-slate-700 text-slate-300'
+    return colors[type] || 'bg-slate-500 text-white shadow-sm'
   }
 
   const parseConfig = (configStr) => {
@@ -282,7 +318,7 @@ export default function RulesStep({ project, datasets, onNext }) {
   }
 
   return (
-    <div className="p-4 lg:p-5 space-y-4">
+    <div className="p-4 lg:p-5 flex flex-col flex-1 min-h-0 gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-400">
           Define matching rules per column. Rules determine how source and target values are compared.
@@ -317,7 +353,7 @@ export default function RulesStep({ project, datasets, onNext }) {
         </div>
       )}
 
-      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+      <div className="space-y-2 flex-1 overflow-y-auto pr-1 min-h-0">
         {rules.map((rule) => {
           const config = parseConfig(rule.config)
           return editRule?.id === rule.id ? (
@@ -344,14 +380,17 @@ export default function RulesStep({ project, datasets, onNext }) {
                   <span
                     className={clsx(
                       'text-[10px] font-bold px-1.5 py-0.5 rounded uppercase',
-                      getRuleTypeBadge(rule.rule_type)
+                      getMatchTypeBadge(config.arcs_match_type)
                     )}
                   >
+                    {config.arcs_match_type || '1-to-1'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 px-1 bg-surface-800 rounded">
                     {rule.rule_type}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Column: <span className="text-slate-400">{config.source_column}</span>
+                  Primary Condition: <span className="text-slate-400">{config.source_column}</span>
                   {config.threshold !== undefined && (
                     <>
                       {' '}
@@ -400,7 +439,7 @@ export default function RulesStep({ project, datasets, onNext }) {
         </div>
       )}
 
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-end pt-2 mt-auto">
         <button className="btn-primary" onClick={onNext}>
           Continue to Execute
         </button>

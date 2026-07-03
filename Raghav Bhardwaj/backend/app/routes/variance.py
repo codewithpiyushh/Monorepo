@@ -21,9 +21,12 @@ def variance_flux(
     period_key: Optional[str] = Query(None),
     top_n: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER])),
+    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER, PREPARER])),
 ):
-    return variance_service.get_variance_flux_summary(db, profile_id=profile_id, period_key=period_key, top_n=top_n)
+    return variance_service.get_variance_flux_summary(
+        db, profile_id=profile_id, period_key=period_key, top_n=top_n,
+        current_user=current_user,
+    )
 
 
 @router.get("/variance-trends", response_model=list[VarianceTrendRow])
@@ -31,9 +34,12 @@ def variance_trends(
     profile_id: Optional[int] = Query(None),
     months: int = Query(6, ge=2, le=12),
     db: Session = Depends(get_db),
-    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER])),
+    current_user=Depends(role_required([ADMIN, APPROVER, CERTIFIER, PREPARER])),
 ):
-    return variance_service.get_variance_trends(db, profile_id=profile_id, months=months)
+    return variance_service.get_variance_trends(
+        db, profile_id=profile_id, months=months,
+        current_user=current_user,
+    )
 
 
 @router.post("/variance-refresh/{balance_id}")

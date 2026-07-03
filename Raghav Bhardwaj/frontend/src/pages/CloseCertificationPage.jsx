@@ -35,6 +35,12 @@ function PeriodRow({ cal, profile, cert, tasks, onLock, onUnlock, users }) {
   const [unlockReason, setUnlockReason] = useState('')
   const [showUnlockBox, setShowUnlockBox] = useState(false)
 
+  const { data: certHistory = [] } = useQuery({
+    queryKey: ['cert-history', cert?.id],
+    queryFn: () => enterpriseAPI.getCertificationWorkflowHistory(cert.id),
+    enabled: !!cert?.id && expanded
+  })
+
   const completedTasks = tasks.filter((t) => t.status === 'COMPLETE').length
   const totalTasks     = tasks.length
   const taskPct        = totalTasks ? Math.round(completedTasks / totalTasks * 100) : 0
@@ -140,6 +146,30 @@ function PeriodRow({ cal, profile, cert, tasks, onLock, onUnlock, users }) {
                 <span>Due: <strong>{cert.due_date}</strong></span>
                 {cert.last_comment && <span>Comment: <em>"{cert.last_comment}"</em></span>}
               </div>
+
+              {certHistory.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--border-1)' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)', marginBottom: 8 }}>
+                    Audit History
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {certHistory.map((h, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                        <div style={{ color: 'var(--text-tertiary)', width: 130, flexShrink: 0 }}>
+                          {new Date(h.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{h.action}</span>
+                          <span style={{ color: 'var(--text-secondary)', marginLeft: 6 }}>
+                            {h.from_status || 'OPEN'} → {h.to_status}
+                          </span>
+                          {h.comments && <span style={{ color: 'var(--text-tertiary)', marginLeft: 6, fontStyle: 'italic' }}>({h.comments})</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

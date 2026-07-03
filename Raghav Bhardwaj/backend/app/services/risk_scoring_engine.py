@@ -352,7 +352,7 @@ def score_all_profiles(
     return results, errors
 
 
-def get_risk_dashboard(db: Session) -> dict:
+def get_risk_dashboard(db: Session, current_user: Optional[User] = None) -> dict:
     """
     Full dashboard payload for GET /enterprise/dashboard/risk-real.
     Uses cached score when fresh (< 10 min), else re-scores live.
@@ -362,17 +362,19 @@ def get_risk_dashboard(db: Session) -> dict:
         CertificationWorkflow,
         ExceptionQueueRecord,
         MatchGroup,
+        User
     )
+    from ..rbac.rls import apply_profile_rls
 
     today = date.today()
     now   = datetime.utcnow()
     STALE_MINUTES = 10
 
-    profiles = (
-        db.query(ReconciliationProfile)
-        .filter(ReconciliationProfile.active == True)
-        .all()
-    )
+    profile_query = db.query(ReconciliationProfile).filter(ReconciliationProfile.active == True)
+    if current_user:
+        profile_query = apply_profile_rls(profile_query, current_user, profile_model=ReconciliationProfile)
+        
+    profiles = profile_query.all()
 
     profile_risk = []
     for p in profiles:
@@ -512,6 +514,6 @@ def get_risk_dashboard(db: Session) -> dict:
         "sod_violations":           sod_violations[:20],
         "overdue_high_risk":        overdue_high_risk[:20],
         "total_risk_score":         total_score,
-        "scored_at":                now.isoformat(),
+        "scored_at":                now.isoformat() + "Z",
         "profile_count":            len(profiles),
     }

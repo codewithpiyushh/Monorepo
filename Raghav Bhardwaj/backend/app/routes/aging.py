@@ -46,19 +46,16 @@ def aging_summary(
     Four-bucket aging KPI summary.
     Preparers are automatically scoped to their own assigned exceptions.
     """
-    scoped_owner = owner_id
-    if (current_user.role or "").lower() == "preparer" and owner_id is None:
-        scoped_owner = current_user.id
-
     return aging_service.get_aging_summary(
         db,
         profile_id          = profile_id,
-        owner_id            = scoped_owner,
+        owner_id            = owner_id,
         status_filter       = status,
         risk_classification = risk_classification,
         date_from           = date_from,
         date_to             = date_to,
         include_resolved    = include_resolved,
+        current_user        = current_user,
     )
 
 
@@ -85,15 +82,11 @@ def aging_details(
     Paginated exception list with age_days, bucket, bucket_color, and profile context.
     Clicking a KPI card in the UI calls this with ?bucket=WARNING etc.
     """
-    scoped_owner = owner_id
-    if (current_user.role or "").lower() == "preparer" and owner_id is None:
-        scoped_owner = current_user.id
-
     return aging_service.get_aging_details(
         db,
         bucket              = bucket,
         profile_id          = profile_id,
-        owner_id            = scoped_owner,
+        owner_id            = owner_id,
         status_filter       = status,
         risk_classification = risk_classification,
         date_from           = date_from,
@@ -103,6 +96,7 @@ def aging_details(
         page_size           = page_size,
         sort_by             = sort_by,
         sort_desc           = sort_desc,
+        current_user        = current_user,
     )
 
 
@@ -119,7 +113,7 @@ def aging_trend(
     Month-over-month aging trend. Uses snapshots for historical periods,
     live data for the current period.
     """
-    return aging_service.get_aging_trend(db, profile_id=profile_id, months=months)
+    return aging_service.get_aging_trend(db, profile_id=profile_id, months=months, current_user=current_user)
 
 
 # ── Escalation trigger — can be called manually or by scheduler ───────────────
