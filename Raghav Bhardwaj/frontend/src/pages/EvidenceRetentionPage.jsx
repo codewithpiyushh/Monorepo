@@ -1,18 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import PageHeader from '../components/ui/PageHeader';
-import client from '../api/client';
+import { evidenceRetentionAPI } from '../api';
 import { 
   Database, Archive, FileText, HardDrive, Clock, Shield, 
   Trash2, Download, Settings, Play, CheckCircle2, AlertCircle, ArrowRight
 } from 'lucide-react';
-
-// Mock Data
-const metricData = [
-  { label: 'Total Storage', value: '4.2 TB', icon: HardDrive, color: 'text-blue-400' },
-  { label: 'Active Data', value: '1.5 TB', icon: Database, color: 'text-emerald-400' },
-  { label: 'Cold Storage (Archived)', value: '2.7 TB', icon: Archive, color: 'text-purple-400' },
-];
 
 // Data will be fetched from API
 
@@ -21,17 +14,20 @@ export default function EvidenceRetentionPage() {
   const [policies, setPolicies] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [policiesRes, jobsRes] = await Promise.all([
-          client.get('/api/v1/evidence-retention/policies'),
-          client.get('/api/v1/evidence-retention/jobs')
+        const [policiesData, jobsData, metricsData] = await Promise.all([
+          evidenceRetentionAPI.listPolicies(),
+          evidenceRetentionAPI.listJobs(),
+          evidenceRetentionAPI.getMetrics().catch(() => null)
         ]);
+        setMetrics(metricsData);
         
-        const mappedPolicies = (policiesRes.data || []).map(p => ({
+        const mappedPolicies = (policiesData || []).map(p => ({
           id: p.id,
           name: p.doc_type || 'General Document',
           rule: `> ${p.retention_period_days} Days`,
@@ -39,7 +35,7 @@ export default function EvidenceRetentionPage() {
           isArchive: !!p.cold_storage_days
         }));
         
-        const mappedJobs = (jobsRes.data || []).map(j => {
+        const mappedJobs = (jobsData || []).map(j => {
           let uiStatus = j.status;
           if (j.status === 'PENDING') uiStatus = 'Scheduled';
           if (j.status === 'IN_PROGRESS') uiStatus = 'Running';
@@ -67,6 +63,16 @@ export default function EvidenceRetentionPage() {
     
     fetchData();
   }, []);
+
+  const metricData = metrics ? [
+    { label: 'Total Storage', value: metrics.total_storage, icon: HardDrive, color: 'var(--accent)' },
+    { label: 'Active Data', value: metrics.active_storage, icon: Database, color: 'var(--ok)' },
+    { label: 'Cold Storage (Archived)', value: metrics.cold_storage, icon: Archive, color: 'var(--warn)' },
+  ] : [
+    { label: 'Total Storage', value: '—', icon: HardDrive, color: 'var(--accent)' },
+    { label: 'Active Data', value: '—', icon: Database, color: 'var(--ok)' },
+    { label: 'Cold Storage (Archived)', value: '—', icon: Archive, color: 'var(--warn)' },
+  ];
 
   // Chart Configuration
   const storageChartOption = {
@@ -119,168 +125,149 @@ export default function EvidenceRetentionPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <PageHeader 
-        title="Evidence Retention & Archival" 
-        subtitle="Manage data lifecycle, archival schedules, and storage metrics for PDFs and attachments." 
-      />
+    <div className="h-full flex flex-col">
 
       {/* Tabs */}
-      <div className="flex space-x-4 border-b border-[var(--border-color)] pb-2">
-        {['overview', 'policies', 'schedules', 'settings'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 capitalize font-medium transition-colors ${
-              activeTab === tab 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
+      <div style={{ padding: '12px 24px', background: 'var(--surface-0)', borderBottom: '1px solid var(--border-1)' }}>
+        <div className="tab-bar" style={{ background: 'var(--surface-1)', borderRadius: 8, display: 'inline-flex' }}>
+          {['overview', 'policies', 'schedules', 'settings'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`tab-item ${activeTab === tab ? 'tab-active' : ''}`}
+              style={{ textTransform: 'capitalize' }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {/* Top Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {metricData.map((metric, idx) => (
-              <div key={idx} className="premium-card micro-anim p-6 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-400 mb-1">{metric.label}</p>
-                  <p className="text-3xl font-bold text-white">{metric.value}</p>
-                </div>
-                <div className={`p-4 rounded-full bg-black/20 ${metric.color}`}>
-                  <metric.icon size={32} strokeWidth={1.5} />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chart Area */}
-            <div className="lg:col-span-2 glass-panel p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Database size={20} className="text-blue-400" />
-                  Storage Growth Trends
-                </h3>
-                <button className="text-xs text-gray-400 hover:text-white flex items-center gap-1 transition-colors">
-                  <Download size={14} /> Export Report
-                </button>
-              </div>
-              <div className="h-[350px]">
-                <ReactECharts option={storageChartOption} style={{ height: '100%', width: '100%' }} />
-              </div>
-            </div>
-
-            {/* Quick Policies */}
-            <div className="glass-panel p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Shield size={20} className="text-purple-400" />
-                  Active Retention Rules
-                </h3>
-                <button className="text-blue-400 hover:text-blue-300 transition-colors">
-                  <Settings size={18} />
-                </button>
-              </div>
-              <div className="space-y-4">
-                {policies.map(policy => (
-                  <div key={policy.id} className="premium-card p-4 hover:border-blue-500/50 transition-colors cursor-pointer group">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-medium text-gray-200 group-hover:text-white transition-colors">{policy.name}</span>
-                      {policy.isArchive ? (
-                        <Archive size={16} className="text-gray-400 group-hover:text-blue-400" />
-                      ) : (
-                        <Trash2 size={16} className="text-gray-400 group-hover:text-blue-400" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-mono text-xs">
-                        {policy.rule}
-                      </span>
-                      <span className="text-gray-400 flex items-center gap-1">
-                        <ArrowRight size={12} /> {policy.action}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Archival Schedules Table */}
-          <div className="glass-panel p-6">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Clock size={20} className="text-emerald-400" />
-                  Upcoming Archival Schedules
-                </h3>
-                <p className="text-sm text-gray-400 mt-1">Automated jobs for moving data to cold storage or deletion.</p>
-              </div>
-              <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2">
-                <Play size={16} /> Run Manual Job
-              </button>
-            </div>
+      <div className="flex-1 overflow-auto p-4" style={{ background: 'var(--surface-0)' }}>
+        {activeTab === 'overview' && (
+          <div className="flex flex-col h-full gap-4">
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700/50 text-gray-400">
-                    <th className="pb-3 font-medium">Job ID</th>
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Target Dataset</th>
-                    <th className="pb-3 font-medium">Next Run</th>
-                    <th className="pb-3 font-medium">Impact (Size)</th>
-                    <th className="pb-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700/30">
-                  {schedules.map((schedule) => (
-                    <tr key={schedule.id} className="hover:bg-white/5 transition-colors">
-                      <td className="py-4 font-mono text-gray-300">{schedule.id}</td>
-                      <td className="py-4 text-gray-200 font-medium">{schedule.name}</td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2 text-gray-400">
-                          <FileText size={14} /> {schedule.dataset}
-                        </div>
-                      </td>
-                      <td className="py-4 text-gray-300">{schedule.nextRun}</td>
-                      <td className="py-4 text-gray-400">{schedule.items} items <span className="text-gray-500">({schedule.size})</span></td>
-                      <td className="py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          schedule.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400' :
-                          schedule.status === 'Running' ? 'bg-blue-500/10 text-blue-400' :
-                          'bg-gray-500/10 text-gray-400'
-                        }`}>
-                          {schedule.status === 'Completed' && <CheckCircle2 size={12} />}
-                          {schedule.status === 'Running' && <AlertCircle size={12} className="animate-pulse" />}
-                          {schedule.status === 'Scheduled' && <Clock size={12} />}
-                          {schedule.status}
+            {/* Top Metrics Banner */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              {metricData.map((metric, idx) => (
+                <div key={idx} style={{ flex: 1, background: 'var(--surface-1)', border: '1px solid var(--border-1)', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>{metric.label}</p>
+                    <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{metric.value}</p>
+                  </div>
+                  <div style={{ color: metric.color }}>
+                    <metric.icon size={24} strokeWidth={1.5} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 250 }}>
+              {/* Chart Area */}
+              <div style={{ flex: 2, background: 'var(--surface-1)', border: '1px solid var(--border-1)', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Database size={16} style={{ color: 'var(--accent)' }} />
+                    Storage Growth Trends
+                  </h3>
+                  <button className="btn-secondary text-xs py-1 h-7 px-3 flex items-center gap-1">
+                    <Download size={12} /> Export
+                  </button>
+                </div>
+                <div style={{ flex: 1, minHeight: 0, padding: '8px' }}>
+                  <ReactECharts option={storageChartOption} style={{ height: '100%', width: '100%' }} />
+                </div>
+              </div>
+
+              {/* Quick Policies Area */}
+              <div style={{ flex: 1, background: 'var(--surface-1)', border: '1px solid var(--border-1)', borderRadius: 8, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Shield size={16} style={{ color: '#8b5cf6' }} />
+                    Active Retention Rules
+                  </h3>
+                  <button className="btn-ghost text-xs py-1 h-7 px-2">
+                    <Settings size={14} />
+                  </button>
+                </div>
+                <div className="slim-scroll" style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {policies.map(policy => (
+                    <div key={policy.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--border-0)', borderRadius: 6, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{policy.name}</span>
+                        {policy.isArchive ? <Archive size={14} style={{ color: 'var(--text-tertiary)' }} /> : <Trash2 size={14} style={{ color: 'var(--text-tertiary)' }} />}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, background: 'var(--surface-3)', color: 'var(--accent)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
+                          {policy.rule}
                         </span>
-                      </td>
-                    </tr>
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <ArrowRight size={10} /> {policy.action}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Archival Schedules Table */}
+            <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border-1)', borderRadius: 8, display: 'flex', flexDirection: 'column', height: 180, flexShrink: 0 }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Clock size={16} style={{ color: 'var(--ok)' }} />
+                  <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Upcoming Archival Schedules</h3>
+                </div>
+                <button className="btn-primary text-xs py-1 h-7 px-3 flex items-center gap-1">
+                  <Play size={12} /> Run Manual
+                </button>
+              </div>
+              <div className="slim-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--surface-2)', zIndex: 1 }}>
+                    <tr>
+                      <th style={{ padding: '6px 16px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', borderBottom: '1px solid var(--border-0)' }}>Job ID</th>
+                      <th style={{ padding: '6px 16px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', borderBottom: '1px solid var(--border-0)' }}>Name</th>
+                      <th style={{ padding: '6px 16px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', borderBottom: '1px solid var(--border-0)' }}>Dataset</th>
+                      <th style={{ padding: '6px 16px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', borderBottom: '1px solid var(--border-0)' }}>Next Run</th>
+                      <th style={{ padding: '6px 16px', fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', borderBottom: '1px solid var(--border-0)' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedules.map((schedule) => (
+                      <tr key={schedule.id} style={{ borderBottom: '1px solid var(--border-0)' }}>
+                        <td style={{ padding: '6px 16px', fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{schedule.id}</td>
+                        <td style={{ padding: '6px 16px', fontSize: 12, color: 'var(--text-primary)', fontWeight: 500 }}>{schedule.name}</td>
+                        <td style={{ padding: '6px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>{schedule.dataset}</td>
+                        <td style={{ padding: '6px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>{schedule.nextRun}</td>
+                        <td style={{ padding: '6px 16px' }}>
+                          <span style={{ 
+                            fontSize: 10, padding: '2px 8px', borderRadius: 9999, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4,
+                            background: schedule.status === 'Completed' ? 'rgba(34,197,94,.1)' : schedule.status === 'Running' ? 'rgba(59,130,246,.1)' : 'var(--surface-3)',
+                            color: schedule.status === 'Completed' ? 'var(--ok)' : schedule.status === 'Running' ? 'var(--accent)' : 'var(--text-tertiary)'
+                          }}>
+                            {schedule.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {activeTab !== 'overview' && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <div style={{ textAlign: 'center' }}>
+              <Archive size={32} style={{ color: 'var(--text-disabled)', margin: '0 auto 12px' }} />
+              <h2 style={{ fontSize: 16, color: 'var(--text-secondary)' }}>Detailed {activeTab} view</h2>
             </div>
           </div>
-        </div>
-      )}
-      
-      {activeTab !== 'overview' && (
-        <div className="glass-panel p-12 text-center flex flex-col items-center justify-center">
-          <Archive size={48} className="text-gray-600 mb-4" strokeWidth={1} />
-          <h2 className="text-xl font-medium text-gray-300 mb-2">Detailed {activeTab} view</h2>
-          <p className="text-gray-500 max-w-md">
-            This module provides comprehensive management for {activeTab}. Content goes here in full implementation.
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

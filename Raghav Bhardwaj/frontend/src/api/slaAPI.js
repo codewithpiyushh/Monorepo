@@ -5,7 +5,7 @@
 
 import client from './client'
 
-const BASE = '/api/v1/sla'
+const BASE = '/v1/sla'
 
 export const slaAPI = {
   // ── Violations (role-scoped per backend RBAC) ──────────────────────────

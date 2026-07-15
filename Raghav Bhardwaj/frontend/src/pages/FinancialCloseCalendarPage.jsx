@@ -616,7 +616,11 @@ export default function FinancialCloseCalendarPage() {
   const kpis = periodsQ.data?.kpis
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{
+      padding: '24px 32px', maxWidth: 1200, margin: '0 auto',
+      height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0,
+      boxSizing: 'border-box',
+    }}>
       <PageHeader
         title="Financial Close Calendar"
         subtitle="Enterprise orchestration layer for monthly and quarterly close management"
@@ -630,12 +634,12 @@ export default function FinancialCloseCalendarPage() {
         }
       />
 
-      <div style={{ marginTop: 20 }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: 16, paddingRight: 4 }} className="slim-scroll">
         {periodsQ.isLoading && <LoadingState message="Loading close periods…" />}
         {periodsQ.isError && <ErrorState message="Failed to load close calendar" onRetry={periodsQ.refetch} />}
 
         {kpis && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
             <KpiCard icon={Calendar} label="Open Periods" value={kpis.open_periods} color={C.accent} />
             <KpiCard icon={Clock} label="Near Deadline" value={kpis.near_deadline} color={C.warn} />
             <KpiCard icon={AlertOctagon} label="Overdue Tasks" value={kpis.overdue_tasks} color={C.bad} />

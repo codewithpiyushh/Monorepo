@@ -29,7 +29,7 @@ const PAGE_META = {
   '/analytics-explorer':      { label: 'Analytics',                section: 'Analytics' },
   '/variance-analytics':      { label: 'Variance Analytics',       section: 'Analytics' },
   '/reconciliation-profiles': { label: 'Reconciliation Profiles',  section: 'Operations' },
-  '/admin':                   { label: 'Admin Center',              section: 'Administration' },
+
   '/work-queue':              { label: 'Work Queue',                section: 'My Work' },
   '/my-reconciliations':      { label: 'My Reconciliations',        section: 'My Work' },
   '/my-performance':          { label: 'My Performance',            section: 'My Work' },
@@ -37,18 +37,19 @@ const PAGE_META = {
   '/enterprise-ops':          { label: 'Enterprise Reconciliation Ops', section: 'Operations' },
   '/rule-builder':            { label: 'Rule Builder',              section: 'Configuration' },
   '/reconciliations':         { label: 'Reconciliations',           section: 'Operations' },
-  '/executive-dashboard':     { label: 'Executive Dashboard',       section: 'Analytics' },
+  '/executive-dashboard':     { label: 'Executive Dashboard',       section: 'Analytics', subtitle: 'Real-time financial close analytics and material risk exposure.' },
   '/approver-dashboard':      { label: 'Dashboard',                 section: 'Approval' },
   '/approver-queue':          { label: 'Pending Approvals',         section: 'Approval' },
   '/aging-dashboard':         { label: 'Aging Analysis',            section: 'Analytics' },
   '/close-calendar':          { label: 'Close Calendar',            section: 'Close Management' },
   '/financial-close-calendar': { label: 'Close Calendar',            section: 'Close Management' },
-  '/controls-governance':     { label: 'Compliance Dashboard',      section: 'Governance' },
-  '/audit':                   { label: 'Certification History',     section: 'Governance' },
+  '/controls-governance':     { label: 'Policy & Controls Studio',      section: 'Governance', subtitle: 'Segregation-of-duties enforcement, approval policy testing, and reusable control coverage.'},
+  '/audit':                   { label: 'Audit Trail',               section: 'Governance' },
   '/risk-dashboard':          { label: 'Risk Analytics',            section: 'Analytics' },
-  '/close-certification':     { label: 'Certification Queue',       section: 'Certification' },
-  '/auto-cert':               { label: 'Auto-Certification',        section: 'Certification' },
+  '/close-certification':     { label: 'Period Close Monitor', section: 'Period Close Monitor', subtitle: 'Manage close periods, lock controls, and certification workflows.' },
+  '/auto-cert':               { label: 'Auto-Certification Settings', section: 'Certification', subtitle: 'Configure zero-touch certification rules to automate the financial close.' },
   '/ingestion':               { label: 'Data Ingestion',            section: 'Data' },
+  '/evidence-retention':      { label: 'Evidence Retention & Archival', subtitle: 'Manage data lifecycle, archival schedules, and storage metrics for PDFs and attachments.' },
 }
 
 /* ─── Admin sidebar — new grouped structure with collapsible sections ─── */
@@ -74,15 +75,6 @@ const ADMIN_NAV = [
     ],
   },
 
-  // ── DATA dropdown ──
-  {
-    kind: 'group',
-    label: 'Data',
-    defaultOpen: false,
-    items: [
-      { to: '/ingestion', icon: Network, label: 'API Ingestion', tip: 'Data Ingestion Hub' },
-    ],
-  },
 
   // ── ANALYTICS dropdown ──
   {
@@ -96,13 +88,16 @@ const ADMIN_NAV = [
       { to: '/aging-dashboard',    icon: Clock,         label: 'Aging Analysis',      tip: 'Aging Analysis' },
     ],
   },
-  // Direct link
+  // ── CLOSE MANAGEMENT dropdown ──
   {
-    kind: 'link',
-    to: '/close-certification',
-    icon: CalendarCheck2,
+    kind: 'group',
     label: 'Close Management',
-    tip: 'Close Certification',
+    defaultOpen: false,
+    items: [
+      { to: '/close-certification',    icon: CalendarCheck2, label: 'Close Certification',    tip: 'Close Certification Queue' },
+      { to: '/certification-workflow', icon: FileCheck2,     label: 'Certification Workflow', tip: 'Certification Workflow Management' },
+      { to: '/financial-close-calendar', icon: Clock,        label: 'Close Calendar',         tip: 'Financial Close Calendar' },
+    ],
   },
   // ── CONFIGURATION dropdown ──
   {
@@ -126,18 +121,11 @@ const ADMIN_NAV = [
       { to: '/audit',              icon: ClipboardList, label: 'Audit Trail',        tip: 'Audit Trail' },
       { to: '/sla-monitor',        icon: AlertTriangle, label: 'SLA Monitor',        tip: 'SLA Monitoring & Escalation' },
       { to: '/escalation-workbench', icon: Bell,        label: 'Escalation Workbench', tip: 'Escalation Management' },
-      { to: '/compliance-policy',       icon: BookOpen,      label: 'Compliance',         tip: 'Compliance' },
+      { to: '/controls-governance', icon: BookOpen,      label: 'Controls Governance', tip: 'Governance & Compliance Hub' },
       { to: '/evidence-retention',      icon: Archive,       label: 'Evidence Retention', tip: 'Evidence Retention' },
     ],
   },
-  // Direct link
-  {
-    kind: 'link',
-    to: '/admin',
-    icon: Settings,
-    label: 'Administration',
-    tip: 'Admin Center',
-  },
+
 ]
 
 /* Flat list of all routable items (for collapsed icon-only mode) */
@@ -162,6 +150,7 @@ const PREPARER_NAV = [
     label: 'Home',
     tip: 'Home / Dashboard',
   },
+
   // ── RECONCILIATION dropdown ──
   {
     kind: 'group',
@@ -173,6 +162,7 @@ const PREPARER_NAV = [
       { to: '/balance-reconciliation',  icon: Database,      label: 'Workbench',          tip: 'Balance Reconciliation Workbench' },
     ],
   },
+
   // ── ANALYTICS dropdown ──
   {
     kind: 'group',
@@ -307,7 +297,6 @@ const CERTIFIER_NAV = [
     items: [
       { to: '/close-certification', icon: FileCheck2,  label: 'Certification Queue', tip: 'All approved balances awaiting final sign-off' },
       { to: '/auto-cert', icon: ShieldCheck, label: 'Auto-Certification Settings', tip: 'Configure auto-certification rules' },
-      { to: '/risk-dashboard',      icon: ShieldAlert, label: 'High Risk Reviews',   tip: 'HIGH/CRITICAL risk profiles and material variances' },
       { to: '/exception-workbench', icon: AlertTriangle, label: 'Escalated Items',  tip: 'System and manually escalated items requiring intervention' },
     ],
   },
@@ -332,7 +321,6 @@ const CERTIFIER_NAV = [
     items: [
       { to: '/financial-close-calendar', icon: CalendarCheck2, label: 'Close Calendar', tip: 'Monthly / quarterly close period schedule and readiness' },
       { to: '/close-readiness',         icon: CheckCircle2,   label: 'Close Readiness', tip: 'Validation engine: can we close the books?' },
-      { to: '/close-certification', icon: FileCheck2,   label: 'Close Sign-offs', tip: 'Final certified records, pending and returned sign-offs' },
     ],
   },
   // ── GOVERNANCE dropdown ──
@@ -342,8 +330,8 @@ const CERTIFIER_NAV = [
     emoji: '🛡️',
     defaultOpen: false,
     items: [
-      { to: '/audit',               icon: ClipboardList, label: 'Certification History',  tip: 'Complete certification audit trail for internal / external audits' },
-      { to: '/controls-governance', icon: Shield,        label: 'Compliance Dashboard', tip: 'SOX violations, policy exceptions, SoD breaches, control failures' },
+      { to: '/audit',               icon: ClipboardList, label: 'Audit Trail',  tip: 'Complete certification audit trail for internal / external audits' },
+      { to: '/controls-governance', icon: Shield,        label: 'Controls Governance', tip: 'SOX violations, policy exceptions, SoD breaches, control failures' },
     ],
   },
 ]
@@ -363,566 +351,172 @@ const CERTIFIER_NAV_GROUPS = [
   },
 ]
 
+/* ─── SidebarNav — reusable collapsible sidebar ─── */
+function SidebarNav({ items, SB_TEXT, SB_TEXT_DIM, SB_BORDER, theme }) {
+  const [openGroups, setOpenGroups] = useState(() =>
+    Object.fromEntries(
+      items.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
+    )
+  )
+  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
+
+  const navItemStyle = (isActive) => ({
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: isActive ? '#FFE600' : (theme === 'light' ? '#FFE600' : SB_TEXT_DIM),
+    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
+    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
+    fontWeight: isActive ? 600 : 500,
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    textDecoration: 'none', position: 'relative',
+    transition: 'color 100ms, background 100ms',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+  })
+
+  const subItemStyle = (isActive) => ({
+    ...navItemStyle(isActive),
+    paddingLeft: 28,
+    height: 30,
+    fontSize: 12,
+  })
+
+  const disabledStyleMain = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 34, borderRadius: 6,
+    padding: '0 10px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const disabledStyleSub = {
+    display: 'flex', alignItems: 'center', gap: 9,
+    height: 30, borderRadius: 6,
+    padding: '0 10px 0 28px', margin: '1px 2px',
+    color: 'rgba(255,255,255,0.22)',
+    fontSize: 12, fontFamily: 'Inter, sans-serif',
+    whiteSpace: 'nowrap', overflow: 'hidden',
+    cursor: 'default', userSelect: 'none',
+  }
+
+  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {items.map((entry, idx) => {
+        const showDivider = idx > 0
+
+        if (entry.kind === 'link') {
+          if (entry.disabled || !entry.to) {
+            const DisabledIcon = entry.icon
+            return (
+              <div key={entry.label}>
+                {showDivider && <Divider />}
+                <div style={disabledStyleMain} title={entry.tip}>
+                  <DisabledIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                </div>
+              </div>
+            )
+          }
+          const Icon = entry.icon
+          return (
+            <div key={entry.to}>
+              {showDivider && <Divider />}
+              <NavLink
+                to={entry.to}
+                title={entry.tip}
+                style={({ isActive }) => navItemStyle(isActive)}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '' }}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )
+        }
+
+        // kind === 'group'
+        const isOpen = openGroups[entry.label]
+        return (
+          <div key={entry.label}>
+            {showDivider && <Divider />}
+            <button
+              onClick={() => toggle(entry.label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', height: 32,
+                padding: '0 10px', margin: '1px 2px',
+                borderRadius: 6, border: 'none',
+                background: 'transparent',
+                color: theme === 'light' ? '#FFE600' : SB_TEXT_DIM,
+                cursor: 'pointer',
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                fontFamily: 'Inter, sans-serif',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
+              {isOpen
+                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
+                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
+            </button>
+
+            {isOpen && entry.items.map(item => {
+              const ItemIcon = item.icon
+              if (item.disabled || !item.to) {
+                return (
+                  <div key={item.label} style={disabledStyleSub} title={item.tip}>
+                    <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
+                  </div>
+                )
+              }
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  title={item.tip}
+                  style={({ isActive }) => subItemStyle(isActive)}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '' }}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
+                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
+                    </>
+                  )}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* Flat list for collapsed (icon-only) mode — for approver/certifier flat-group fallback */
 const flatItems = (groups) => groups.flatMap((g) => g.items)
 
 const SIDEBAR_COLLAPSED_KEY = 'drms_sidebar_collapsed'
 
-/* ─── CertifierNav — collapsible certifier sidebar ─── */
-function CertifierNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
-  const [openGroups, setOpenGroups] = useState(() =>
-    Object.fromEntries(
-      CERTIFIER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
-    )
-  )
-  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
 
-  const navItemStyle = (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: isActive ? '#FFE600' : SB_TEXT_DIM,
-    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
-    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
-    fontWeight: isActive ? 600 : 500,
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    textDecoration: 'none', position: 'relative',
-    transition: 'color 100ms, background 100ms',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-  })
-
-  const subItemStyle = (isActive) => ({
-    ...navItemStyle(isActive),
-    paddingLeft: 28,
-    height: 30,
-    fontSize: 12,
-  })
-
-  const disabledStyle = {
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 30, borderRadius: 6,
-    padding: '0 10px 0 28px', margin: '1px 2px',
-    color: 'rgba(255,255,255,0.22)',
-    fontSize: 12, fontFamily: 'Inter, sans-serif',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-    cursor: 'default', userSelect: 'none',
-  }
-
-  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {CERTIFIER_NAV.map((entry, idx) => {
-        const showDivider = idx > 0
-
-        if (entry.kind === 'link') {
-          const Icon = entry.icon
-          return (
-            <div key={entry.to}>
-              {showDivider && <Divider />}
-              <NavLink
-                to={entry.to}
-                title={entry.tip}
-                style={({ isActive }) => navItemStyle(isActive)}
-                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          )
-        }
-
-        // kind === 'group'
-        const isOpen = openGroups[entry.label]
-        return (
-          <div key={entry.label}>
-            {showDivider && <Divider />}
-            <button
-              onClick={() => toggle(entry.label)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', height: 32,
-                padding: '0 10px', margin: '1px 2px',
-                borderRadius: 6, border: 'none',
-                background: 'transparent',
-                color: SB_TEXT_DIM,
-                cursor: 'pointer',
-                fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                fontFamily: 'Inter, sans-serif',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
-              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
-              {isOpen
-                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
-                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
-            </button>
-
-            {isOpen && entry.items.map(item => {
-              const ItemIcon = item.icon
-              if (item.disabled || !item.to) {
-                return (
-                  <div key={item.label} style={disabledStyle} title={item.tip}>
-                    <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
-                  </div>
-                )
-              }
-              return (
-                <NavLink
-                  key={item.to + item.label}
-                  to={item.to}
-                  title={item.tip}
-                  style={({ isActive }) => subItemStyle(isActive)}
-                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/* ─── ApproverNav — collapsible approver sidebar ─── */
-function ApproverNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
-  const [openGroups, setOpenGroups] = useState(() =>
-    Object.fromEntries(
-      APPROVER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
-    )
-  )
-  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
-
-  const navItemStyle = (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: isActive ? '#FFE600' : SB_TEXT_DIM,
-    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
-    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
-    fontWeight: isActive ? 600 : 500,
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    textDecoration: 'none', position: 'relative',
-    transition: 'color 100ms, background 100ms',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-  })
-
-  const subItemStyle = (isActive) => ({
-    ...navItemStyle(isActive),
-    paddingLeft: 28,
-    height: 30,
-    fontSize: 12,
-  })
-
-  const disabledStyle = {
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: 'rgba(255,255,255,0.22)',
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-    cursor: 'default', userSelect: 'none',
-  }
-
-  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {APPROVER_NAV.map((entry, idx) => {
-        const showDivider = idx > 0
-
-        if (entry.kind === 'link') {
-          if (entry.disabled || !entry.to) {
-            const DisabledIcon = entry.icon
-            return (
-              <div key={entry.label}>
-                {showDivider && <Divider />}
-                <div style={disabledStyle} title={entry.tip}>
-                  <DisabledIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
-                </div>
-              </div>
-            )
-          }
-          const Icon = entry.icon
-          return (
-            <div key={entry.to}>
-              {showDivider && <Divider />}
-              <NavLink
-                to={entry.to}
-                title={entry.tip}
-                style={({ isActive }) => navItemStyle(isActive)}
-                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          )
-        }
-
-        // kind === 'group'
-        const isOpen = openGroups[entry.label]
-        return (
-          <div key={entry.label}>
-            {showDivider && <Divider />}
-            <button
-              onClick={() => toggle(entry.label)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', height: 32,
-                padding: '0 10px', margin: '1px 2px',
-                borderRadius: 6, border: 'none',
-                background: 'transparent',
-                color: SB_TEXT_DIM,
-                cursor: 'pointer',
-                fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                fontFamily: 'Inter, sans-serif',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
-              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
-              {isOpen
-                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
-                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
-            </button>
-
-            {isOpen && entry.items.map(item => {
-              const ItemIcon = item.icon
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  title={item.tip}
-                  style={({ isActive }) => subItemStyle(isActive)}
-                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/* ─── PreparerNav — collapsible preparer sidebar ─── */
-function PreparerNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
-  const [openGroups, setOpenGroups] = useState(() =>
-    Object.fromEntries(
-      PREPARER_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
-    )
-  )
-  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
-
-  const navItemStyle = (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: isActive ? '#FFE600' : SB_TEXT_DIM,
-    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
-    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
-    fontWeight: isActive ? 600 : 500,
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    textDecoration: 'none', position: 'relative',
-    transition: 'color 100ms, background 100ms',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-  })
-
-  const subItemStyle = (isActive) => ({
-    ...navItemStyle(isActive),
-    paddingLeft: 28,
-    height: 30,
-    fontSize: 12,
-  })
-
-  const disabledStyle = {
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: 'rgba(255,255,255,0.22)',
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-    cursor: 'default', userSelect: 'none',
-  }
-
-  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {PREPARER_NAV.map((entry, idx) => {
-        const showDivider = idx > 0
-
-        if (entry.kind === 'link') {
-          if (entry.disabled || !entry.to) {
-            const DisabledIcon = entry.icon
-            return (
-              <div key={entry.label}>
-                {showDivider && <Divider />}
-                <div style={disabledStyle} title={entry.tip}>
-                  <DisabledIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
-                </div>
-              </div>
-            )
-          }
-          const Icon = entry.icon
-          return (
-            <div key={entry.to}>
-              {showDivider && <Divider />}
-              <NavLink
-                to={entry.to}
-                title={entry.tip}
-                style={({ isActive }) => navItemStyle(isActive)}
-                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          )
-        }
-
-        // kind === 'group'
-        const isOpen = openGroups[entry.label]
-        return (
-          <div key={entry.label}>
-            {showDivider && <Divider />}
-            <button
-              onClick={() => toggle(entry.label)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', height: 32,
-                padding: '0 10px', margin: '1px 2px',
-                borderRadius: 6, border: 'none',
-                background: 'transparent',
-                color: SB_TEXT_DIM,
-                cursor: 'pointer',
-                fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                fontFamily: 'Inter, sans-serif',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
-              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
-              {isOpen
-                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
-                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
-            </button>
-
-            {isOpen && entry.items.map(item => {
-              const ItemIcon = item.icon
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  title={item.tip}
-                  style={({ isActive }) => subItemStyle(isActive)}
-                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/* ─── AdminNav — new collapsible admin sidebar ─── */
-function AdminNav({ SB_TEXT, SB_TEXT_DIM, SB_BORDER }) {
-  const [openGroups, setOpenGroups] = useState(() =>
-    Object.fromEntries(
-      ADMIN_NAV.filter(e => e.kind === 'group').map(e => [e.label, e.defaultOpen])
-    )
-  )
-  const toggle = (label) => setOpenGroups(s => ({ ...s, [label]: !s[label] }))
-
-  const navItemStyle = (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 34, borderRadius: 6,
-    padding: '0 10px', margin: '1px 2px',
-    color: isActive ? '#FFE600' : SB_TEXT_DIM,
-    background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
-    border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
-    fontWeight: isActive ? 600 : 500,
-    fontSize: 12.5, fontFamily: 'Inter, sans-serif',
-    textDecoration: 'none', position: 'relative',
-    transition: 'color 100ms, background 100ms',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-  })
-
-  const subItemStyle = (isActive) => ({
-    ...navItemStyle(isActive),
-    paddingLeft: 28,
-    height: 30,
-    fontSize: 12,
-  })
-
-  const disabledStyle = {
-    display: 'flex', alignItems: 'center', gap: 9,
-    height: 30, borderRadius: 6,
-    padding: '0 10px 0 28px', margin: '1px 2px',
-    color: 'rgba(255,255,255,0.22)',
-    fontSize: 12, fontFamily: 'Inter, sans-serif',
-    whiteSpace: 'nowrap', overflow: 'hidden',
-    cursor: 'default', userSelect: 'none',
-  }
-
-  const Divider = () => <div style={{ height: 1, background: SB_BORDER, margin: '5px 8px' }} />
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {ADMIN_NAV.map((entry, idx) => {
-        const showDivider = idx > 0
-
-        if (entry.kind === 'link') {
-          const Icon = entry.icon
-          return (
-            <div key={entry.to}>
-              {showDivider && <Divider />}
-              <NavLink
-                to={entry.to}
-                title={entry.tip}
-                style={({ isActive }) => navItemStyle(isActive)}
-                onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.label}</span>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          )
-        }
-
-        // kind === 'group'
-        const isOpen = openGroups[entry.label]
-        return (
-          <div key={entry.label}>
-            {showDivider && <Divider />}
-            <button
-              onClick={() => toggle(entry.label)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', height: 32,
-                padding: '0 10px', margin: '1px 2px',
-                borderRadius: 6, border: 'none',
-                background: 'transparent',
-                color: SB_TEXT_DIM,
-                cursor: 'pointer',
-                fontSize: 11, fontWeight: 700,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                fontFamily: 'Inter, sans-serif',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>{entry.emoji}</span>
-              <span style={{ flex: 1, textAlign: 'left' }}>{entry.label}</span>
-              {isOpen
-                ? <ChevronDown style={{ width: 11, height: 11, flexShrink: 0 }} />
-                : <ChevronRight style={{ width: 11, height: 11, flexShrink: 0 }} />}
-            </button>
-
-            {isOpen && entry.items.map(item => {
-              const ItemIcon = item.icon
-              if (item.disabled || !item.to) {
-                return (
-                  <div key={item.label} style={disabledStyle} title={item.tip}>
-                    <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 9, opacity: 0.45 }}>soon</span>
-                  </div>
-                )
-              }
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  title={item.tip}
-                  style={({ isActive }) => subItemStyle(isActive)}
-                  onMouseEnter={e => { e.currentTarget.style.color = SB_TEXT; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = '' }}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 3, borderRadius: '0 2px 2px 0', background: '#FFE600' }} />}
-                      <ItemIcon style={{ width: 13, height: 13, flexShrink: 0 }} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 export default function Layout() {
   const location  = useLocation()
@@ -1136,7 +730,7 @@ export default function Layout() {
                     width: 40, height: 40,
                     borderRadius: 7,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: isActive ? '#FFE600' : SB_TEXT_DIM,
+                    color: isActive ? '#FFE600' : (theme === 'light' ? '#FFE600' : SB_TEXT_DIM),
                     background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
                     border: `1px solid ${isActive ? 'rgba(255,230,0,0.22)' : 'transparent'}`,
                     position: 'relative',
@@ -1172,16 +766,16 @@ export default function Layout() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {role === 'admin' ? (
                 /* Admin: collapsible-group structure */
-                <AdminNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+                <SidebarNav items={ADMIN_NAV} SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} theme={theme} />
               ) : role === 'preparer' ? (
                 /* Preparer: collapsible-group structure */
-                <PreparerNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+                <SidebarNav items={PREPARER_NAV} SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} theme={theme} />
               ) : role === 'approver' ? (
                 /* Approver: collapsible-group structure */
-                <ApproverNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+                <SidebarNav items={APPROVER_NAV} SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} theme={theme} />
               ) : role === 'certifier' ? (
                 /* Certifier: collapsible-group structure */
-                <CertifierNav SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} />
+                <SidebarNav items={CERTIFIER_NAV} SB_TEXT={SB_TEXT} SB_TEXT_DIM={SB_TEXT_DIM} SB_BORDER={SB_BORDER} theme={theme} />
               ) : (
                 /* Other roles: original flat group render */
                 navGroups.map((group) => (
@@ -1189,7 +783,7 @@ export default function Layout() {
                     <p style={{
                       fontSize: 9.5, fontWeight: 700,
                       letterSpacing: '0.12em', textTransform: 'uppercase',
-                      color: SB_TEXT_DIM,
+                      color: theme === 'light' ? '#FFE600' : SB_TEXT_DIM,
                       padding: '8px 10px 3px',
                       margin: 0,
                     }}>
@@ -1206,7 +800,7 @@ export default function Layout() {
                           borderRadius: 6,
                           padding: '0 10px',
                           margin: '1px 2px',
-                          color: isActive ? '#FFE600' : SB_TEXT_DIM,
+                          color: isActive ? '#FFE600' : (theme === 'light' ? '#FFE600' : SB_TEXT_DIM),
                           background: isActive ? 'rgba(255,230,0,0.10)' : 'transparent',
                           border: `1px solid ${isActive ? 'rgba(255,230,0,0.20)' : 'transparent'}`,
                           fontWeight: isActive ? 600 : 500,
@@ -1394,6 +988,19 @@ export default function Layout() {
             <h1 className="bl-header-title" style={{ marginTop: 2 }}>
               {isWorkflowRoute && activeProject ? activeProject.name : currentPage.label}
             </h1>
+            {currentPage.subtitle && !isWorkflowRoute && (
+              <p style={{
+                margin: '2px 0 0',
+                fontSize: 11,
+                fontWeight: 500,
+                color: 'var(--text-tertiary)',
+                fontFamily: 'Inter, sans-serif',
+                letterSpacing: '0.01em',
+                lineHeight: 1.4,
+              }}>
+                {currentPage.subtitle}
+              </p>
+            )}
           </div>
 
 
@@ -1526,7 +1133,7 @@ export default function Layout() {
         )}
 
         {/* Page content */}
-        <div className="flex-1 min-h-0 overflow-auto" style={{ background: 'var(--surface-0)' }}>
+        <div className="flex-1 min-h-0 overflow-auto relative" style={{ background: 'var(--surface-0)' }}>
           <Outlet context={{ setHeaderOverride }} />
         </div>
       </div>

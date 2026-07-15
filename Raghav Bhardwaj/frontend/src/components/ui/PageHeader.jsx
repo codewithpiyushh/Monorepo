@@ -1,9 +1,9 @@
-export default function PageHeader({ title, subtitle, badge, actions, children, tabs, activeTab, onTabChange }) {
+export default function PageHeader({ title, subtitle, badge, actions, children, tabs, activeTab, onTabChange, compact }) {
   return (
     <div style={{ flexShrink: 0, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-1)' }}>
       {/* Title row */}
       <div style={{
-        padding: '24px 32px 16px',
+        padding: compact ? '12px 20px 8px' : '24px 32px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -14,7 +14,7 @@ export default function PageHeader({ title, subtitle, badge, actions, children, 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 style={{
               fontFamily: 'Inter, sans-serif',
-              fontSize: 24,
+              fontSize: compact ? 18 : 24,
               fontWeight: 700,
               letterSpacing: '-0.02em',
               color: 'var(--text-primary)',
@@ -40,10 +40,11 @@ export default function PageHeader({ title, subtitle, badge, actions, children, 
           </div>
           {subtitle && (
             <p style={{
-              fontSize: 13,
+              fontSize: compact ? 11.5 : 13,
               color: 'var(--text-secondary)',
-              marginTop: 4,
+              marginTop: compact ? 2 : 4,
               lineHeight: 1.4,
+              margin: 0,
             }}>
               {subtitle}
             </p>

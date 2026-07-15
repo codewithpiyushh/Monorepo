@@ -4,7 +4,7 @@ backend/app/services/aging_schemas.py
 Pydantic schemas for the Aging Analysis Engine.
 """
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 

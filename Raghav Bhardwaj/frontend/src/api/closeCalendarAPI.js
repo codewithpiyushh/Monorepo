@@ -5,7 +5,7 @@
 
 import client from './client'
 
-const BASE = '/api/v1/close-calendar'
+const BASE = '/v1/close-calendar'
 
 export const closeCalendarAPI = {
   listPeriods: () =>

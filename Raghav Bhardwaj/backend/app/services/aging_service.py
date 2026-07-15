@@ -49,8 +49,11 @@ BUCKET_COLOR = {
     BUCKET_CRITICAL: "#ef4444",
 }
 
-ESCALATION_RULES = [# (min_age_days, level, notified_role, icon, title_tpl)
-    (61, "BREACH", "reviewer", "warning", "Exception Aging Alert — Review Required"), (90, "CRITICAL", "certifier", "error", "Exception Escalation — Certifier Attention Required"), (120, "SEVERE", "admin", "Exception Escalation — Immediate Action Required (120+ Days)")]
+ESCALATION_RULES = [
+    (61, "BREACH", "reviewer", "warning", "Exception Aging Alert — Review Required"),
+    (90, "CRITICAL", "certifier", "error", "Exception Escalation — Certifier Attention Required"),
+    (120, "SEVERE", "admin", "error", "Exception Escalation — Immediate Action Required (120+ Days)")
+]
 
 EXCLUDED_STATUSES = {"RESOLVED", "CLOSED"}
 
@@ -170,6 +173,8 @@ def _enrich_exceptions(
     ).outerjoin(
         ReconciliationProfile, MatchGroup.profile_id == ReconciliationProfile.id
     )
+
+
 
     if current_user:
         q = apply_profile_rls(q, current_user, profile_model=ReconciliationProfile)

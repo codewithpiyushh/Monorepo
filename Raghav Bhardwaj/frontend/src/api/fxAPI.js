@@ -9,7 +9,7 @@ export const fxAPI = {
   dashboard: () => api.get('/v1/fx/dashboard').then(r => r.data),
 
   /** List stored exchange rates (optional from_currency filter) */
-  listRates: (params = {}) => {
+  list: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return api.get(`/v1/fx/rates${qs ? `?${qs}` : ''}`).then(r => r.data)
   },
@@ -32,5 +32,5 @@ export const fxAPI = {
       .then(r => r.data),
 
   /** Manually add a rate entry (existing enterprise endpoint) */
-  createRate: (data) => api.post('/enterprise/fx/rates', data).then(r => r.data),
+  create: (data) => api.post('/enterprise/fx/rates', data).then(r => r.data),
 }

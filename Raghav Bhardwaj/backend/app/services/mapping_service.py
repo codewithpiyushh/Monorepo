@@ -1,9 +1,8 @@
-import json
 from typing import List, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from rapidfuzz import fuzz
-from ..models.models import Dataset, Mapping, ColumnMetadata
+from ..models.models import Dataset, Mapping
 from ..schemas.schemas import MappingCreate
 
 

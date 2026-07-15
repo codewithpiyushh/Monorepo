@@ -249,7 +249,7 @@ def run_reconciliation(execution_id: int, project_id: int, db: Session) -> None:
             "total_source": len(source_rows),
             "total_target": len(target_rows),
             "match_rate": round(
-                matched_count / max(len(source_rows), 1) * 100, 2
+                matched_count / max(matched_count + unmatched_count + partial_count, 1) * 100, 2
             ),
             "auto_reconciled": unmatched_count == 0 and partial_count == 0,
             "requires_preparer_justification": unmatched_count > 0 or partial_count > 0,
@@ -495,6 +495,7 @@ def promote_execution_to_profile(
     actor_id: int | None,
     recon_type: str = "BANK_RECONCILIATION",
     risk_classification: str = "MEDIUM",
+    preparer_id: int | None = None,
     reviewer_id: int | None = None,
     approver_id: int | None = None,
     certifier_id: int | None = None,
@@ -535,7 +536,8 @@ def promote_execution_to_profile(
     stats = json.loads(execution.stats) if execution.stats else {}
 
     # ── Resolve users ─────────────────────────────────────────────────────────
-    preparer = db.query(User).filter(User.id == actor_id).first() if actor_id else None
+    assigned_prep_id = preparer_id or actor_id
+    preparer = db.query(User).filter(User.id == assigned_prep_id).first() if assigned_prep_id else None
     if not reviewer_id:
         rev = db.query(User).filter(User.role == "reviewer", User.is_active == True).first()
         reviewer_id = rev.id if rev else actor_id
@@ -600,7 +602,7 @@ def promote_execution_to_profile(
             "fallback": ["TOLERANCE", "DATE_WINDOW", "FUZZY"],
             "key_fields": ["reference", "amount", "currency"],
         }),
-        assigned_preparer=actor_id,
+        assigned_preparer=assigned_prep_id,
         assigned_reviewer=reviewer_id,
         assigned_approver=approver_id,
         assigned_certifier=certifier_id,
@@ -617,7 +619,7 @@ def promote_execution_to_profile(
 
     # Ownership records
     for uid, orole in [
-        (actor_id, "PREPARER"), (reviewer_id, "REVIEWER"),
+        (assigned_prep_id, "PREPARER"), (reviewer_id, "REVIEWER"),
         (approver_id, "APPROVER"), (certifier_id, "CERTIFIER"),
     ]:
         if uid:
@@ -639,11 +641,21 @@ def promote_execution_to_profile(
     loaded_count = 0
     match_groups_created = 0
     exceptions_created = 0
+    total_source_amount = 0.0
+    total_target_amount = 0.0
     batch_id = f"BATCH-PROMOTE-{uuid.uuid4().hex[:8].upper()}"
 
     for result in results:
         src_data = json.loads(result.source_data) if result.source_data else {}
         tgt_data = json.loads(result.target_data) if result.target_data else {}
+        
+        total_source_amount += float(src_data.get("amount") or 0)
+        total_target_amount += float(tgt_data.get("amount") or 0)
+
+        # Derive mapping entity and account
+        labels = _derive_unit_labels(src_data if result.source_data else None, tgt_data if result.target_data else None, mappings)
+        entity_resolved = labels.get("entity") or sample_entity
+        account_resolved = labels.get("account") or sample_account
 
         # Source record
         src_ref = src_data.get("reference") or src_data.get(key_mapping.source_column if key_mapping else "id") or f"SRC-{result.id}"
@@ -652,9 +664,9 @@ def promote_execution_to_profile(
             src_rec = ReconciliationRecord(
                 batch_id=batch_id,
                 profile_id=profile.id,
-                source_system=f"{sample_entity}-GL",
-                entity=src_data.get("entity") or sample_entity,
-                account=src_data.get("account") or sample_account,
+                source_system=f"{entity_resolved}-GL",
+                entity=entity_resolved,
+                account=account_resolved,
                 period=src_data.get("period") or sample_period,
                 currency=src_data.get("currency") or sample_currency,
                 amount=float(src_data.get("amount") or 0),
@@ -676,9 +688,9 @@ def promote_execution_to_profile(
             tgt_rec = ReconciliationRecord(
                 batch_id=batch_id,
                 profile_id=profile.id,
-                source_system=f"{sample_entity}-BANK",
-                entity=tgt_data.get("entity") or sample_entity,
-                account=tgt_data.get("account") or sample_account,
+                source_system=f"{entity_resolved}-BANK",
+                entity=entity_resolved,
+                account=account_resolved,
                 period=tgt_data.get("period") or sample_period,
                 currency=tgt_data.get("currency") or sample_currency,
                 amount=float(tgt_data.get("amount") or 0),
@@ -764,11 +776,13 @@ def promote_execution_to_profile(
     db.flush()
 
     # ── Certification Workflow ────────────────────────────────────────────────
+    is_auto_matched = stats.get('unmatched', 0) == 0 and stats.get('partial', 0) == 0
+
     cert = CertificationWorkflow(
         profile_id=profile.id,
         calendar_id=close_cal.id,
-        status="PREPARED",
-        current_stage="PREPARER",
+        status="REVIEWED" if is_auto_matched else "PREPARED",
+        current_stage="REVIEWER" if is_auto_matched else "PREPARER",
         preparer_id=actor_id,
         reviewer_id=reviewer_id,
         approver_id=approver_id,
@@ -783,12 +797,12 @@ def promote_execution_to_profile(
 
     db.add(CertificationWorkflowHistory(
         workflow_id=cert.id,
-        actor_id=actor_id,
-        actor_role="PREPARER",
-        action="PREPARE",
+        actor_id=None if is_auto_matched else actor_id,
+        actor_role="SYSTEM" if is_auto_matched else "PREPARER",
+        action="AUTO_PREPARE" if is_auto_matched else "PREPARE",
         from_status="OPEN",
-        to_status="PREPARED",
-        comments=f"Auto-created from project execution #{execution_id}.",
+        to_status="REVIEWED" if is_auto_matched else "PREPARED",
+        comments=f"100% matched execution auto-advanced past preparer." if is_auto_matched else f"Auto-created from project execution #{execution_id}.",
         created_at=datetime.utcnow(),
     ))
 
@@ -807,6 +821,41 @@ def promote_execution_to_profile(
             "loaded_count": loaded_count,
         },
     )
+
+    # ── Auto-create Balance Reconciliation ────────────────────────────────────
+    from ..models.models import ReconciliationBalance
+    from ..services import balance_service
+
+    existing_balance = db.query(ReconciliationBalance).filter(
+        ReconciliationBalance.profile_id == profile.id,
+        ReconciliationBalance.period_key == sample_period,
+    ).first()
+
+    if existing_balance:
+        try:
+            balance_service.update_balance(
+                db=db,
+                balance_id=existing_balance.id,
+                source_balance=total_source_amount,
+                target_balance=total_target_amount,
+                comments=f"Auto-updated from execution #{execution_id}.",
+                actor_id=actor_id
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            balance_service.create_balance(
+                db=db,
+                profile_id=profile.id,
+                period_key=sample_period,
+                source_balance=total_source_amount,
+                target_balance=total_target_amount,
+                comments=f"Auto-generated from execution #{execution_id}.",
+                actor_id=actor_id
+            )
+        except Exception:
+            pass
 
     return {
         "profile_id": profile.id,

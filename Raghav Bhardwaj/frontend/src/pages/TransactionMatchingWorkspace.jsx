@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
 import toast from 'react-hot-toast'
 import {
@@ -380,10 +381,12 @@ function GroupRow({ group, onConfirm, onReject, onSelect, bulkSelected, onBulkTo
 // ─────────────────────────────────────────────────────────────────────────────
 export default function TransactionMatchingWorkspace() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const selectedProjectId = useProjectStore(s => s.selectedProjectId)
 
   // Profile selection
-  const [profileId, setProfileId] = useState('')
+  const [profileId, setProfileId] = useState(searchParams.get('profileId') || '')
   const [activeTab, setActiveTab] = useState('workspace')
 
   // Matching config
@@ -562,6 +565,18 @@ export default function TransactionMatchingWorkspace() {
     onError: e => toast.error(e?.response?.data?.detail || 'Bulk confirm failed'),
   })
 
+  // Promote to Balance
+  const promoteMutation = useMutation({
+    mutationFn: () => matchingAPI.promoteToBalance(Number(profileId)),
+    onSuccess: (data) => {
+      toast.success('Balance Reconciliation generated successfully!')
+      navigate(`/balance-reconciliation/${data.balance_id}`)
+    },
+    onError: (err) => {
+      toast.error('Failed to promote to balance: ' + (err.response?.data?.detail || err.message))
+    }
+  })
+
   // ── Toggle handlers ────────────────────────────────────────────────────────
   const toggleSource = useCallback((id) => {
     setSelectedSource(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -656,6 +671,24 @@ export default function TransactionMatchingWorkspace() {
               {advancedMutation.isPending
                 ? <><RefreshCw style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> Running…</>
                 : <><Zap style={{ width: 13, height: 13 }} /> Run Auto-Match</>
+              }
+            </button>
+
+            <button
+              onClick={() => promoteMutation.mutate()}
+              disabled={!profileId || promoteMutation.isPending}
+              style={{
+                padding: '7px 16px', borderRadius: 8,
+                background: promoteMutation.isPending ? 'var(--surface-3)' : 'var(--surface-2)',
+                color: 'var(--text-primary)', border: '1px solid var(--border-2)', fontWeight: 700, fontSize: 13,
+                cursor: !profileId || promoteMutation.isPending ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                marginLeft: 10
+              }}
+            >
+              {promoteMutation.isPending
+                ? <><RefreshCw style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> Promoting…</>
+                : <><FileText style={{ width: 13, height: 13 }} /> Promote to Balance</>
               }
             </button>
           </div>

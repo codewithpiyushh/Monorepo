@@ -121,6 +121,8 @@ export default function App() {
             <Route path="analytics-explorer"       element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="analytics-explorer/:entity/:account" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="analytics-explorer/:entity/:account/:profile" element={<ReconciliationAnalyticsExplorer />} />
+            <Route path="analytics-explorer/:entity/:account/:profile/:exception" element={<ReconciliationAnalyticsExplorer />} />
             <Route path="reconciliation-profiles"  element={<ReconciliationProfiles />} />
             <Route path="risk-dashboard"           element={<RiskDashboard />} />
             <Route path="risk-dashboard/:entity"   element={<RiskDashboard />} />
@@ -177,7 +179,7 @@ export default function App() {
             <Route path="bulk-operations"         element={<BulkOperationsCenter />} />
             <Route path="approval-chains"         element={<ApprovalChainsPage />} />
             <Route path="risk-configuration"      element={<RiskConfigurationPage />} />
-            <Route path="compliance-policy"       element={<CompliancePolicyPage />} />
+            <Route path="compliance-policy"       element={<Navigate to="/controls-governance" replace />} />
             <Route path="evidence-retention"      element={<EvidenceRetentionPage />} />
             <Route path="preparer-close-management" element={<PreparerCloseManagement />} />
             <Route path="approver-close-signoffs" element={<ApproverCloseSignoffs />} />

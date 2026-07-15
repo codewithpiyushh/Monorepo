@@ -51,7 +51,14 @@ except ImportError:
         "apply sla_monitoring_models.py and run the migration first."
     )
 
-BREACHING_STATES = ["DRAFT", "UNDER_REVIEW", "APPROVED"]
+BREACHING_STATES = ["DRAFT", "UNDER_REVIEW", "APPROVED", "OUT_OF_BALANCE"]
+
+DEFAULT_POLICY_DEFINITIONS = [
+    {"priority_level": "LOW",      "max_days_open": 10, "escalation_role": "PREPARER",  "reminder_interval_days": 5},
+    {"priority_level": "MEDIUM",   "max_days_open": 7,  "escalation_role": "PREPARER",  "reminder_interval_days": 3},
+    {"priority_level": "HIGH",     "max_days_open": 4,  "escalation_role": "APPROVER",  "reminder_interval_days": 2},
+    {"priority_level": "CRITICAL", "max_days_open": 2,  "escalation_role": "CERTIFIER", "reminder_interval_days": 1},
+]
 
 STATE_TO_VIOLATION_TYPE = {
     "DRAFT":         "SLA_BREACH",
@@ -105,6 +112,25 @@ def resolve_owner_for_role(db: Session, profile: ReconciliationProfile, role: st
     return getattr(profile, field, None) if field else None
 
 
+def ensure_default_policies(db: Session, commit: bool = False) -> bool:
+    """Create a simple global policy set when the SLA module has no policies yet."""
+    existing = db.query(SLAPolicy).filter(SLAPolicy.profile_id.is_(None)).all()
+    existing_priorities = {p.priority_level.upper() for p in existing}
+    created = False
+
+    for policy_data in DEFAULT_POLICY_DEFINITIONS:
+        priority = policy_data["priority_level"].upper()
+        if priority in existing_priorities:
+            continue
+        db.add(SLAPolicy(profile_id=None, **policy_data))
+        existing_priorities.add(priority)
+        created = True
+
+    if created and commit:
+        db.commit()
+    return created
+
+
 def run_sla_scan(db: Session, actor_id: Optional[int] = None) -> dict:
     """
     The scheduled scan. Call this from an APScheduler job (see
@@ -112,6 +138,8 @@ def run_sla_scan(db: Session, actor_id: Optional[int] = None) -> dict:
     optional convenience endpoint not required by spec but harmless to add
     if you want a manual trigger button).
     """
+    ensure_default_policies(db, commit=False)
+
     now = datetime.utcnow()
     profiles = {p.id: p for p in db.query(ReconciliationProfile).all()}
 
@@ -165,7 +193,7 @@ def run_sla_scan(db: Session, actor_id: Optional[int] = None) -> dict:
             .first()
         )
 
-        if age_days <= policy.max_days_open:
+        if age_days <= policy.max_days_open and bal.status not in {"OUT_OF_BALANCE"}:
             # Within SLA — auto-resolve if it had previously breached
             if existing:
                 existing.status = "RESOLVED"
@@ -175,7 +203,7 @@ def run_sla_scan(db: Session, actor_id: Optional[int] = None) -> dict:
                 auto_resolved += 1
             continue
 
-        days_overdue = age_days - policy.max_days_open
+        days_overdue = max(1, age_days - policy.max_days_open) if bal.status == "OUT_OF_BALANCE" else age_days - policy.max_days_open
 
         if existing:
             existing.days_overdue = days_overdue

@@ -337,14 +337,14 @@
 
   /* ══ TOP HEADER ════════════════════════════════════════════ */
   .bl-header {
-    height: var(--header-height);
+    min-height: var(--header-height);
     background: var(--header-bg);
     border-bottom: 1px solid var(--border-1);
     /* EY signature yellow top strip */
     border-top: 3px solid var(--accent);
     display: flex;
     align-items: center;
-    padding: 0 16px;
+    padding: 8px 16px;
     gap: 12px;
     flex-shrink: 0;
   }

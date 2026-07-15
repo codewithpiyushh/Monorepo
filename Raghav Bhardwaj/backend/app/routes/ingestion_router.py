@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..services import ingestion_service
-from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
 from ..rbac.roles import ADMIN, PREPARER
 from pydantic import BaseModel

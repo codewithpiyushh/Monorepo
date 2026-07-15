@@ -321,6 +321,34 @@ export const profilesAPI = {
   delete: (id, hard = false) => api.delete(`/v1/profiles/${id}?hard=${hard}`).then(r => r.data),
 }
 
+export const approvalChainsAPI = {
+  list: (params) => api.get('/v1/approval-chains', { params }).then(r => r.data),
+  get: (id) => api.get(`/v1/approval-chains/${id}`).then(r => r.data),
+  create: (payload) => api.post('/v1/approval-chains', payload).then(r => r.data),
+  update: (id, payload) => api.patch(`/v1/approval-chains/${id}`, payload).then(r => r.data),
+  delete: (id) => api.delete(`/v1/approval-chains/${id}`).then(r => r.data),
+}
+
+export const riskConfigAPI = {
+  get: (projectId) => api.get(`/v1/risk-config/project/${projectId}`).then(r => r.data),
+  update: (projectId, payload) => api.put(`/v1/risk-config/project/${projectId}`, payload).then(r => r.data),
+  create: (payload) => api.post('/v1/risk-config/', payload).then(r => r.data),
+}
+
+export const compliancePolicyAPI = {
+  list: () => api.get('/v1/compliance-policy').then(r => r.data),
+  create: (payload) => api.post('/v1/compliance-policy', payload).then(r => r.data),
+  update: (id, payload) => api.patch(`/v1/compliance-policy/${id}`, payload).then(r => r.data),
+  delete: (id) => api.delete(`/v1/compliance-policy/${id}`).then(r => r.data),
+}
+
+export const evidenceRetentionAPI = {
+  listPolicies: () => api.get('/v1/evidence-retention/policies').then(r => r.data),
+  createPolicy: (payload) => api.post('/v1/evidence-retention/policies', payload).then(r => r.data),
+  listJobs: () => api.get('/v1/evidence-retention/jobs').then(r => r.data),
+  getMetrics: () => api.get('/v1/evidence-retention/metrics').then(r => r.data),
+}
+
 export { default as lifecycleAPI } from './lifecycleAPI'
 export { default as agingAPI } from './agingAPI'
 export { supportingItemsAPI } from './supportingItemsAPI'

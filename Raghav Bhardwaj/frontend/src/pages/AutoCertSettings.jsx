@@ -5,20 +5,22 @@ import toast from 'react-hot-toast'
 import PageHeader from '../components/ui/PageHeader'
 import { LoadingState } from '../components/ui/PageState'
 import { useAuthStore } from '../store/authStore'
+import { useProjectStore } from '../store/projectStore'
 import { autoCertAPI } from '../api'
 
 export default function AutoCertSettings() {
   const qc = useQueryClient()
-  const project = useAuthStore((s) => s.project)
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
+  const activeProjectId = selectedProjectId || '1'
   
   const [maxVariance, setMaxVariance] = useState(0.0)
   const [allowExceptions, setAllowExceptions] = useState(false)
   const [allowedRiskLevels, setAllowedRiskLevels] = useState([])
 
   const { data: rule, isLoading } = useQuery({
-    queryKey: ['auto-cert-rule', project?.id],
-    queryFn: () => autoCertAPI.getRule(project?.id),
-    enabled: !!project?.id,
+    queryKey: ['auto-cert-rule', activeProjectId],
+    queryFn: () => autoCertAPI.getRule(activeProjectId),
+    enabled: !!activeProjectId,
   })
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export default function AutoCertSettings() {
   }, [rule])
 
   const updateMutation = useMutation({
-    mutationFn: (payload) => autoCertAPI.updateRule(project?.id, payload),
+    mutationFn: (payload) => autoCertAPI.updateRule(activeProjectId, payload),
     onSuccess: () => {
       toast.success('Auto-Cert rules updated')
       qc.invalidateQueries({ queryKey: ['auto-cert-rule'] })
@@ -39,7 +41,7 @@ export default function AutoCertSettings() {
   })
 
   const runMutation = useMutation({
-    mutationFn: () => autoCertAPI.runEngine(project?.id),
+    mutationFn: () => autoCertAPI.runEngine(activeProjectId),
     onSuccess: (data) => {
       toast.success(`Engine complete! ${data.certified} certified, ${data.skipped} skipped out of ${data.processed}.`)
     },
@@ -64,24 +66,18 @@ export default function AutoCertSettings() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader
-        title="Auto-Certification Engine"
-        subtitle="Configure zero-touch certification rules to automate the financial close."
-        badge={rule?.is_active ? 'Active' : 'Disabled'}
-      />
-
-      <div className="flex-1 overflow-auto p-5" style={{ background: 'var(--surface-0)' }}>
+      <div className="flex-1 overflow-auto p-8" style={{ background: 'var(--surface-0)' }}>
         {isLoading ? <LoadingState /> : (
-          <div className="max-w-3xl space-y-6">
+          <div className="max-w-5xl w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Rules Panel */}
-            <div className="card p-6">
-              <div className="flex items-center gap-3 mb-6 border-b border-[var(--border-1)] pb-4">
+            <div className="card p-6 flex flex-col">
+              <div className="flex items-center gap-3 mb-5 border-b border-[var(--border-1)] pb-4 flex-shrink-0">
                 <Settings2 style={{ width: 20, height: 20, color: 'var(--accent)' }} />
                 <h3 className="text-base font-semibold text-[var(--text-primary)]">Global Certification Rules</h3>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-5 flex-1">
                 <div>
                   <label className="label">Maximum Allowed Variance ($)</label>
                   <p className="text-xs text-[var(--text-secondary)] mb-2">Profiles with a variance strictly less than or equal to this value are eligible.</p>
@@ -90,50 +86,52 @@ export default function AutoCertSettings() {
 
                 <div>
                   <label className="label">Exception Policy</label>
-                  <label className="flex items-center gap-3 cursor-pointer mt-2">
-                    <input type="checkbox" checked={allowExceptions} onChange={e => setAllowExceptions(e.target.checked)} />
-                    <span className="text-sm text-[var(--text-primary)]">Allow Auto-Certification even if open exceptions exist (Not Recommended)</span>
+                  <label className="flex items-start gap-3 cursor-pointer mt-2">
+                    <input type="checkbox" className="mt-1" checked={allowExceptions} onChange={e => setAllowExceptions(e.target.checked)} />
+                    <span className="text-sm text-[var(--text-primary)] leading-tight">Allow Auto-Certification even if open exceptions exist (Not Recommended)</span>
                   </label>
                 </div>
 
                 <div>
                   <label className="label">Eligible Risk Classifications</label>
                   <p className="text-xs text-[var(--text-secondary)] mb-2">Only profiles with these risk levels will be automatically certified.</p>
-                  <div className="flex gap-3 mt-2">
+                  <div className="flex gap-2 mt-2">
                     {['LOW', 'MEDIUM', 'HIGH'].map(level => (
-                      <label key={level} className="flex items-center gap-2 cursor-pointer bg-[var(--surface-2)] px-3 py-2 rounded-lg border border-[var(--border-1)]">
+                      <label key={level} className="flex items-center gap-2 cursor-pointer bg-[var(--surface-2)] px-3 py-1.5 rounded-lg border border-[var(--border-1)] hover:bg-[var(--surface-3)] transition-colors">
                         <input type="checkbox" checked={allowedRiskLevels.includes(level)} onChange={() => toggleRisk(level)} />
-                        <span className="text-xs font-medium text-[var(--text-primary)]">{level}</span>
+                        <span className="text-xs font-semibold text-[var(--text-primary)]">{level}</span>
                       </label>
                     ))}
                   </div>
                 </div>
+              </div>
 
-                <div className="pt-4 border-t border-[var(--border-1)]">
-                  <button className="btn-primary" onClick={handleSave} disabled={updateMutation.isPending}>
-                    Save Rules
-                  </button>
-                </div>
+              <div className="pt-4 mt-5 border-t border-[var(--border-1)] flex-shrink-0">
+                <button className="btn-primary w-full justify-center" onClick={handleSave} disabled={updateMutation.isPending}>
+                  Save Rules
+                </button>
               </div>
             </div>
 
             {/* Run Panel */}
-            <div className="card p-6 bg-[var(--surface-2)] border-[var(--accent)] border-opacity-30">
-              <div className="flex items-center gap-3 mb-2">
-                <Zap style={{ width: 20, height: 20, color: 'var(--accent)' }} />
-                <h3 className="text-base font-semibold text-[var(--text-primary)]">Run Engine</h3>
+            <div className="card p-6 bg-[var(--surface-2)] border-[var(--accent)] border-opacity-30 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <Zap style={{ width: 20, height: 20, color: 'var(--accent)' }} />
+                  <h3 className="text-base font-semibold text-[var(--text-primary)]">Run Engine</h3>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)] mb-6 leading-relaxed">
+                  Trigger the Auto-Certification engine immediately. It will scan all OPEN or SUBMITTED profiles and certify those matching the criteria configured in the Global Certification Rules.
+                </p>
               </div>
-              <p className="text-sm text-[var(--text-secondary)] mb-6">
-                Trigger the Auto-Certification engine immediately. It will scan all OPEN or SUBMITTED profiles and certify those matching the criteria above.
-              </p>
               
               <button 
-                className="btn-primary w-full justify-center h-12 text-sm" 
+                className="btn-primary w-full justify-center h-12 text-sm mt-auto shadow-lg" 
                 onClick={() => runMutation.mutate()} 
                 disabled={runMutation.isPending}
-                style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}
+                style={{ background: 'var(--accent)', color: '#000', border: 'none', fontWeight: 700 }}
               >
-                <ShieldCheck style={{ width: 16, height: 16 }} /> Execute Zero-Touch Certification
+                <ShieldCheck style={{ width: 18, height: 18 }} /> Execute Zero-Touch Certification
               </button>
             </div>
 

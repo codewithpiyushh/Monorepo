@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from ..models.models import (
@@ -85,8 +85,8 @@ def _seed_project_defaults(db: Session, project: Project, user_id: int) -> None:
         },
     ]
 
-    source_dataset = _create_dataset(db, project.id, "Source Sample Data", "source", source_rows)
-    target_dataset = _create_dataset(db, project.id, "Target Sample Data", "target", target_rows)
+    _create_dataset(db, project.id, "Source Sample Data", "source", source_rows)
+    _create_dataset(db, project.id, "Target Sample Data", "target", target_rows)
 
     _create_mappings(db, project.id)
     _create_rules(db, project.id)

@@ -26,17 +26,14 @@ function fmt(n) {
   return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function KpiCard({ label, value, sub, icon: Icon, color }) {
+function HeaderKpiCard({ label, value, color, icon: Icon }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 32, height: 32, borderRadius: 8, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon size={14} color={color} />
+    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 8, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>{value}</div>
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-        {sub ? <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div> : null}
-      </div>
+      {Icon && <Icon size={14} color={color} style={{ opacity: 0.8 }} />}
     </div>
   )
 }
@@ -119,7 +116,7 @@ export default function VarianceAnalyticsDashboard() {
   useEffect(() => {
     if (setHeaderOverride) {
       setHeaderOverride(
-        <header className="bl-header" style={{ padding: '0 24px' }}>
+        <header className="bl-header" style={{ padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div className="flex flex-col min-w-0 flex-shrink-0">
             <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--text-tertiary)', lineHeight: 1, fontFamily: 'Inter, sans-serif' }}>
               ANALYTICS
@@ -128,78 +125,75 @@ export default function VarianceAnalyticsDashboard() {
               <h1 className="bl-header-title">Variance Analytics</h1>
             </div>
           </div>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            {/* Controls */}
+            <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 8, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Filter size={12} color="var(--text-tertiary)" />
+                <input
+                  value={profileId}
+                  onChange={(e) => setProfileId(e.target.value)}
+                  placeholder="Profile ID..."
+                  style={{ width: 80, padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-1)', background: 'var(--surface-1)', color: 'var(--text-primary)', fontSize: 11 }}
+                />
+              </div>
+              <div style={{ width: 1, height: 16, background: 'var(--border-2)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Trend</span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {[6, 9, 12].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setMonths(n)}
+                      style={{
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        border: `1px solid ${months === n ? COLORS.within : 'var(--border-1)'}`,
+                        background: months === n ? `${COLORS.within}18` : 'transparent',
+                        color: 'var(--text-primary)',
+                        fontSize: 10,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {n}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ width: 1, height: 16, background: 'var(--border-2)' }} />
+              <button
+                onClick={() => {
+                  fluxQuery.refetch()
+                  trendQuery.refetch()
+                }}
+                style={{ padding: '2px', borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Refresh"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
+
+            {/* KPIs */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <HeaderKpiCard label="Total Unexplained" value={`$${fmt(flux?.total_unexplained || 0)}`} color={COLORS.critical} icon={TrendingUp} />
+              <HeaderKpiCard label="Profiles" value={flux?.total_profiles || 0} color={COLORS.within} icon={BarChart3} />
+              <HeaderKpiCard label="Missing Explanations" value={missingNarratives} color={COLORS.material} icon={AlertTriangle} />
+              <HeaderKpiCard label="Top Flux Shifts" value={topFlux.length} color={COLORS.balanced} icon={TrendingDown} />
+            </div>
+          </div>
         </header>
       )
     }
     return () => setHeaderOverride?.(null)
-  }, [setHeaderOverride])
+  }, [setHeaderOverride, profileId, months, flux, missingNarratives, topFlux.length])
 
   if (fluxQuery.isLoading || trendQuery.isLoading) {
     return <LoadingState message="Loading variance analytics" />
   }
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18, alignItems: 'stretch' }}>
-        
-        {/* Controls block styled like a KPI card */}
-        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 16 }}>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Filter size={14} color="var(--text-tertiary)" />
-            <input
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-              placeholder="Profile ID..."
-              style={{ width: 100, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-1)', background: 'var(--surface-1)', color: 'var(--text-primary)', fontSize: 12 }}
-            />
-          </div>
-
-          <div style={{ width: 1, height: 24, background: 'var(--border-2)' }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase' }}>Trend</span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[6, 9, 12].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setMonths(n)}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 6,
-                    border: `1px solid ${months === n ? COLORS.within : 'var(--border-1)'}`,
-                    background: months === n ? `${COLORS.within}18` : 'transparent',
-                    color: 'var(--text-primary)',
-                    fontSize: 11,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {n}m
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 24, background: 'var(--border-2)' }} />
-
-          <button
-            onClick={() => {
-              fluxQuery.refetch()
-              trendQuery.refetch()
-            }}
-            style={{ padding: '6px', borderRadius: 6, border: 'none', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Refresh"
-          >
-            <RefreshCw size={14} />
-          </button>
-        </div>
-
-        <KpiCard label="Total Unexplained" value={`$${fmt(flux?.total_unexplained || 0)}`} icon={TrendingUp} color={COLORS.critical} />
-        <KpiCard label="Profiles in Scope" value={flux?.total_profiles || 0} icon={BarChart3} color={COLORS.within} />
-        <KpiCard label="Missing Narratives" value={missingNarratives} icon={AlertTriangle} color={COLORS.material} sub="No saved explanation" />
-        <KpiCard label="Top Flux Shifts" value={topFlux.length} icon={TrendingDown} color={COLORS.balanced} />
-      </div>
-
+    <div style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 16, marginBottom: 16 }}>
         <ChartCard title="Corporate Waterfall" subtitle="Top unexplained balances by profile">
           {flux?.waterfall?.length ? <ReactECharts option={waterfallOption} style={{ height: '100%' }} notMerge /> : <EmptyState title="No waterfall data" description="Run balances with unexplained variance to populate this chart." />}
@@ -210,75 +204,79 @@ export default function VarianceAnalyticsDashboard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <ChartCard title="Top Offenders - Unexplained" subtitle="Largest unexplained variances">
+        <ChartCard title="Top Offenders - Unexplained" subtitle="Largest unexplained variances" height="auto">
           {topUnexplained.length ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ color: 'var(--text-tertiary)', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 0' }}>Profile</th>
-                  <th>Period</th>
-                  <th style={{ textAlign: 'right' }}>Unexplained</th>
-                  <th style={{ textAlign: 'right' }}>Class</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topUnexplained.slice(0, 8).map((row) => (
-                  <tr 
-                    key={`${row.balance_id}-${row.period_key}`} 
-                    style={{ borderTop: '1px solid var(--border-0)', cursor: 'pointer' }}
-                    className="hover:bg-surface-700/30 transition-colors"
-                    onClick={() => navigate(`/balance-reconciliation/${row.balance_id}`)}
-                  >
-                    <td style={{ padding: '8px 0' }}>{row.profile_name}</td>
-                    <td>{row.period_key}</td>
-                    <td style={{ textAlign: 'right', color: Math.abs(row.unexplained_variance) > 0 ? COLORS.critical : COLORS.balanced }}>
-                      {fmt(row.unexplained_variance)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 999, background: `${CLASS_META[row.classification]?.color || COLORS.within}18`, color: CLASS_META[row.classification]?.color || COLORS.within }}>
-                        {CLASS_META[row.classification]?.label || row.classification}
-                      </span>
-                    </td>
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-tertiary)', textAlign: 'left', borderBottom: '1px solid var(--border-1)' }}>
+                    <th style={{ padding: '10px 12px' }}>Profile</th>
+                    <th style={{ padding: '10px 12px' }}>Period</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Unexplained</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Class</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {topUnexplained.slice(0, 8).map((row) => (
+                    <tr 
+                      key={`${row.balance_id}-${row.period_key}`} 
+                      style={{ borderBottom: '1px solid var(--border-0)', cursor: 'pointer' }}
+                      className="hover:bg-surface-700/30 transition-colors"
+                      onClick={() => navigate(`/balance-reconciliation/${row.balance_id}`)}
+                    >
+                      <td style={{ padding: '12px', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)', fontWeight: 500 }} title={row.profile_name}>{row.profile_name}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{row.period_key}</td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600, color: Math.abs(row.unexplained_variance) > 0 ? COLORS.critical : COLORS.balanced }}>
+                        {fmt(row.unexplained_variance)}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'right' }}>
+                        <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: `${CLASS_META[row.classification]?.color || COLORS.within}15`, color: CLASS_META[row.classification]?.color || COLORS.within }}>
+                          {CLASS_META[row.classification]?.label || row.classification}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState title="No offenders" description="No unexplained variances were returned." />
           )}
         </ChartCard>
 
-        <ChartCard title="Top Offenders - Flux" subtitle="Largest month-over-month swings">
+        <ChartCard title="Top Offenders - Flux" subtitle="Largest month-over-month swings" height="auto">
           {topFlux.length ? (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ color: 'var(--text-tertiary)', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 0' }}>Profile</th>
-                  <th>Period</th>
-                  <th style={{ textAlign: 'right' }}>Flux %</th>
-                  <th style={{ textAlign: 'right' }}>Narrative</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topFlux.slice(0, 8).map((row) => (
-                  <tr 
-                    key={`${row.balance_id}-${row.period_key}`} 
-                    style={{ borderTop: '1px solid var(--border-0)', cursor: 'pointer' }}
-                    className="hover:bg-surface-700/30 transition-colors"
-                    onClick={() => navigate(`/balance-reconciliation/${row.balance_id}`)}
-                  >
-                    <td style={{ padding: '8px 0' }}>{row.profile_name}</td>
-                    <td>{row.period_key}</td>
-                    <td style={{ textAlign: 'right', color: Math.abs(row.flux_percentage || 0) > 25 ? COLORS.critical : COLORS.material }}>
-                      {row.flux_percentage == null ? '—' : `${row.flux_percentage >= 0 ? '+' : ''}${Number(row.flux_percentage).toFixed(1)}%`}
-                    </td>
-                    <td style={{ textAlign: 'right', color: row.explanation_provided ? COLORS.balanced : COLORS.material }}>
-                      {row.explanation_provided ? 'Saved' : 'Missing'}
-                    </td>
+            <div style={{ width: '100%', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: 'var(--text-tertiary)', textAlign: 'left', borderBottom: '1px solid var(--border-1)' }}>
+                    <th style={{ padding: '10px 12px' }}>Profile</th>
+                    <th style={{ padding: '10px 12px' }}>Period</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Flux %</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Narrative</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {topFlux.slice(0, 8).map((row) => (
+                    <tr 
+                      key={`${row.balance_id}-${row.period_key}`} 
+                      style={{ borderBottom: '1px solid var(--border-0)', cursor: 'pointer' }}
+                      className="hover:bg-surface-700/30 transition-colors"
+                      onClick={() => navigate(`/balance-reconciliation/${row.balance_id}`)}
+                    >
+                      <td style={{ padding: '12px', maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-primary)', fontWeight: 500 }} title={row.profile_name}>{row.profile_name}</td>
+                      <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{row.period_key}</td>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600, color: Math.abs(row.flux_percentage || 0) > 25 ? COLORS.critical : COLORS.material }}>
+                        {row.flux_percentage == null ? '—' : `${row.flux_percentage >= 0 ? '+' : ''}${Number(row.flux_percentage).toFixed(1)}%`}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'right', color: row.explanation_provided ? COLORS.balanced : COLORS.material, fontWeight: 500 }}>
+                        {row.explanation_provided ? 'Saved' : 'Missing'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState title="No flux shifts" description="No month-over-month changes were returned." />
           )}

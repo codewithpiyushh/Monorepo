@@ -329,6 +329,7 @@ def get_variance_flux_summary(
         query = query.filter(ReconciliationBalance.profile_id == profile_id)
     if period_key:
         query = query.filter(ReconciliationBalance.period_key == period_key)
+
         
     if current_user:
         query = apply_profile_rls(query, current_user, profile_model=ReconciliationProfile)

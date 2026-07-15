@@ -10,7 +10,7 @@ import {
   Scale, Plus, RefreshCw, ChevronDown, ChevronUp,
   CheckCircle, XCircle, AlertTriangle, Clock,
   TrendingUp, DollarSign, FileText, Eye, Send,
-  ThumbsUp, ThumbsDown, Award, History, Filter,
+  ThumbsUp, ThumbsDown, Award, History, Filter, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import balancesAPI from '../api/balancesAPI';
@@ -343,6 +343,7 @@ function ActionModal({ action, balance, onClose, onDone }) {
 
 function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighlighted }) {
   const [expanded, setExpanded] = useState(false);
+  const navigate = useNavigate();
   const allowedActions = ROLE_ACTIONS[role?.toLowerCase()] || [];
 
   const canSubmit  = allowedActions.includes('submit')  && ['DRAFT', 'REJECTED', 'BALANCED', 'WITHIN_THRESHOLD', 'OUT_OF_BALANCE'].includes(balance.status);
@@ -359,7 +360,7 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighl
       background: isHighlighted ? 'rgba(255, 230, 0, 0.08)' : 'linear-gradient(145deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.0) 100%)', 
       border: `1px solid ${isHighlighted ? '#FFE600' : isOutOfBalance ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.05)'}`,
       backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-      borderRadius: 8, overflow: 'hidden', marginBottom: 8,
+      borderRadius: 8, overflow: 'hidden', marginBottom: 4,
       boxShadow: '0 1px 6px rgba(0,0,0,0.03)',
       transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s',
     }}
@@ -367,14 +368,17 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighl
     onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 6px rgba(0,0,0,0.03)' }}>
       {/* Main Header Row */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', cursor: 'pointer' }}
         onClick={() => setExpanded(e => !e)}
       >
         <div style={{ flex: 2, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 2 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-              Profile #{balance.profile_id} · {balance.period_key}
-            </span>
+            <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {balance.profile_name ? `${balance.profile_name}` : `Profile #${balance.profile_id}`} - {balance.period_key}
+            </h3>
+            <p style={{ margin: 0, fontSize: 11, color: 'var(--text-tertiary)' }}>
+              {balance.project_name ? `Project: ${balance.project_name} | ` : ''}ID: {balance.id}
+            </p>
             {(balance.comment_count || 0) > 0 && (
               <span style={{ 
                 fontSize: 10, padding: '2px 6px', borderRadius: '10px', 
@@ -389,11 +393,11 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighl
         </div>
 
         {/* ... Rest of your existing header info (GL Balance, Supporting, etc) ... */}
-        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>GL Balance</div><div style={{ fontSize: 13, fontWeight: 600 }}>{(balance.source_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
-        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Supporting</div><div style={{ fontSize: 13, fontWeight: 600 }}>{(balance.target_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>GL Balance</div><div style={{ fontSize: 12, fontWeight: 600 }}>{(balance.source_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
+        <div style={{ flex: 1, textAlign: 'right' }}><div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>Supporting</div><div style={{ fontSize: 12, fontWeight: 600 }}>{(balance.target_balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></div>
         <div style={{ flex: 1, textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Variance</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: varianceColor }}>{variance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>Variance</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: varianceColor }}>{variance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
         </div>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}><StatusBadge status={balance.status} /></div>
         <div>{expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</div>
@@ -420,6 +424,11 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighl
                 <button onClick={(e) => { e.stopPropagation(); onView(balance); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border-1)', background: 'transparent' }}>
                     <History size={13} /> History
                 </button>
+                {variance !== 0 && balance.profile_id && (
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/transaction-matching-workspace?profileId=${balance.profile_id}&period=${balance.period_key}`); }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 8, border: '1px solid var(--brand)', background: 'rgba(77, 148, 255, 0.1)', color: 'var(--brand)' }}>
+                      <Eye size={13} /> Investigate Variance
+                  </button>
+                )}
                 {canSubmit && !isBalanceLocked(balance.status) && (
                     <button onClick={(e) => { e.stopPropagation(); onAction('submit', balance); }} style={{ border: 'none', background: '#3b82f6', color: '#fff', padding: '7px 14px', borderRadius: 8 }}>
                         <Send size={13} /> Submit
@@ -440,20 +449,39 @@ function BalanceRow({ balance, role, onAction, onView, onNarrativeSaved, isHighl
 
 // ── History Drawer ────────────────────────────────────────────────────────────
 
-function HistoryDrawer({ balance, onClose }) {
+function HistoryDrawer({ balance, collapsed, onToggleCollapse, onClose }) {
   const { data: history = [], isLoading } = useQuery({
     queryKey: ['balance-history', balance.id],
     queryFn: () => balancesAPI.getHistory(balance.id),
   });
 
+  if (collapsed) {
+    return (
+      <div style={{
+        width: 48, height: '100%', flexShrink: 0,
+        background: 'var(--surface-1)', borderLeft: '1px solid var(--border-0)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 24,
+      }}>
+        <button onClick={onToggleCollapse} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }} title="Expand Audit History">
+          <ChevronLeft size={20} />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{
-      position: 'fixed', right: 0, top: 0, bottom: 0, width: 380,
+      width: 380, height: '100%', flexShrink: 0,
       background: 'var(--surface-1)', borderLeft: '1px solid var(--border-0)',
-      zIndex: 500, padding: 24, overflowY: 'auto',
+      padding: 24, overflowY: 'auto', transition: 'width 0.3s ease'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Audit History</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={onToggleCollapse} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 0 }} title="Collapse">
+            <ChevronRight size={18} />
+          </button>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Audit History</h3>
+        </div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-tertiary)' }}>×</button>
       </div>
 
@@ -514,6 +542,7 @@ export default function BalanceReconciliationPage() {
   const [showCreate, setShowCreate]   = useState(false);
   const [actionModal, setActionModal] = useState(null);   // { action, balance }
   const [historyDrawer, setHistoryDrawer] = useState(null); // balance
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
 
   // Filters
   const [filterStatus, setFilterStatus]   = useState('');
@@ -545,7 +574,7 @@ export default function BalanceReconciliationPage() {
     queryKey: ['balance-list', page, filterStatus, filterPeriod],
     queryFn: () => balancesAPI.list({
       page,
-      page_size: 20,
+      page_size: 8,
       ...(filterStatus  ? { status: filterStatus }      : {}),
       ...(filterPeriod  ? { period_key: filterPeriod }  : {}),
     }),
@@ -554,9 +583,9 @@ export default function BalanceReconciliationPage() {
   });
 
   const dash  = dashQ.data  || {};
-  const items = listQ.data?.items || [];
-  const total = listQ.data?.total || 0;
-  const totalPages = Math.ceil(total / 20);
+  const items = (balanceId && singleItemQuery.data) ? [singleItemQuery.data] : (listQ.data?.items || []);
+  const total = (balanceId && singleItemQuery.data) ? 1 : (listQ.data?.total || 0);
+  const totalPages = Math.ceil(total / ((balanceId && singleItemQuery.data) ? 1 : 8));
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleCreated = useCallback(() => {
@@ -606,7 +635,10 @@ export default function BalanceReconciliationPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ padding: '20px 28px', maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ flex: 1, padding: '16px 24px', maxWidth: 1200, width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        
+        {/* Top Header Section (KPIs and Filters) */}
+        <div style={{ flexShrink: 0, paddingBottom: 12, marginBottom: 0, borderBottom: '1px solid var(--border-0)' }}>
 
 
 
@@ -616,9 +648,9 @@ export default function BalanceReconciliationPage() {
       ) : (
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(8, 1fr)', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
           gap: 10, 
-          marginBottom: 16 
+          marginBottom: 10 
         }}>
           <KpiCard label="Total"            value={dash.total || 0}               icon={FileText} />
           <KpiCard label="Balanced"         value={dash.balanced || 0}            icon={CheckCircle} color="#22c55e" />
@@ -638,17 +670,17 @@ export default function BalanceReconciliationPage() {
 
       {/* Filters */}
       <div style={{
-        display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12,
-        padding: '8px 12px', background: 'var(--surface-1)',
-        border: '1px solid var(--border-0)', borderRadius: 8,
+        display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8,
+        padding: '6px 10px', background: 'var(--surface-1)',
+        border: '1px solid var(--border-0)', borderRadius: 6,
       }}>
-        <Filter size={14} color="var(--text-tertiary)" />
+        <Filter size={13} color="var(--text-tertiary)" />
         <select
           value={filterStatus}
           onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
           style={{
-            padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-1)',
-            background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 12, cursor: 'pointer',
+            padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border-1)',
+            background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 11, cursor: 'pointer',
           }}
         >
           <option value="">All Statuses</option>
@@ -663,26 +695,68 @@ export default function BalanceReconciliationPage() {
           value={filterPeriod}
           onChange={e => { setFilterPeriod(e.target.value); setPage(1); }}
           style={{
-            padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border-1)',
-            background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 12, outline: 'none', width: 220,
+            padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border-1)',
+            background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 11, outline: 'none', width: 200,
           }}
         />
 
         <button
           onClick={() => { setFilterStatus(''); setFilterPeriod(''); setPage(1); }}
           style={{
-            padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border-1)',
-            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
-            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border-1)',
+            background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11,
+            display: 'flex', alignItems: 'center', gap: 4,
           }}
         >
-          <RefreshCw size={12} /> Reset
+          <RefreshCw size={11} /> Reset
         </button>
-
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>
-          {total} record{total !== 1 ? 's' : ''}
-        </span>
+        
+        <div style={{ flex: 1 }} />
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            Showing {Math.min((page - 1) * 8 + 1, total)} to {Math.min(page * 8, total)} of {total} records
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{
+                padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
+                background: 'var(--surface-1)', color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
+              }}
+            >
+              ← Prev
+            </button>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              minWidth: 26, padding: '0 6px', fontSize: 11, fontWeight: 600,
+              background: 'var(--surface-2)', borderRadius: 6, color: 'var(--text-primary)'
+            }}>
+              {page}
+            </div>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages || totalPages === 0}
+              style={{
+                padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
+                background: 'var(--surface-1)', color: (page === totalPages || totalPages === 0) ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                cursor: (page === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        </div>
       </div>
+        </div>
+
+      {/* Bottom Split Section */}
+      <div style={{ display: 'flex', flexDirection: 'row', flex: 1, overflow: 'hidden' }}>
+        
+        {/* Left: Main Content (List) */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingRight: historyDrawer ? 16 : 0, transition: 'padding-right 0.3s ease' }}>
 
       {/* List */}
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }} className="slim-scroll">
@@ -714,46 +788,6 @@ export default function BalanceReconciliationPage() {
             />
           ))}
 
-          {/* Pagination */}
-          <div style={{ 
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-            marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-0)' 
-          }}>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-              Showing {Math.min((page - 1) * 20 + 1, total)} to {Math.min(page * 20, total)} of {total} records
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                style={{
-                  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
-                  background: 'var(--surface-1)', color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
-                }}
-              >
-                ← Prev
-              </button>
-              <div style={{ 
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                minWidth: 26, padding: '0 6px', fontSize: 11, fontWeight: 600,
-                background: 'var(--surface-2)', borderRadius: 6, color: 'var(--text-primary)'
-              }}>
-                {page}
-              </div>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages || totalPages === 0}
-                style={{
-                  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-1)',
-                  background: 'var(--surface-1)', color: (page === totalPages || totalPages === 0) ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: (page === totalPages || totalPages === 0) ? 'not-allowed' : 'pointer', fontSize: 11, transition: 'background 0.2s',
-                }}
-              >
-                Next →
-              </button>
-            </div>
-          </div>
         </>
       )}
       </div>
@@ -774,16 +808,23 @@ export default function BalanceReconciliationPage() {
           onDone={handleActionDone}
         />
       )}
+        </div>
 
-      {historyDrawer && (
-        <HistoryDrawer
-          balance={historyDrawer}
-          onClose={() => {
-            setHistoryDrawer(null);
-            if (balanceId) navigate('/balance-reconciliation', { replace: true });
-          }}
-        />
-      )}
+        {/* Right: Audit History */}
+        {historyDrawer && (
+          <HistoryDrawer
+            balance={historyDrawer}
+            collapsed={historyCollapsed}
+            onToggleCollapse={() => setHistoryCollapsed(!historyCollapsed)}
+            onClose={() => {
+              setHistoryDrawer(null);
+              setHistoryCollapsed(false);
+              if (balanceId) navigate('/balance-reconciliation', { replace: true });
+            }}
+          />
+        )}
+      </div>
+
       </div>
     </div>
   );

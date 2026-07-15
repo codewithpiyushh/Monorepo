@@ -1,64 +1,88 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import PageHeader from '../components/ui/PageHeader';
 import { ShieldAlert, Activity, DollarSign, Clock, Layers, Save, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import client from '../api/client';
+import { riskConfigAPI } from '../api';
+import { useProjectStore } from '../store/projectStore';
+import toast from 'react-hot-toast';
 
 export default function RiskConfigurationPage() {
+  const selectedProjectId = useProjectStore(s => s.selectedProjectId);
   const [weights, setWeights] = useState({
-    aging: 0,
-    dollarValue: 0,
-    accountType: 0
+    aging: 33,
+    dollarValue: 33,
+    accountType: 34
   });
   
-  const [entities, setEntities] = useState([]);
+  const [entities, setEntities] = useState([
+    { id: 'ACT-001', name: 'Global Cash & Equivalents', agingVal: 4, dollarVal: 450, typeVal: 8 },
+    { id: 'ACT-012', name: 'EMEA Accounts Payable', agingVal: 42, dollarVal: 80, typeVal: 3 },
+    { id: 'ACT-045', name: 'Intercompany APAC Settlement', agingVal: 12, dollarVal: 1200, typeVal: 9 },
+    { id: 'ACT-089', name: 'US Payroll Clearing Account', agingVal: 9, dollarVal: 340, typeVal: 5 },
+  ]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchConfig = async () => {
+      if (!selectedProjectId) return;
       try {
         setIsLoading(true);
-        const res = await client.get('/api/v1/risk-config');
-        if (res.data) {
+        // The API returns config for a specific project
+        const data = await riskConfigAPI.get(selectedProjectId);
+        if (data) {
           setWeights({
-            aging: res.data.aging ?? res.data.aging_weight ?? 35,
-            dollarValue: res.data.dollarValue ?? res.data.materiality_weight ?? 45,
-            accountType: res.data.accountType ?? res.data.account_type_weight ?? 20
+            aging: Math.round(data.aging_weight * 100) || 33,
+            dollarValue: Math.round(data.materiality_weight * 100) || 33,
+            accountType: Math.round(data.account_type_weight * 100) || 34
           });
-          if (res.data.entities) {
-            setEntities(res.data.entities);
-          } else if (Array.isArray(res.data.previewData)) {
-            setEntities(res.data.previewData);
-          }
         }
       } catch (error) {
         console.error('Failed to fetch risk configurations:', error);
-        // Fallback for UI testing if backend fails
-        setWeights({ aging: 35, dollarValue: 45, accountType: 20 });
       } finally {
         setIsLoading(false);
       }
     };
     fetchConfig();
-  }, []);
+  }, [selectedProjectId]);
 
   const handleWeightChange = (key, value) => {
-    setWeights(prev => ({ ...prev, [key]: parseInt(value, 10) }));
+    setWeights(prev => ({ ...prev, [key]: parseInt(value, 10) || 0 }));
   };
 
   const handleSave = async () => {
+    if (!selectedProjectId) return;
+    const total = weights.aging + weights.dollarValue + weights.accountType;
+    if (total !== 100) {
+      toast.error(`Invalid weights: Total weight is ${total}%. It must equal 100% before deploying.`);
+      return;
+    }
     setIsSaving(true);
     try {
-      await client.post('/api/v1/risk-config', {
-        aging: weights.aging,
-        dollarValue: weights.dollarValue,
-        accountType: weights.accountType,
-        aging_weight: weights.aging,
-        materiality_weight: weights.dollarValue,
-        account_type_weight: weights.accountType
+      await riskConfigAPI.update(selectedProjectId, {
+        aging_weight: weights.aging / 100,
+        materiality_weight: weights.dollarValue / 100,
+        account_type_weight: weights.accountType / 100
       });
+      toast.success("✅ Risk configuration deployed successfully!");
     } catch (error) {
-      console.error('Failed to save risk configuration:', error);
+      if (error.response?.status === 404) {
+        try {
+          // Create if it doesn't exist yet
+          await riskConfigAPI.create({
+            project_id: selectedProjectId,
+            aging_weight: weights.aging / 100,
+            materiality_weight: weights.dollarValue / 100,
+            account_type_weight: weights.accountType / 100
+          });
+          toast.success("✅ Risk configuration deployed successfully!");
+        } catch (createErr) {
+          toast.error(`❌ Failed to deploy risk configuration: ${createErr.message}`);
+          console.error('Failed to create risk configuration:', createErr);
+        }
+      } else {
+        toast.error(`❌ Failed to deploy risk configuration: ${error.message}`);
+        console.error('Failed to save risk configuration:', error);
+      }
     } finally {
       setIsSaving(false);
     }

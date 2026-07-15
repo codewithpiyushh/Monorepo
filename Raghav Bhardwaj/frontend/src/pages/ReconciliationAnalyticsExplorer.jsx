@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useOutletContext, useNavigate, useParams } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
 import { BarChart3, CheckCircle2, Clock, Layers, ShieldAlert, TrendingUp, Users, AlertTriangle, ChevronDown } from 'lucide-react'
-import { projectsAPI, executionsAPI, workflowAPI } from '../api'
+import { enterpriseAPI, projectsAPI, executionsAPI, workflowAPI } from '../api'
 import { useProjectStore } from '../store/projectStore'
 import PageHeader from '../components/ui/PageHeader'
 import { EmptyState, LoadingState } from '../components/ui/PageState'
@@ -37,32 +37,24 @@ const toNumber = (value) => {
 
 function KpiCard({ label, value, sub, icon: Icon, color }) {
   return (
-    <div style={{
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border-1)',
-      borderRadius: 10,
-      padding: '8px 12px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-    }}>
+    <div className="flex items-center gap-2.5 px-3 border-l border-[var(--border-1)]">
       <div style={{
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        background: `${color}18`,
-        border: `1px solid ${color}33`,
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        background: `${color}15`,
+        border: `1px solid ${color}30`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <Icon style={{ width: 14, height: 14, color }} />
+        <Icon style={{ width: 12, height: 12, color }} />
       </div>
-      <div>
-        <p style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</p>
-        <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 2 }}>{value}</p>
-        {sub ? <p style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 2 }}>{sub}</p> : null}
+      <div className="flex flex-col justify-center">
+        <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1 }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1, margin: '3px 0 2px 0' }}>{value}</span>
+        {sub && <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1 }}>{sub}</span>}
       </div>
     </div>
   )
@@ -71,8 +63,8 @@ function KpiCard({ label, value, sub, icon: Icon, color }) {
 function ProjectSelectorCard({ projects, selectedProjectId, onChange }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
-
   const selected = projects.find(p => String(p.id) === String(selectedProjectId));
+  const [dropdownStyle, setDropdownStyle] = useState({});
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -84,63 +76,45 @@ function ProjectSelectorCard({ projects, selectedProjectId, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        top: rect.bottom + 8,
+        left: rect.left,
+        minWidth: Math.max(rect.width, 220),
+      });
+    }
+  }, [open]);
+
   return (
-    <div ref={containerRef} style={{
-      background: 'var(--surface-2)',
-      border: '1px solid var(--border-1)',
-      borderRadius: 10,
-      padding: '8px 12px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      position: 'relative',
-      cursor: 'pointer',
-      userSelect: 'none',
-      transition: 'background 0.2s',
-    }}
-    onClick={() => setOpen(!open)}
-    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
-    onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-2)'}
-    >
+    <div ref={containerRef} className="flex items-center gap-2 pl-4 border-l border-[var(--border-1)] relative cursor-pointer group" onClick={() => setOpen(!open)}>
       <div style={{
-        width: 32,
-        height: 32,
-        borderRadius: 8,
-        background: `${COLORS.blue}18`,
-        border: `1px solid ${COLORS.blue}33`,
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        background: `${COLORS.blue}15`,
+        border: `1px solid ${COLORS.blue}30`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <Layers style={{ width: 14, height: 14, color: COLORS.blue }} />
+        <Layers style={{ width: 12, height: 12, color: COLORS.blue }} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        <p style={{ fontSize: 9.5, color: 'var(--text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>Selected Project</p>
-        <div style={{ 
-          fontSize: 18, 
-          fontWeight: 700, 
-          color: 'var(--text-primary)',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
-          overflow: 'hidden',
-          paddingRight: 20,
-        }}>
-          {selected ? selected.name : 'Select a project...'}
+      <div className="flex flex-col justify-center">
+        <span style={{ fontSize: 9, color: 'var(--text-tertiary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1 }}>Selected Project</span>
+        <div className="flex items-center gap-1" style={{ margin: '3px 0 2px 0' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{selected ? selected.name.substring(0, 15) + (selected.name.length > 15 ? '...' : '') : 'None'}</span>
+          <ChevronDown style={{ width: 12, height: 12, color: 'var(--text-tertiary)' }} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
-        <p style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 1 }}>live project context</p>
+        <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1 }}>Live analytics context</span>
       </div>
-      <ChevronDown style={{ 
-        position: 'absolute', right: 12, top: '50%', transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`, 
-        width: 14, height: 14, color: 'var(--text-tertiary)', pointerEvents: 'none', transition: 'transform 0.2s' 
-      }} />
 
       {open && (
         <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
+          position: 'fixed',
+          ...dropdownStyle,
           marginTop: 6,
           background: 'var(--surface-2)',
           border: '1px solid var(--border-1)',
@@ -400,8 +374,8 @@ function EntityTable({ data, onRowClick }) {
       <tbody>
         {data.slice(0, 12).map((row) => (
           <tr 
-            key={row.entity} 
-            onClick={() => onRowClick?.(row.entity)}
+            key={`${row.entity}-${row.account}`} 
+            onClick={() => onRowClick?.(row)}
             className={onRowClick ? "cursor-pointer hover:bg-surface-700/30 transition-colors" : ""}
           >
             <td style={{ fontWeight: 600, fontSize: 12 }}>{row.entity}</td>
@@ -425,6 +399,150 @@ function EntityTable({ data, onRowClick }) {
   )
 }
 
+function DrilldownTable({ level, data, onSelect }) {
+  if (!data.length) {
+    return <EmptyState title="No drill-down data" description="Choose an entity or account to inspect deeper detail." />
+  }
+
+  const rows = data.slice(0, 20)
+
+  if (level === 'account') {
+    return (
+      <table className="data-table" style={{ borderRadius: 0 }}>
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Total</th>
+            <th>Matched</th>
+            <th>Open Issues</th>
+            <th>Match Rate</th>
+            <th>Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.account}
+              onClick={() => onSelect?.(row)}
+              className={onSelect ? 'cursor-pointer hover:bg-surface-700/30 transition-colors' : ''}
+            >
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{row.account}</td>
+              <td style={{ fontSize: 12 }}>{row.total_transactions?.toLocaleString?.() ?? row.total_transactions ?? 0}</td>
+              <td style={{ fontSize: 12, color: COLORS.green }}>{row.matched_transactions?.toLocaleString?.() ?? row.matched_transactions ?? 0}</td>
+              <td style={{ fontSize: 12, color: row.exceptions > 0 ? COLORS.red : COLORS.green }}>{row.exceptions?.toLocaleString?.() ?? row.exceptions ?? 0}</td>
+              <td style={{ fontSize: 12, fontWeight: 700, color: row.match_rate >= 90 ? COLORS.green : row.match_rate >= 70 ? COLORS.amber : COLORS.red }}>
+                {row.match_rate}%
+              </td>
+              <td style={{ fontSize: 12 }}>{Number(row.variance_amount || 0).toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
+  if (level === 'reconciliation') {
+    return (
+      <table className="data-table" style={{ borderRadius: 0 }}>
+        <thead>
+          <tr>
+            <th>Profile</th>
+            <th>Entity</th>
+            <th>Account</th>
+            <th>Status</th>
+            <th>Total</th>
+            <th>Matched</th>
+            <th>Open Issues</th>
+            <th>Match Rate</th>
+            <th>Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.profile_id}
+              onClick={() => onSelect?.(row)}
+              className={onSelect ? 'cursor-pointer hover:bg-surface-700/30 transition-colors' : ''}
+            >
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{row.profile_id}</td>
+              <td style={{ fontSize: 12 }}>{row.entity}</td>
+              <td style={{ fontSize: 12 }}>{row.account}</td>
+              <td style={{ fontSize: 12 }}>{row.status || 'UNKNOWN'}</td>
+              <td style={{ fontSize: 12 }}>{row.total_transactions?.toLocaleString?.() ?? row.total_transactions ?? 0}</td>
+              <td style={{ fontSize: 12, color: COLORS.green }}>{row.matched_transactions?.toLocaleString?.() ?? row.matched_transactions ?? 0}</td>
+              <td style={{ fontSize: 12, color: row.exceptions > 0 ? COLORS.red : COLORS.green }}>{row.exceptions?.toLocaleString?.() ?? row.exceptions ?? 0}</td>
+              <td style={{ fontSize: 12, fontWeight: 700, color: row.match_rate >= 90 ? COLORS.green : row.match_rate >= 70 ? COLORS.amber : COLORS.red }}>
+                {row.match_rate}%
+              </td>
+              <td style={{ fontSize: 12 }}>{Number(row.variance_amount || 0).toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
+  if (level === 'exception') {
+    return (
+      <table className="data-table" style={{ borderRadius: 0 }}>
+        <thead>
+          <tr>
+            <th>Exception ID</th>
+            <th>Profile</th>
+            <th>Entity</th>
+            <th>Account</th>
+            <th>Classification</th>
+            <th>Status</th>
+            <th>Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.exception_id || row.record_id}
+              onClick={() => onSelect?.(row)}
+              className={onSelect ? 'cursor-pointer hover:bg-surface-700/30 transition-colors' : ''}
+            >
+              <td style={{ fontWeight: 600, fontSize: 12 }}>{row.exception_id || 'UNKNOWN'}</td>
+              <td style={{ fontSize: 12 }}>{row.profile_id}</td>
+              <td style={{ fontSize: 12 }}>{row.entity}</td>
+              <td style={{ fontSize: 12 }}>{row.account}</td>
+              <td style={{ fontSize: 12 }}>{row.classification || 'UNCLASSIFIED'}</td>
+              <td style={{ fontSize: 12 }}>{row.status}</td>
+              <td style={{ fontSize: 12 }}>{Number(row.variance_amount || 0).toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
+  return (
+    <table className="data-table" style={{ borderRadius: 0 }}>
+      <thead>
+        <tr>
+          <th>Transaction</th>
+          <th>Entity</th>
+          <th>Account</th>
+          <th>Status</th>
+          <th>Variance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, index) => (
+          <tr key={row.record_id || row.transaction_id || index}>
+            <td style={{ fontWeight: 600, fontSize: 12 }}>{row.record_id || row.transaction_id || `Row ${index + 1}`}</td>
+            <td style={{ fontSize: 12 }}>{row.entity || 'Unassigned'}</td>
+            <td style={{ fontSize: 12 }}>{row.account || 'Unassigned'}</td>
+            <td style={{ fontSize: 12 }}>{row.status || 'UNKNOWN'}</td>
+            <td style={{ fontSize: 12 }}>{Number(row.match_variance || 0).toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 function bucketIssueLoad(openIssues) {
   if (openIssues === 0) return 'Clean'
   if (openIssues <= 2) return 'Low'
@@ -435,7 +553,7 @@ function bucketIssueLoad(openIssues) {
 export default function ReconciliationAnalyticsExplorer() {
   const { selectedProjectId, setSelectedProjectId } = useProjectStore()
   const navigate = useNavigate()
-  const { entity, account } = useParams()
+  const { entity, account, profile, exception } = useParams()
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -453,6 +571,10 @@ export default function ReconciliationAnalyticsExplorer() {
     () => projects.find((project) => String(project.id) === String(selectedProjectId)) || null,
     [projects, selectedProjectId],
   )
+  const selectedEntity = entity ? decodeURIComponent(entity) : ''
+  const selectedAccount = account ? decodeURIComponent(account) : ''
+  const selectedProfile = profile ? decodeURIComponent(profile) : ''
+  const selectedException = exception ? decodeURIComponent(exception) : ''
 
   const context = useOutletContext();
   const setHeaderOverride = context?.setHeaderOverride;
@@ -515,6 +637,19 @@ export default function ReconciliationAnalyticsExplorer() {
 
   const units = resultsPage?.units || []
   const latestStats = safeJson(latestExecution?.stats)
+  const drillLevel = selectedException ? 'transaction' : selectedProfile ? 'exception' : selectedAccount ? 'reconciliation' : selectedEntity ? 'account' : 'entity'
+  const drillKey = selectedException || selectedProfile || selectedAccount || selectedEntity || ''
+
+  const { data: drilldownData = { items: [], total: 0 }, isLoading: drillLoading } = useQuery({
+    queryKey: ['project-analytics-drilldown', selectedProjectId, drillLevel, drillKey],
+    queryFn: () => enterpriseAPI.analyticsDrilldown({
+      level: drillLevel,
+      key: drillKey,
+      limit: 200,
+    }),
+    enabled: Number.isFinite(numericProjectId) && Boolean(drillKey),
+  })
+  const drilldownItems = drilldownData?.items || []
 
   const entityPerformance = useMemo(() => {
     return units
@@ -578,6 +713,51 @@ export default function ReconciliationAnalyticsExplorer() {
     { label: 'Workflows', value: workflows.length, sub: `${workflowStatus.length} workflow states`, icon: ShieldAlert, color: COLORS.amber },
   ]
 
+  useEffect(() => {
+    if (setHeaderOverride) {
+      const subtitle = selectedProject 
+        ? `Live analytics for ${selectedProject.name}` 
+        : (selectedProjectId ? 'Live analytics for the selected project' : 'Select a project to view live analytics.');
+
+      setHeaderOverride(
+        <header className="bl-header" style={{ paddingRight: 0 }}>
+          <div className="flex flex-col min-w-0 flex-shrink-0 mr-4">
+            <h1 className="bl-header-title" style={{ fontSize: 18 }}>Project Analytics</h1>
+            <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2, fontWeight: 500 }}>{subtitle}</p>
+          </div>
+          <div className="flex-1 flex items-center justify-end overflow-x-auto overflow-y-hidden pl-4 border-l border-[var(--border-1)] ml-auto h-full slim-scroll">
+            <ProjectSelectorCard projects={projects} selectedProjectId={selectedProjectId} onChange={setSelectedProjectId} />
+            {kpis.map((card) => <KpiCard key={card.label} {...card} />)}
+          </div>
+        </header>
+      );
+      return () => setHeaderOverride(null);
+    }
+  }, [setHeaderOverride, selectedProject, selectedProjectId, kpis, projects]);
+
+  const handleEntitySelect = (row) => {
+    const entityName = typeof row === 'string' ? row : row?.entity
+    const accountName = typeof row === 'string' ? undefined : row?.account
+    if (!entityName) return
+    if (accountName && accountName !== 'Unassigned' && accountName !== 'General') {
+      navigate(`/analytics-explorer/${encodeURIComponent(entityName)}/${encodeURIComponent(accountName)}`)
+    } else {
+      navigate(`/analytics-explorer/${encodeURIComponent(entityName)}`)
+    }
+  }
+  const handleAccountSelect = (row) => {
+    if (!selectedEntity || !row?.account) return
+    navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}/${encodeURIComponent(row.account)}`)
+  }
+  const handleProfileSelect = (row) => {
+    if (!selectedEntity || !selectedAccount || !row?.profile_id) return
+    navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}/${encodeURIComponent(selectedAccount)}/${encodeURIComponent(row.profile_id)}`)
+  }
+  const handleExceptionSelect = (row) => {
+    if (!selectedEntity || !selectedAccount || !selectedProfile || !row?.exception_id) return
+    navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}/${encodeURIComponent(selectedAccount)}/${encodeURIComponent(selectedProfile)}/${encodeURIComponent(row.exception_id)}`)
+  }
+
   if (!selectedProjectId) {
     return (
       <div className="h-full flex flex-col">
@@ -588,7 +768,7 @@ export default function ReconciliationAnalyticsExplorer() {
     )
   }
 
-  if (execLoading || (Number.isFinite(numericProjectId) && latestExecution && resultsLoading)) {
+  if (execLoading || (Number.isFinite(numericProjectId) && latestExecution && resultsLoading) || drillLoading) {
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto p-5">
@@ -601,12 +781,10 @@ export default function ReconciliationAnalyticsExplorer() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-auto p-5 slim-scroll" style={{ background: 'var(--surface-0)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
-          <ProjectSelectorCard projects={projects} selectedProjectId={selectedProjectId} onChange={setSelectedProjectId} />
-          {kpis.map((card) => <KpiCard key={card.label} {...card} />)}
-        </div>
 
-        <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12 }}>
+
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12 }}>
           <ChartCard title="Execution Trend" subtitle="Latest runs for the selected project">
             <MatchTrendChart data={trendData} />
           </ChartCard>
@@ -624,24 +802,59 @@ export default function ReconciliationAnalyticsExplorer() {
           </ChartCard>
         </div>
 
-        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden' }}>
-            <EntityTable data={entityPerformance} onRowClick={(entity) => navigate(`/analytics-explorer/${entity}`)} />
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1.15fr', gap: 12, minHeight: 0 }}>
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden', minHeight: 0 }}>
+            <EntityTable data={entityPerformance} onRowClick={handleEntitySelect} />
           </div>
-          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Run Summary</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {[
-                ['Matched', toNumber(latestStats.matched), COLORS.green],
-                ['Partial', toNumber(latestStats.partial), COLORS.amber],
-                ['Unmatched', toNumber(latestStats.unmatched), COLORS.red],
-                ['Match Rate', `${latestStats.match_rate ?? 0}%`, COLORS.blue],
-              ].map(([label, value, color]) => (
-                <div key={label} style={{ background: 'var(--surface-1)', border: '1px solid var(--border-1)', borderRadius: 8, padding: 12 }}>
-                  <p style={{ fontSize: 10.5, color: 'var(--text-tertiary)' }}>{label}</p>
-                  <p style={{ fontSize: 20, fontWeight: 700, color }}>{value}</p>
+          <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ padding: 16, borderBottom: '1px solid var(--border-1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Drill-down Explorer</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                    {selectedEntity
+                      ? selectedException
+                        ? `${selectedEntity} / ${selectedAccount} / ${selectedProfile} / ${selectedException}`
+                        : selectedProfile
+                          ? `${selectedEntity} / ${selectedAccount} / ${selectedProfile}`
+                          : selectedAccount
+                            ? `${selectedEntity} / ${selectedAccount}`
+                            : selectedEntity
+                      : 'Select an entity to inspect account-level detail.'}
+                  </p>
                 </div>
-              ))}
+                    {selectedEntity && (
+                  <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: COLORS.violet }}>
+                    {drilldownData.total || drilldownItems.length} rows
+                  </span>
+                )}
+              </div>
+              {selectedEntity && (
+                <button
+                  className="btn-ghost text-xs h-8"
+                  onClick={() => {
+                    if (selectedException) navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}/${encodeURIComponent(selectedAccount)}/${encodeURIComponent(selectedProfile)}`)
+                    else if (selectedProfile) navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}/${encodeURIComponent(selectedAccount)}`)
+                    else if (selectedAccount) navigate(`/analytics-explorer/${encodeURIComponent(selectedEntity)}`)
+                    else navigate('/analytics-explorer')
+                  }}
+                >
+                  {selectedException ? 'Back to Profile' : selectedProfile ? 'Back to Account' : selectedAccount ? 'Back to Entity' : 'Clear selection'}
+                </button>
+              )}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }} className="slim-scroll">
+              {selectedEntity ? (
+                <DrilldownTable
+                  level={drillLevel}
+                  data={drilldownItems}
+                  onSelect={drillLevel === 'account' ? handleAccountSelect : drillLevel === 'reconciliation' ? handleProfileSelect : drillLevel === 'exception' ? handleExceptionSelect : undefined}
+                />
+              ) : (
+                <div style={{ padding: 16 }}>
+                  <EmptyState title="No entity selected" description="Click any entity on the left to open account-level drill-down." />
+                </div>
+              )}
             </div>
           </div>
         </div>

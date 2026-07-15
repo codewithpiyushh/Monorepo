@@ -1,7 +1,7 @@
 import json
 import io
 import pandas as pd
-from typing import List, Optional
+from typing import List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, UploadFile
 from ..models.models import Dataset, ColumnMetadata, DataRow

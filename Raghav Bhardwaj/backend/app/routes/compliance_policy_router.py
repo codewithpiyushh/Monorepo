@@ -4,13 +4,12 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas.compliance_policy_schemas import CompliancePolicyCreate, CompliancePolicyUpdate, CompliancePolicyOut
 from ..services import compliance_policy_service, audit_service
-from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
+from ..rbac.roles import ADMIN, CERTIFIER
 
 router = APIRouter(
     prefix="/api/v1/compliance-policy",
     tags=["compliance_policies"],
-    dependencies=[Depends(role_required(["admin"]))]
 )
 
 @router.post("", response_model=CompliancePolicyOut, status_code=201)
@@ -18,7 +17,7 @@ def create_policy(
     payload: CompliancePolicyCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(role_required([ADMIN])),
 ):
     policy = compliance_policy_service.create_policy(db, payload, current_user.id)
     audit_service.log_action(
@@ -33,7 +32,7 @@ def create_policy(
 def list_policies(
     project_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(role_required([ADMIN, CERTIFIER])),
 ):
     return compliance_policy_service.get_policies(db, project_id=project_id)
 
@@ -41,7 +40,7 @@ def list_policies(
 def get_policy(
     policy_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(role_required([ADMIN, CERTIFIER])),
 ):
     return compliance_policy_service.get_policy(db, policy_id)
 
@@ -51,7 +50,7 @@ def update_policy(
     payload: CompliancePolicyUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(role_required([ADMIN])),
 ):
     policy = compliance_policy_service.update_policy(db, policy_id, payload)
     audit_service.log_action(
@@ -67,7 +66,7 @@ def delete_policy(
     policy_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(role_required([ADMIN])),
 ):
     compliance_policy_service.delete_policy(db, policy_id)
     audit_service.log_action(

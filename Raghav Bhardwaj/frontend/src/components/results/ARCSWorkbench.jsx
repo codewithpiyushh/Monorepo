@@ -7,6 +7,7 @@ export default function ARCSWorkbench({
   transactions,
   mappedColumns,
   onSelectTransaction,
+  canCreateAdjustment = false,
 }) {
   const [activeTab, setActiveTab] = useState('unmatched')
   
@@ -180,6 +181,48 @@ export default function ARCSWorkbench({
     )
   }
 
+  const renderMatchRecordData = (tx) => {
+    const src = parseJson(tx.source_data)
+    const tgt = parseJson(tx.target_data)
+    
+    // We only want to show the columns that actually matter (mappedColumns)
+    const cols = mappedColumns.length ? mappedColumns : []
+    
+    return (
+      <div className="grid grid-cols-2 gap-4 mt-3">
+        <div className="text-xs text-slate-400 bg-surface-900/50 p-3 rounded border border-surface-700/30">
+          <p className="text-[10px] uppercase mb-2 text-slate-500 font-semibold tracking-wider">Source Record</p>
+          <div className="space-y-1.5">
+            {cols.map((c, i) => (
+              <div key={i} className="flex justify-between items-center pb-1 border-b border-surface-700/20 last:border-0">
+                <span className="text-slate-500 truncate pr-2 max-w-[50%]">{c.source_column}</span>
+                <span className="text-slate-200 font-medium truncate">{src[c.source_column] ?? '-'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="text-xs text-slate-400 bg-surface-900/50 p-3 rounded border border-surface-700/30">
+          <p className="text-[10px] uppercase mb-2 text-slate-500 font-semibold tracking-wider">Target Record</p>
+          <div className="space-y-1.5">
+            {cols.map((c, i) => {
+              const srcVal = src[c.source_column]
+              const tgtVal = tgt[c.target_column]
+              const isDiff = tx.match_status !== 'matched' && String(srcVal) !== String(tgtVal)
+              return (
+                <div key={i} className="flex justify-between items-center pb-1 border-b border-surface-700/20 last:border-0">
+                  <span className="text-slate-500 truncate pr-2 max-w-[50%]">{c.target_column}</span>
+                  <span className={`font-medium truncate ${isDiff ? 'text-amber-400 bg-amber-400/10 px-1 rounded' : 'text-slate-200'}`}>
+                    {tgtVal ?? '-'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const renderSuggestedMatches = () => {
     return (
       <div className="space-y-3 max-h-[500px] overflow-y-auto">
@@ -201,16 +244,7 @@ export default function ARCSWorkbench({
                 <button className="btn-primary h-7 px-3 py-0 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white border-transparent">Confirm Match</button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-               <div className="text-xs text-slate-400 bg-surface-900/50 p-2 rounded">
-                 <p className="text-[10px] uppercase mb-1 text-slate-500 font-semibold">Source Record</p>
-                 <pre className="whitespace-pre-wrap font-mono text-[10px]">{tx.source_data}</pre>
-               </div>
-               <div className="text-xs text-slate-400 bg-surface-900/50 p-2 rounded">
-                 <p className="text-[10px] uppercase mb-1 text-slate-500 font-semibold">Target Record</p>
-                 <pre className="whitespace-pre-wrap font-mono text-[10px]">{tx.target_data}</pre>
-               </div>
-            </div>
+            {renderMatchRecordData(tx)}
           </div>
         ))}
       </div>
@@ -226,12 +260,17 @@ export default function ARCSWorkbench({
           </div>
         )}
         {confirmedMatches.map(tx => (
-          <div key={tx.id} className="border border-emerald-900/30 rounded-lg p-3 bg-emerald-900/5 flex justify-between items-center">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-semibold text-slate-200">Match Group #{tx.id}</span>
-              <span className="text-[11px] text-slate-500">Auto-matched via rule execution</span>
+          <div key={tx.id} className="border border-emerald-900/30 rounded-lg p-3 bg-emerald-900/5">
+            <div className="flex flex-col w-full">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-slate-200">Match Group #{tx.id}</span>
+                  <span className="text-[11px] text-slate-500">Auto-matched via rule execution</span>
+                </div>
+                <span className="badge-matched text-[10px]">Confirmed Match</span>
+              </div>
+              {renderMatchRecordData(tx)}
             </div>
-            <span className="badge-matched text-[10px]">Confirmed Match</span>
           </div>
         ))}
       </div>
@@ -306,10 +345,12 @@ export default function ARCSWorkbench({
               </div>
 
               <div className="flex items-center gap-2">
-                <button className="btn-secondary h-8 py-0 text-xs px-3 bg-surface-700 hover:bg-surface-600">
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Create Adjustment
-                </button>
+                {canCreateAdjustment && (
+                  <button className="btn-secondary h-8 py-0 text-xs px-3 bg-surface-700 hover:bg-surface-600">
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Create Adjustment
+                  </button>
+                )}
                 <button 
                   className="btn-primary h-8 py-0 text-xs px-4"
                   disabled={selectedSourceIds.size === 0 && selectedTargetIds.size === 0}

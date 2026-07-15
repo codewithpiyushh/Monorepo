@@ -3,7 +3,6 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
 from ..rbac.roles import ADMIN, APPROVER
 from ..scheduler.scheduler import scheduler

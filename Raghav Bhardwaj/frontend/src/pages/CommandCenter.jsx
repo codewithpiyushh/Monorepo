@@ -5,12 +5,13 @@ import {
   ArrowRight, BookOpen, Zap, AlertTriangle,
   Grid2x2, List, Plus, Search, X, ChevronRight,
   TrendingUp, CheckCircle2, Clock, ShieldAlert, BarChart3,
-  AlertTriangle as AlertIcon,
+  AlertTriangle as AlertIcon, Trash2, Info,
 } from 'lucide-react'
 import { projectsAPI, enterpriseAPI } from '../api'
 import { advancedAPI } from '../api'
 import { LoadingState } from '../components/ui/PageState'
 import ProjectCreationModal from '../components/ProjectCreationModal'
+import ActionDropdown from '../components/ActionDropdown'
 import { useProjectStore } from '../store/projectStore'
 
 // ── Fixed tile dimensions ────────────────────────────────────
@@ -87,24 +88,96 @@ function ProjectInfoModal({ project, onClose }) {
   )
 }
 
+// ── Delete Confirmation Modal ─────────────────────────────────
+function DeleteConfirmationModal({ project, onClose, onConfirm }) {
+  const [confirmName, setConfirmName] = useState('')
+  if (!project) return null
+
+  const isMatch = confirmName === project.name
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 60,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', padding: 16,
+    }}>
+      <div style={{
+        background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+        borderTop: '3px solid #ef4444', borderRadius: 12,
+        width: '100%', maxWidth: 420,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.40)', overflow: 'hidden',
+        fontFamily: 'Inter, sans-serif',
+      }}>
+        <div style={{ padding: '24px 20px 20px' }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+            Delete Project
+          </h2>
+          <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            This action cannot be undone. This will permanently delete the project <strong style={{ color: 'var(--text-primary)' }}>{project.name}</strong> and all associated data.
+          </p>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 6 }}>
+              Please type <strong style={{ color: 'var(--text-primary)' }}>{project.name}</strong> to confirm.
+            </label>
+            <input
+              type="text"
+              value={confirmName}
+              onChange={(e) => setConfirmName(e.target.value)}
+              style={{
+                width: '100%', height: 36, padding: '0 12px', borderRadius: 6,
+                border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+                color: 'var(--text-primary)', fontSize: 13, fontFamily: 'Inter, sans-serif',
+                boxSizing: 'border-box'
+              }}
+              placeholder={project.name}
+              autoFocus
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={{
+              height: 32, padding: '0 16px', borderRadius: 6,
+              border: '1px solid var(--border-2)', background: 'transparent',
+              color: 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600,
+              cursor: 'pointer'
+            }}>
+              Cancel
+            </button>
+            <button type="button" onClick={onConfirm} disabled={!isMatch} style={{
+              height: 32, padding: '0 16px', borderRadius: 6,
+              border: 'none', background: isMatch ? '#ef4444' : 'var(--surface-4)',
+              color: isMatch ? '#fff' : 'var(--text-disabled)', fontSize: 12.5, fontWeight: 600,
+              cursor: isMatch ? 'pointer' : 'not-allowed', transition: 'all 150ms'
+            }}>
+              Confirm Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Tile Card — fixed size ────────────────────────────────────
-function ProjectTileCard({ project }) {
+function ProjectTileCard({ project, onDelete, onShowInfo }) {
   const navigate = useNavigate()
   const src = project.source_dataset_name || 'source'
   const tgt = project.target_dataset_name || 'target'
 
   return (
-    <div style={{
+    <div 
+      onClick={() => navigate(`/projects/${project.id}/ingestion`)}
+      style={{
       height: TILE_H, width: '100%', minWidth: 0,
       position: 'relative', display: 'flex', flexDirection: 'column',
       borderRadius: 12, border: '1px solid var(--border-1)',
       background: 'var(--surface-2)', overflow: 'hidden',
       fontFamily: 'Inter, sans-serif',
-      transition: 'border-color 140ms, box-shadow 140ms',
+      transition: 'border-color 140ms, box-shadow 140ms, transform 140ms',
       boxSizing: 'border-box',
+      cursor: 'pointer',
     }}
-    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.35)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.22)' }}
-    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-1)'; e.currentTarget.style.boxShadow = 'none' }}
+    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.35)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(0,0,0,0.22)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-1)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)' }}
     >
       {/* EY yellow accent bar */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#FFE600' }} />
@@ -120,14 +193,31 @@ function ProjectTileCard({ project }) {
           }}>
             {project.name}
           </h3>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, height: 22, padding: '0 8px', borderRadius: 6,
-            border: '1px solid var(--border-2)', background: 'var(--surface-3)',
-            fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)',
-          }}>
-            #{project.id}
-          </span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, height: 22, padding: '0 8px', borderRadius: 6,
+              border: '1px solid var(--border-2)', background: 'var(--surface-3)',
+              fontSize: 10.5, fontWeight: 700, color: 'var(--text-secondary)',
+            }}>
+              #{project.id}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onShowInfo(); }}
+              title="Project Info"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 22, height: 22, borderRadius: 6,
+                border: '1px solid transparent', background: 'transparent',
+                color: 'var(--text-tertiary)', cursor: 'pointer',
+                transition: 'all 150ms'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#FFE600'; e.currentTarget.style.background = 'rgba(255,230,0,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,230,0,0.3)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-tertiary)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' }}
+            >
+              <Info style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
         </div>
 
         {/* Row 2: Source / target */}
@@ -204,7 +294,7 @@ function ProjectTileCard({ project }) {
 }
 
 // ── List Row ──────────────────────────────────────────────────
-function ProjectListRow({ project, onShowInfo, isLast }) {
+function ProjectListRow({ project, onShowInfo, isLast, onDelete }) {
   const navigate = useNavigate()
   return (
     <div style={{
@@ -233,22 +323,13 @@ function ProjectListRow({ project, onShowInfo, isLast }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        {/* Info */}
-        <button type="button" onClick={(e) => { e.stopPropagation(); onShowInfo() }} title="Project information"
-          style={{
-            width: 32, height: 32, borderRadius: '50%',
-            border: '1px solid var(--border-2)', background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', color: 'var(--text-tertiary)', flexShrink: 0,
-            transition: 'border-color 100ms, color 100ms',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,230,0,0.40)'; e.currentTarget.style.color = '#FFE600' }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-        </button>
+        {/* Action Menu (Replaces Info and Delete) */}
+        <ActionDropdown
+          actions={[
+            { label: 'Project Info', icon: Info, onClick: (e) => { e.stopPropagation(); onShowInfo(); } },
+            { label: 'Delete Project', icon: Trash2, onClick: (e) => { e.stopPropagation(); onDelete && onDelete(); }, variant: 'danger' }
+          ]}
+        />
 
         {/* Open */}
         <button type="button" onClick={() => navigate(`/projects/${project.id}/ingestion`)}
@@ -355,6 +436,7 @@ export default function CommandCenter() {
   const listRef  = useRef(null)   // measures available space for list rows
 
   const [infoProject,    setInfoProject]    = useState(null)
+  const [deleteProject,  setDeleteProject]  = useState(null)
   const [currentPage,    setCurrentPage]    = useState(1)
   const [tilesPerPage,   setTilesPerPage]   = useState(8)
   const [rowsPerPage,    setRowsPerPage]    = useState(8)
@@ -366,7 +448,7 @@ export default function CommandCenter() {
     setCcCounts,
   } = useProjectStore()
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [], isLoading, refetch } = useQuery({
     queryKey: ['projects'],
     queryFn: projectsAPI.list,
   })
@@ -426,6 +508,18 @@ export default function CommandCenter() {
       [p.name, p.description, String(p.id), p.status].join(' ').toLowerCase().includes(q)
     )
   }, [projects, searchTerm])
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteProject) return
+    try {
+      await projectsAPI.delete(deleteProject.id)
+      refetch()
+      setDeleteProject(null)
+    } catch (err) {
+      console.error('Failed to delete project:', err)
+      alert('Failed to delete project. Check console for details.')
+    }
+  }
 
   // Reset page when search/view changes
   useEffect(() => { setCurrentPage(1) }, [searchTerm, projectView])
@@ -519,6 +613,25 @@ export default function CommandCenter() {
                       ? 'Click "New Project" to create your first reconciliation project'
                       : 'Try a different search term or clear the filter'}
                   </p>
+                  {projects.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreationModal(true)}
+                      style={{
+                        marginTop: 20, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        height: 38, padding: '0 20px', borderRadius: 8,
+                        border: '1px solid rgba(255,230,0,0.35)', background: 'rgba(255,230,0,0.12)',
+                        color: '#FFE600', fontSize: 13, fontWeight: 700,
+                        cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                        transition: 'background 100ms',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,230,0,0.20)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,230,0,0.12)'}
+                    >
+                      <Plus style={{ width: 15, height: 15 }} />
+                      Create Project
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -535,7 +648,7 @@ export default function CommandCenter() {
                   alignContent: 'start',
                 }}>
                   {paginatedProjects.map((p) => (
-                    <ProjectTileCard key={p.id} project={p} />
+                    <ProjectTileCard key={p.id} project={p} onDelete={() => setDeleteProject(p)} onShowInfo={() => setInfoProject(p)} />
                   ))}
                 </div>
 
@@ -563,6 +676,7 @@ export default function CommandCenter() {
                         key={p.id} project={p}
                         isLast={idx === paginatedProjects.length - 1}
                         onShowInfo={() => setInfoProject(p)}
+                        onDelete={() => setDeleteProject(p)}
                       />
                     ))}
                   </div>
@@ -585,6 +699,7 @@ export default function CommandCenter() {
 
       <ProjectCreationModal isOpen={showCreationModal} onClose={() => setShowCreationModal(false)} />
       <ProjectInfoModal project={infoProject} onClose={() => setInfoProject(null)} />
+      <DeleteConfirmationModal project={deleteProject} onClose={() => setDeleteProject(null)} onConfirm={handleDeleteConfirm} />
     </div>
   )
 }

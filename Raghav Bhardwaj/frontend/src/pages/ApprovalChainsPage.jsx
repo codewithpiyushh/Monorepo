@@ -2,22 +2,31 @@ import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/ui/PageHeader';
 import { Network, GitMerge, AlertCircle, ArrowRight, CheckCircle, Clock, Search, Plus, Filter, MoreVertical, DollarSign, Activity, Trash2 } from 'lucide-react';
 import client from '../api/client';
+import { approvalChainsAPI } from '../api';
+import { useProjectStore } from '../store/projectStore';
 
 export default function ApprovalChainsPage() {
+  const selectedProjectId = useProjectStore((state) => state.selectedProjectId);
   const [activeTab, setActiveTab] = useState('active');
   const [chains, setChains] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchChains();
-  }, []);
+  }, [selectedProjectId]);
 
   const fetchChains = async () => {
     try {
       setIsLoading(true);
-      const res = await client.get('/api/v1/approval-chains');
-      // If client returns { data: ... } we use res.data, else res
-      setChains(res.data || res || []);
+      const res = await approvalChainsAPI.list({ project_id: selectedProjectId });
+      const rawList = res.data || res || [];
+      const mapped = rawList.map((c) => ({
+        ...c,
+        name: `Approval Routing Rule #${c.id}`,
+        description: `Automatically route matching groups where ${c.condition_field} ${c.condition_operator} ${c.condition_value} to ${c.action}.`,
+        status: c.is_active ? 'active' : 'draft',
+      }));
+      setChains(mapped);
     } catch (error) {
       console.error('Failed to fetch approval chains:', error);
       setChains([]); // fallback
@@ -29,15 +38,15 @@ export default function ApprovalChainsPage() {
   const handleAddChain = async () => {
     try {
       const newChain = {
-        name: 'New Routing Rule',
-        description: 'New dynamically created routing rule for approvals',
-        status: 'draft',
-        rules: [
-          { id: `R-${Date.now()}`, condition: 'Default', action: 'Route to Manager' }
-        ],
-        usageCount: 0
+        condition_field: 'amount',
+        condition_operator: '>',
+        condition_value: '50000',
+        action: 'Route to Manager',
+        target_role: 'approver',
+        is_active: true,
+        project_id: selectedProjectId
       };
-      await client.post('/api/v1/approval-chains', newChain);
+      await approvalChainsAPI.create(newChain);
       fetchChains();
     } catch (error) {
       console.error('Failed to add approval chain:', error);
@@ -46,7 +55,7 @@ export default function ApprovalChainsPage() {
 
   const handleDeleteChain = async (id) => {
     try {
-      await client.delete(`/api/v1/approval-chains/${id}`);
+      await approvalChainsAPI.delete(id);
       fetchChains();
     } catch (error) {
       console.error('Failed to delete approval chain:', error);
@@ -164,32 +173,26 @@ export default function ApprovalChainsPage() {
                         {/* Vertical connector line */}
                         <div className="absolute left-[23px] top-[30px] bottom-[30px] w-0.5 bg-[var(--border-2)] z-0"></div>
 
-                        {(chain.rules || []).map((rule, idx) => (
-                          <div key={rule.id} className="relative z-10 flex items-center gap-5">
+                        <div className="relative z-10 flex items-center gap-5">
                              
                              <div className="w-12 h-12 rounded-full bg-[var(--surface-3)] border-2 border-[var(--border-2)] flex items-center justify-center flex-shrink-0 shadow-[var(--shadow-sm)] relative">
-                               {idx === (chain.rules || []).length - 1 ? (
                                  <GitMerge size={20} className="text-[var(--text-secondary)]" />
-                               ) : (
-                                 <AlertCircle size={20} className="text-[var(--accent)]" />
-                               )}
                              </div>
 
                              <div className="flex-1 premium-card p-4 rounded-lg border border-[var(--border-1)] bg-[var(--surface-2)] flex items-center justify-between transition-all hover:border-[var(--accent-border)] hover:bg-[var(--surface-3)] cursor-pointer group">
                                 <div className="flex items-center gap-5">
                                   <div className="bg-[var(--surface-0)] px-3 py-1.5 rounded-md text-[13px] font-mono text-[var(--text-primary)] border border-[var(--border-1)] shadow-sm flex items-center gap-2 group-hover:border-[var(--accent-border)] transition-colors">
-                                     {rule.condition?.includes('$') ? <DollarSign size={14} className="text-[var(--text-secondary)]"/> : null}
-                                     {rule.condition}
+                                     {chain.condition_field?.includes('amount') ? <DollarSign size={14} className="text-[var(--text-secondary)]"/> : null}
+                                     {chain.condition_field} {chain.condition_operator} {chain.condition_value}
                                   </div>
                                   <ArrowRight size={16} className="text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
                                   <div className="text-[14px] font-medium text-[var(--text-primary)] flex items-center gap-2">
                                      <CheckCircle size={16} className="text-[var(--ok)]" />
-                                     {rule.action}
+                                     {chain.action}
                                   </div>
                                 </div>
                              </div>
-                          </div>
-                        ))}
+                        </div>
                      </div>
                   </div>
                   

@@ -646,7 +646,6 @@ def matching_audit_trail(
     current_user=Depends(role_required(_ALL)),
 ):
     """Audit trail: confirm/reject/manual events for this profile's match groups."""
-    from ..models.models import MatchGroup as MG
 
     rows = db.execute(
         text("""

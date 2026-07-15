@@ -11,7 +11,7 @@ def _column_exists(inspector, table_name: str, column_name: str) -> bool:
 def apply_compat_patches() -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
-    is_mysql = "mysql" in engine.url.drivername
+    "mysql" in engine.url.drivername
 
     # Define all required schema patches
     patch_map = {

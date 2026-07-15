@@ -3,7 +3,7 @@ import hashlib
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.orm import Session
-from ..models.models import AuditLog, User
+from ..models.models import AuditLog
 
 
 def log_action(

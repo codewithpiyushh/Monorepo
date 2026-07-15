@@ -15,8 +15,7 @@ Run once:
     python -m app.models.comment_threads_migration
 """
 import logging
-from sqlalchemy import text, inspect
-from sqlalchemy.engine import Engine
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 

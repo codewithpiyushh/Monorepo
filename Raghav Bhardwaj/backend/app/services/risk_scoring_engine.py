@@ -361,8 +361,7 @@ def get_risk_dashboard(db: Session, current_user: Optional[User] = None) -> dict
         ReconciliationProfile,
         CertificationWorkflow,
         ExceptionQueueRecord,
-        MatchGroup,
-        User
+        MatchGroup
     )
     from ..rbac.rls import apply_profile_rls
 

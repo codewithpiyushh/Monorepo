@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from ..models.models import IngestionJob, ReconciliationBalance
-from ..services import audit_service, matching_engine
+from ..services import audit_service
 
 def start_ingestion(db: Session, project_id: int, dataset_type: str, actor_id: int) -> IngestionJob:
     job = IngestionJob(

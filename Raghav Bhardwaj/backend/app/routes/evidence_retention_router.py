@@ -148,3 +148,48 @@ def delete_job(
         entity_type="archival_job", entity_id=job_id,
         ip_address=request.client.host if request.client else None,
     )
+
+
+@router.get("/metrics")
+def get_metrics(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Live KPI metrics for the Evidence Retention dashboard."""
+    from ..models.models import RetentionPolicy, ArchivalJob
+    from sqlalchemy import func
+
+    total_policies = db.query(func.count(RetentionPolicy.id)).scalar() or 0
+    active_policies = db.query(func.count(RetentionPolicy.id)).filter(RetentionPolicy.is_active == True).scalar() or 0
+
+    total_jobs = db.query(func.count(ArchivalJob.id)).scalar() or 0
+    completed_jobs = db.query(func.count(ArchivalJob.id)).filter(ArchivalJob.status == 'COMPLETED').scalar() or 0
+    total_docs_archived = db.query(func.coalesce(func.sum(ArchivalJob.docs_archived), 0)).scalar() or 0
+
+    # Estimate storage: ~500KB per archived doc for active, ~200KB for cold
+    active_bytes = total_docs_archived * 500 * 1024
+    cold_bytes = total_docs_archived * 200 * 1024
+    total_bytes = active_bytes + cold_bytes
+
+    def format_bytes(b):
+        if b >= 1024**4:
+            return f"{b / 1024**4:.1f} TB"
+        if b >= 1024**3:
+            return f"{b / 1024**3:.1f} GB"
+        if b >= 1024**2:
+            return f"{b / 1024**2:.1f} MB"
+        return f"{b / 1024:.1f} KB"
+
+    return {
+        "total_policies": total_policies,
+        "active_policies": active_policies,
+        "total_jobs": total_jobs,
+        "completed_jobs": completed_jobs,
+        "total_docs_archived": total_docs_archived,
+        "total_storage": format_bytes(total_bytes),
+        "active_storage": format_bytes(active_bytes),
+        "cold_storage": format_bytes(cold_bytes),
+        "total_storage_bytes": total_bytes,
+        "active_storage_bytes": active_bytes,
+        "cold_storage_bytes": cold_bytes,
+    }

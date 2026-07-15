@@ -1,6 +1,5 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from fastapi import HTTPException
 from datetime import datetime
 from ..models.models import (

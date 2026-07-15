@@ -48,7 +48,7 @@ function PeriodRow({ cal, profile, cert, tasks, onLock, onUnlock, users }) {
   return (
     <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, overflow: 'hidden', marginBottom: 8 }}>
       {/* Header */}
-      <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'IBM Plex Mono, monospace' }}>
@@ -213,6 +213,7 @@ const TABS = [
 export default function CloseCertificationPage() {
   const [activeTab,    setActiveTab]    = useState('calendar')
   const [filterStatus, setFilterStatus] = useState('')
+  const [page,         setPage]         = useState(1)
   const qc = useQueryClient()
   const selectedProjectId = useProjectStore((s) => s.selectedProjectId)
 
@@ -260,16 +261,20 @@ export default function CloseCertificationPage() {
     return calendars
   }, [calendars, filterStatus])
 
+  const PAGE_SIZE = 7
+  const paginatedCals = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filteredCals.slice(start, start + PAGE_SIZE)
+  }, [filteredCals, page])
+
+  const totalPages = Math.ceil(filteredCals.length / PAGE_SIZE)
+
   const loading = calLoading || wfLoading || projectsLoading
 
   if (!loading && !hasProjects) {
     return (
       <div className="h-full flex flex-col">
-        <PageHeader
-          title="Period Close Monitor"
-          subtitle="Manage close periods, lock controls, and certification workflows."
-          badge="No projects"
-        />
+
         <div className="flex-1 flex items-center justify-center p-6">
           <EmptyState
             title="No projects yet"
@@ -282,16 +287,9 @@ export default function CloseCertificationPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PageHeader
-        title="Period Close Monitor"
-        subtitle="Manage close periods, lock controls, and certification workflows."
-        badge={`${kpis.periods} periods`}
-      />
-
-      <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
-
-        {/* KPI strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
+      {/* Flush KPI Banner */}
+      <div style={{ background: 'var(--surface-0)', borderBottom: '1px solid var(--border-1)' }}>
+        <div style={{ display: 'flex', overflowX: 'auto' }} className="slim-scroll">
           {[
             ['Total Periods', kpis.periods,     'var(--accent)'],
             ['Locked',        kpis.locked,      'var(--bad)'],
@@ -300,12 +298,17 @@ export default function CloseCertificationPage() {
             ['Pending Cert',  kpis.wfPending,   'var(--warn)'],
             ['Certified',     kpis.wfCertified, 'var(--ok)'],
           ].map(([label, val, color]) => (
-            <div key={label} style={{ background: 'var(--surface-2)', border: '1px solid var(--border-1)', borderRadius: 10, padding: '10px 14px' }}>
-              <p style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>{label}</p>
-              <p style={{ fontSize: 22, fontWeight: 700, color }}>{val}</p>
+            <div key={label} style={{ flex: 1, minWidth: 160, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 24px', borderRight: '1px solid var(--border-1)', lastChild: { borderRight: 'none' } }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em', marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color }}>{val}</div>
+              </div>
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-3 space-y-2" style={{ background: 'var(--surface-0)' }}>
 
         {/* Tab bar */}
         <div className="tab-bar" style={{ background: 'var(--surface-1)', borderRadius: 8 }}>
@@ -323,17 +326,46 @@ export default function CloseCertificationPage() {
               {['', 'locked', 'open', 'overdue'].map((f) => (
                 <button key={f} className={`btn-secondary text-xs h-7 ${filterStatus === f ? 'opacity-100 ring-1 ring-inset ring-accent' : 'opacity-60'}`}
                   style={{ fontWeight: filterStatus === f ? 700 : 400 }}
-                  onClick={() => setFilterStatus(f)}>
+                  onClick={() => { setFilterStatus(f); setPage(1) }}>
                   {f === '' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
                 </button>
               ))}
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-tertiary)' }}>{filteredCals.length} periods</span>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{filteredCals.length} periods</span>
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      style={{
+                        padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-1)',
+                        background: 'transparent',
+                        color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                        cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 11,
+                      }}
+                    >← Prev</button>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      {page} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      style={{
+                        padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-1)',
+                        background: 'transparent',
+                        color: page === totalPages ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                        cursor: page === totalPages ? 'not-allowed' : 'pointer', fontSize: 11,
+                      }}
+                    >Next →</button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {filteredCals.length === 0 ? (
               <EmptyState title="No periods" description="Create periods via profile rollover." />
             ) : (
-              filteredCals.map((cal) => {
+              paginatedCals.map((cal) => {
                 const profile  = profiles.find((p) => p.id === cal.profile_id)
                 const cert     = workflows.find((w) => w.profile_id === cal.profile_id)
                 const tasks    = allTasks.filter((t) => t.calendar_id === cal.id)

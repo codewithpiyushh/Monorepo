@@ -427,8 +427,7 @@ export default function RiskDashboard() {
 
   return (
     <div className="h-full flex flex-col">
-
-      <div className="flex-1 overflow-auto p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
+      <div className="flex-1 flex flex-col min-h-0 p-5 space-y-4" style={{ background: 'var(--surface-0)' }}>
 
         {/* Recalculate result toast */}
         {recalcMutation.isSuccess && (
@@ -442,7 +441,7 @@ export default function RiskDashboard() {
         )}
 
         {/* ── KPI strip ──────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 8 }}>
           {[
             ['LOW Risk',       breakdown.LOW      ?? 0, C.ok],
             ['MEDIUM Risk',    breakdown.MEDIUM   ?? 0, C.warn],
@@ -450,9 +449,9 @@ export default function RiskDashboard() {
             ['CRITICAL Risk',  breakdown.CRITICAL ?? 0, C.bad],
             ['SoD Violations', (data?.sod_violations || []).length, C.purple],
           ].map(([label, val, color]) => (
-            <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px' }}>
-              <p style={{ fontSize: 10, color: C.sub }}>{label}</p>
-              <p style={{ fontSize: 24, fontWeight: 700, color }}>{val}</p>
+            <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: 10, fontWeight: 600, color: C.sub }}>{label}</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color }}>{val}</p>
             </div>
           ))}
         </div>
@@ -466,9 +465,11 @@ export default function RiskDashboard() {
           ))}
         </div>
 
-        {/* ── Overview ───────────────────────────────────────────────── */}
-        {tab === 'overview' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+        {/* ── Tab Content Area ───────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* ── Overview ───────────────────────────────────────────────── */}
+          {tab === 'overview' && (
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
             <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2 }}>Overall Risk Score</p>
               <p style={{ fontSize: 11, color: C.sub, marginBottom: 4 }}>
@@ -523,8 +524,8 @@ export default function RiskDashboard() {
 
         {/* ── Profile Scores (with expandable factor breakdown) ───────── */}
         {tab === 'profiles' && (
-          <>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="flex-1 min-h-0 flex flex-col gap-4">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
               <input
                 className="input h-8 text-xs w-48"
                 placeholder="Search profiles…"
@@ -546,7 +547,7 @@ export default function RiskDashboard() {
             {profileScores.length === 0 ? (
               <EmptyState title="No profiles match" description="Adjust filters or click Recalculate." />
             ) : (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10 }}>
                 <table className="data-table" style={{ borderRadius: 0 }}>
                   <thead>
                     <tr>
@@ -574,52 +575,58 @@ export default function RiskDashboard() {
                 </table>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {/* ── Exception Aging ─────────────────────────────────────────── */}
         {tab === 'exceptions' && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10 }}>
             <AgingByRiskTable data={data?.exception_aging_by_risk} />
           </div>
         )}
 
         {/* ── SoD Violations ──────────────────────────────────────────── */}
         {tab === 'sod' && (
-          (data?.sod_violations || []).length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <ShieldCheck style={{ width: 40, height: 40, color: C.ok, margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 14, fontWeight: 700, color: C.ok }}>No SoD Violations Detected</p>
-              <p style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>All profiles have proper segregation of duties.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {data.sod_violations.map((v, i) => <SodRow key={i} v={v} />)}
-            </div>
-          )
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            {(data?.sod_violations || []).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <ShieldCheck style={{ width: 40, height: 40, color: C.ok, margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.ok }}>No SoD Violations Detected</p>
+                <p style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>All profiles have proper segregation of duties.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {data.sod_violations.map((v, i) => <SodRow key={i} v={v} />)}
+              </div>
+            )}
+          </div>
         )}
 
         {/* ── Overdue High Risk ────────────────────────────────────────── */}
         {tab === 'overdue' && (
-          (data?.overdue_high_risk || []).length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <CheckCircle2 style={{ width: 40, height: 40, color: C.ok, margin: '0 auto 12px' }} />
-              <p style={{ fontSize: 14, fontWeight: 700, color: C.ok }}>No Overdue High-Risk Items</p>
-              <p style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>All high-risk certifications are within SLA.</p>
-            </div>
-          ) : (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-              <table className="data-table" style={{ borderRadius: 0 }}>
-                <thead>
-                  <tr><th>Profile</th><th>Risk</th><th>Due Date</th><th>Days Overdue</th></tr>
-                </thead>
-                <tbody>
-                  {data.overdue_high_risk.map((item, i) => <OverdueRow key={i} item={item} />)}
-                </tbody>
-              </table>
-            </div>
-          )
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col">
+            {(data?.overdue_high_risk || []).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <CheckCircle2 style={{ width: 40, height: 40, color: C.ok, margin: '0 auto 12px' }} />
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.ok }}>No Overdue High-Risk Items</p>
+                <p style={{ fontSize: 12, color: C.sub, marginTop: 4 }}>All high-risk certifications are within SLA.</p>
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+                <table className="data-table" style={{ borderRadius: 0 }}>
+                  <thead>
+                    <tr><th>Profile</th><th>Risk</th><th>Due Date</th><th>Days Overdue</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.overdue_high_risk.map((item, i) => <OverdueRow key={i} item={item} />)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
+
+        </div>
 
       </div>
     </div>

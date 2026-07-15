@@ -4,7 +4,6 @@ import os
 from contextlib import asynccontextmanager
 
 from .database import init_db, SessionLocal, engine
-from .core.config import settings
 from .schema_compat import apply_compat_patches
 from .scheduler import service as scheduler_service
 
@@ -128,6 +127,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[seed_demo_user] Warning: {e}")
 
+    try:
+        from .services.sla_monitoring_service import ensure_default_policies, run_sla_scan
+        db = SessionLocal()
+        try:
+            ensure_default_policies(db, commit=True)
+            run_sla_scan(db)
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[sla_monitoring] Warning: {e}")
+
     db = SessionLocal()
     try:
         from .services.demo_manager import run_demo_startup
@@ -183,7 +193,8 @@ app.include_router(supporting_items_router.router)    # prefix="/api/v1/supporti
 app.include_router(comment_router.router)    # prefix="/api/v1/balances"
 app.include_router(balances.router)          # prefix="/api/v1/balances"
 app.include_router(aging.router)             # prefix="/api/v1/exceptions"
-app.include_router(variance.router)          # prefix="/api/v1/analytics" + "/api/v1/balances"
+app.include_router(variance.router)          # prefix="/api/v1/analytics"
+app.include_router(variance.balance_router)  # prefix="/api/v1/balances"
 app.include_router(ops_v1.router)            # prefix="/api/v1/ops"
 app.include_router(aging.router, prefix="/api/v1/exceptions")
 app.include_router(close_calendar.router)  # prefix="/api/v1/close-calendar"
@@ -242,4 +253,5 @@ def _seed_demo_user():
 
 @app.get("/api/health")
 def health():
+    # Trigger reload to run close periods seed fallback
     return {"status": "ok", "service": "DRMS API"}

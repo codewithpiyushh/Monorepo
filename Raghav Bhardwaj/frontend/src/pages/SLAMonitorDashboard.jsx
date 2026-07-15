@@ -5,7 +5,7 @@
 // Escalated Accounts, SLA Compliance %. Plus a violations table and SLA
 // policy management. Linked from Command Center / Admin Center nav.
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -27,20 +27,23 @@ function KpiCard({ icon: Icon, label, value, color, sub }) {
   return (
     <div style={{
       background: 'var(--surface-1)', border: '1px solid var(--border-0)',
-      borderRadius: 12, padding: '16px 18px', flex: 1, minWidth: 170,
+      borderRadius: 12, padding: '12px 14px', flex: 1, minWidth: 150,
+      display: 'flex', flexDirection: 'column', justifyContent: 'center'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         <div style={{
-          width: 28, height: 28, borderRadius: 8, display: 'flex',
+          width: 24, height: 24, borderRadius: 6, display: 'flex',
           alignItems: 'center', justifyContent: 'center',
           background: `${color}18`, border: `1px solid ${color}33`,
         }}>
-          <Icon size={14} color={color} />
+          <Icon size={12} color={color} />
         </div>
-        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>{label}</span>
+        <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>{label}</span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)', marginTop: 4 }}>{sub}</div>}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
+        {sub && <div style={{ fontSize: 9.5, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
+      </div>
     </div>
   )
 }
@@ -144,100 +147,174 @@ export default function SLAMonitorDashboard() {
     const escalated = violations.filter(v => v.escalation_level === 3 && v.status === 'OPEN').length
     const compliance = total > 0 ? Math.round(((total - open) / total) * 100) : 100
     return { total, open, escalated, compliance }
-  }, [violations])
+  }, [violations]);
+
+  const openViolations = useMemo(() => violations.filter(v => v.status === 'OPEN'), [violations]);
+  const [violationsPage, setViolationsPage] = useState(0);
+  const totalViolationsPages = Math.ceil(openViolations.length / 5);
+  const paginatedViolations = useMemo(() => {
+    const start = violationsPage * 5;
+    return openViolations.slice(start, start + 5);
+  }, [openViolations, violationsPage]);
+
+  // Reset page if it exceeds total pages after a refresh/scan
+  useEffect(() => {
+    if (violationsPage >= totalViolationsPages && totalViolationsPages > 0) {
+      setViolationsPage(totalViolationsPages - 1);
+    }
+  }, [totalViolationsPages, violationsPage]);
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{
+      padding: '16px 24px',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box',
+      overflow: 'hidden',
+      background: 'var(--background)'
+    }}>
       <PageHeader
         title="SLA Monitor Dashboard"
         subtitle="Enterprise SLA compliance, breach tracking, and escalation policy management"
-        icon={<ShieldAlert size={22} />}
+        icon={<ShieldAlert size={20} />}
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn-secondary btn-sm" disabled={scanMut.isPending} onClick={() => scanMut.mutate()}>
-              <RefreshCw size={13} className={scanMut.isPending ? 'spin' : ''} /> {scanMut.isPending ? 'Scanning…' : 'Run Scan'}
+              <RefreshCw size={12} className={scanMut.isPending ? 'spin' : ''} /> {scanMut.isPending ? 'Scanning…' : 'Run Scan'}
             </button>
             <button className="btn-primary btn-sm" onClick={() => navigate('/escalation-workbench')}>
-              <ChevronRight size={13} /> Escalation Workbench
+              <ChevronRight size={12} /> Escalation Workbench
             </button>
           </div>
         }
       />
 
-      <div style={{ marginTop: 20 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, marginTop: 12 }}>
         {violationsQ.isLoading && <LoadingState message="Loading SLA violations…" />}
         {violationsQ.isError && <ErrorState message="Failed to load SLA data" onRetry={violationsQ.refetch} />}
 
         {!violationsQ.isLoading && (
           <>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            {/* KPI Row */}
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <KpiCard icon={Activity} label="Total Violations" value={kpis.total} color={C.accent} />
               <KpiCard icon={AlertOctagon} label="Open Violations" value={kpis.open} color={C.bad} />
               <KpiCard icon={ShieldAlert} label="Escalated Accounts" value={kpis.escalated} color={C.orange} sub="Level 3 — reassigned" />
               <KpiCard icon={TrendingUp} label="SLA Compliance" value={`${kpis.compliance}%`} color={kpis.compliance >= 90 ? C.ok : C.warn} />
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Open Violations by Priority</span>
-            </div>
-
-            {!violations.length ? (
-              <EmptyState title="No SLA violations" description="All balances are currently within their configured SLA thresholds." />
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 28 }}>
-                {violations.filter(v => v.status === 'OPEN').slice(0, 15).map(v => (
-                  <div key={v.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                    background: 'var(--surface-1)', border: '1px solid var(--border-0)', borderRadius: 8,
-                  }}>
-                    <span style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: ESCALATION_COLOR[v.escalation_level] || C.muted,
-                    }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {v.profile_name} — {v.violation_type.replace(/_/g, ' ')}
-                      </div>
-                      <div style={{ fontSize: 10.5, color: 'var(--text-tertiary)' }}>
-                        {v.days_overdue}d overdue · Level {v.escalation_level} · Owner: {v.current_owner_name || `User #${v.current_owner_id}`}
-                      </div>
-                    </div>
-                    <span style={{
-                      fontSize: 9.5, fontWeight: 700, padding: '3px 9px', borderRadius: 99,
-                      color: STATUS_COLOR[v.status], background: `${STATUS_COLOR[v.status]}18`,
-                    }}>
-                      {v.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                <Settings size={13} style={{ marginRight: 6, verticalAlign: -2 }} /> SLA Policies
-              </span>
-              <button className="btn-secondary btn-sm" onClick={() => setShowPolicyModal(true)}>
-                <Plus size={12} /> New Policy
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {policies.length === 0 && (
-                <EmptyState title="No SLA policies configured" description="Create a global default policy per priority level, or a profile-specific override." />
-              )}
-              {policies.map(p => (
-                <div key={p.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                  background: 'var(--surface-1)', border: '1px solid var(--border-0)', borderRadius: 8,
-                }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', width: 110 }}>
-                    {p.priority_level}
-                  </span>
-                  <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', flex: 1 }}>
-                    {p.profile_name ? `Profile: ${p.profile_name}` : 'Global default'} · Max {p.max_days_open}d · Owner: {p.escalation_role} · Reminder every {p.reminder_interval_days}d
-                  </span>
+            {/* Split Content Panels */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20, flex: 1, minHeight: 0 }}>
+              
+              {/* Left Column: Violations List */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
+                background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+                borderRadius: 12, padding: '16px 20px', boxSizing: 'border-box'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Open Violations by Priority</span>
                 </div>
-              ))}
+
+                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {!openViolations.length ? (
+                    <EmptyState title="No SLA violations" description="All balances are currently within their configured SLA thresholds." />
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto' }}>
+                        {paginatedViolations.map(v => (
+                          <div key={v.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                            background: 'var(--surface-1)', border: '1px solid var(--border-0)', borderRadius: 8,
+                          }}>
+                            <span style={{
+                              width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                              background: ESCALATION_COLOR[v.escalation_level] || C.muted,
+                            }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {v.profile_name} — {v.violation_type.replace(/_/g, ' ')}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                                {v.days_overdue}d overdue · Level {v.escalation_level} · Owner: {v.current_owner_name || `User #${v.current_owner_id}`}
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                              color: STATUS_COLOR[v.status], background: `${STATUS_COLOR[v.status]}12`,
+                            }}>
+                              {v.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination Controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-1)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                          Page {violationsPage + 1} of {totalViolationsPages || 1}
+                        </span>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button 
+                            className="btn-secondary btn-sm" 
+                            onClick={() => setViolationsPage(p => Math.max(0, p - 1))}
+                            disabled={violationsPage === 0}
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                          >
+                            Previous
+                          </button>
+                          <button 
+                            className="btn-secondary btn-sm" 
+                            onClick={() => setViolationsPage(p => Math.min(totalViolationsPages - 1, p + 1))}
+                            disabled={violationsPage >= totalViolationsPages - 1}
+                            style={{ padding: '4px 8px', fontSize: 11 }}
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Column: Policies List */}
+              <div style={{
+                display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
+                background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+                borderRadius: 12, padding: '16px 20px', boxSizing: 'border-box'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    <Settings size={12} style={{ marginRight: 4, verticalAlign: -2 }} /> SLA Policies
+                  </span>
+                  <button className="btn-secondary btn-sm" onClick={() => setShowPolicyModal(true)} style={{ padding: '4px 8px', fontSize: 11 }}>
+                    <Plus size={11} /> New Policy
+                  </button>
+                </div>
+
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {policies.length === 0 ? (
+                    <EmptyState title="No SLA policies configured" description="Create a global default policy per priority level, or a profile-specific override." />
+                  ) : (
+                    policies.map(p => (
+                      <div key={p.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                        background: 'var(--surface-1)', border: '1px solid var(--border-0)', borderRadius: 8,
+                      }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', width: 80, flexShrink: 0 }}>
+                          {p.priority_level}
+                        </span>
+                        <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.profile_name ? `Profile: ${p.profile_name} · Max ${p.max_days_open}d · Owner: ${p.escalation_role} · Reminder every ${p.reminder_interval_days}d` : `Global default · Max ${p.max_days_open}d · Owner: ${p.escalation_role} · Reminder every ${p.reminder_interval_days}d`}>
+                          {p.profile_name ? `Profile: ${p.profile_name}` : 'Global default'} · Max {p.max_days_open}d · Owner: {p.escalation_role} · Reminder every {p.reminder_interval_days}d
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
             </div>
           </>
         )}

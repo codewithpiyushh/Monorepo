@@ -30,7 +30,6 @@ import logging
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models.models import (
@@ -78,7 +77,7 @@ except ImportError:
     HAS_SUPPORTING_ITEMS = False
 
 try:
-    from ..models.models import SLAPolicy, SLAViolation, User
+    from ..models.models import SLAViolation, User
     HAS_SLA = True
 except ImportError:
     HAS_SLA = False
@@ -149,6 +148,57 @@ def _notify(db: Session, user_id: Optional[int], ntype: str, title: str, message
 
 def _today_str() -> str:
     return date.today().isoformat()
+
+
+def sync_period_tasks_with_workflows(db: Session, period_id: int):
+    """
+    Syncs ClosePeriodTask status and completion percentage with the actual
+    CertificationWorkflow status for the given close period.
+    """
+    from ..models.models import ClosePeriod, ClosePeriodTask, FinancialCloseCalendar, CertificationWorkflow
+    
+    period = db.query(ClosePeriod).filter(ClosePeriod.id == period_id).first()
+    if not period:
+        return
+        
+    tasks = db.query(ClosePeriodTask).filter(ClosePeriodTask.close_period_id == period.id).all()
+    for task in tasks:
+        # Find FinancialCloseCalendar for this profile and period key
+        calendar = db.query(FinancialCloseCalendar).filter(
+            FinancialCloseCalendar.profile_id == task.profile_id,
+            FinancialCloseCalendar.period_key == period.period_key
+        ).first()
+        if not calendar:
+            continue
+            
+        # Find CertificationWorkflow for this calendar
+        wf = db.query(CertificationWorkflow).filter(
+            CertificationWorkflow.calendar_id == calendar.id
+        ).first()
+        if not wf:
+            continue
+            
+        # Determine status and completion based on workflow status
+        wf_status = (wf.status or "OPEN").upper().strip()
+        if wf_status in ("OPEN", "REOPENED"):
+            task_status, completion = "NOT_STARTED", 0.0
+        elif wf_status == "PREPARED":
+            task_status, completion = "IN_PROGRESS", 33.0
+        elif wf_status == "SUBMITTED":
+            task_status, completion = "UNDER_REVIEW", 66.0
+        elif wf_status == "REVIEWED":
+            task_status, completion = "UNDER_REVIEW", 80.0
+        elif wf_status == "APPROVED":
+            task_status, completion = "UNDER_REVIEW", 90.0
+        elif wf_status == "CERTIFIED":
+            task_status, completion = "CERTIFIED", 100.0
+        else:
+            task_status, completion = "NOT_STARTED", 0.0
+            
+        task.task_status = task_status
+        task.completion_percentage = completion
+        db.add(task)
+    db.commit()
 
 
 def recalc_period_progress(db: Session, period: "ClosePeriod") -> dict:
@@ -289,6 +339,7 @@ def list_close_periods(db: Session) -> dict:
     pending_certs_total = 0
 
     for p in periods:
+        sync_period_tasks_with_workflows(db, p.id)
         progress = recalc_period_progress(db, p)
         profile_ids = _profile_ids_for_period(db, p.id)
         open_issues = _open_issues_count(db, profile_ids)
@@ -420,6 +471,7 @@ def create_close_period(db: Session, payload, current_user_id: int) -> dict:
 # ─────────────────────────────────────────────────────────────────────────
 
 def list_period_tasks(db: Session, period_id: int, owner_id: Optional[int] = None) -> dict:
+    sync_period_tasks_with_workflows(db, period_id)
     q = (
         db.query(ClosePeriodTask, ReconciliationProfile)
         .join(ReconciliationProfile, ClosePeriodTask.profile_id == ReconciliationProfile.id)
@@ -481,6 +533,7 @@ def get_period_dashboard(db: Session, period_id: int) -> dict:
     if not period:
         raise ValueError("Close period not found")
 
+    sync_period_tasks_with_workflows(db, period_id)
     progress = recalc_period_progress(db, period)
     profile_ids = _profile_ids_for_period(db, period_id)
     open_issues = _open_issues_count(db, profile_ids)

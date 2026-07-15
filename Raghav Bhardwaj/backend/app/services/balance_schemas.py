@@ -53,6 +53,8 @@ class BalanceHistoryOut(BaseModel):
 class BalanceOut(BaseModel):
     id:                  int
     profile_id:          int
+    profile_name:        Optional[str] = None
+    project_name:        Optional[str] = None
     period_key:          str
     source_balance:      float
     target_balance:      float

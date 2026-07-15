@@ -23,12 +23,12 @@ const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
 function PromoteModal({ execution, users, onClose, onSuccess }) {
   const [reconType, setReconType] = useState('BANK_RECONCILIATION')
   const [risk, setRisk] = useState('MEDIUM')
-  const [reviewerId, setReviewerId] = useState('')
+  const [preparerId, setPreparerId] = useState('')
   const [approverId, setApproverId] = useState('')
   const [certifierId, setCertifierId] = useState('')
   const [promoting, setPromoting] = useState(false)
 
-  const reviewers  = users.filter((u) => u.role === 'reviewer')
+  const preparers  = users.filter((u) => u.role === 'preparer')
   const approvers  = users.filter((u) => u.role === 'approver')
   const certifiers = users.filter((u) => u.role === 'certifier')
 
@@ -38,7 +38,7 @@ function PromoteModal({ execution, users, onClose, onSuccess }) {
       const result = await executionsAPI.promote(execution.project_id, execution.id, {
         recon_type: reconType,
         risk_classification: risk,
-        reviewer_id: reviewerId ? Number(reviewerId) : undefined,
+        preparer_id: preparerId ? Number(preparerId) : undefined,
         approver_id: approverId ? Number(approverId) : undefined,
         certifier_id: certifierId ? Number(certifierId) : undefined,
       })
@@ -124,10 +124,10 @@ function PromoteModal({ execution, users, onClose, onSuccess }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
-              <label className="label">Reviewer</label>
-              <select className="input text-xs" value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
+              <label className="label">Preparer</label>
+              <select className="input text-xs" value={preparerId} onChange={(e) => setPreparerId(e.target.value)}>
                 <option value="">Auto-assign</option>
-                {reviewers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+                {preparers.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
               </select>
             </div>
             <div>
@@ -215,28 +215,26 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
   const [selectedTransaction, setSelectedTransaction] = useState(null)
   const [workflowItems, setWorkflowItems] = useState([])
   const [activeWorkflow, setActiveWorkflow] = useState(null)
+
   const [filter, setFilter] = useState('all')
   const [comments, setComments] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [total, setTotal] = useState(0)
   const [stats, setStats] = useState(null)
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(10)
+  const [pageSize] = useState(5)
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [deletingRunId, setDeletingRunId] = useState(null)
   const [exporting, setExporting] = useState(false)
-  const [exportStatus, setExportStatus] = useState('all')
   const [resultView, setResultView] = useState('overview')
   const [expandedGroupKey, setExpandedGroupKey] = useState('')
   const [groupDrilled, setGroupDrilled] = useState(false)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [users, setUsers] = useState([])
   const [showPromoteModal, setShowPromoteModal] = useState(false)
   const [promoteResult, setPromoteResult] = useState(null)
   const pollRef = useRef(null)
-
   const getUnitKey = (unit, idx = 0) => `${unit.entity}::${unit.account}::${idx}`
   const totalPages = Math.ceil(total / pageSize) || 1
 
@@ -330,11 +328,21 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
     })
   }, [activeExec?.status, running, onTopbarStateChange])
 
-  const loadResults = async (executionId, nextPage, perPage = pageSize) => {
+  useEffect(() => {
+    if (activeExec?.status === 'completed') {
+      loadResults(activeExec.id, 1, pageSize, filter)
+    }
+  }, [filter])
+
+  const loadResults = async (executionId, nextPage, perPage = pageSize, currentFilter = filter) => {
     setLoading(true)
     setGroupDrilled(false)
     try {
-      const data = await executionsAPI.results(project.id, executionId, { page: nextPage, page_size: perPage })
+      const params = { page: nextPage, page_size: perPage }
+      if (currentFilter && currentFilter !== 'all') {
+        params.match_status = currentFilter === 'exceptions' ? 'unmatched' : currentFilter
+      }
+      const data = await executionsAPI.results(project.id, executionId, params)
       const nextUnits = data.units || []
       setUnits(nextUnits)
       setTotal(data.total || 0)
@@ -394,7 +402,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
   const handleExport = async () => {
     try {
       setExporting(true)
-      await exportsAPI.downloadReport(project.id, exportStatus)
+      await exportsAPI.downloadReport(project.id, filter)
       toast.success('Report downloaded')
     } catch (err) {
       toast.error(err?.message || err?.response?.data?.detail || 'Failed to export report')
@@ -509,13 +517,13 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
     const tx = activeTransactions[0]
     const source = safeParse(tx?.source_data)
     return {
-      period: source?.period || '-',
-      entity: selectedReconciliation?.entity || '-',
-      account: selectedReconciliation?.account || '-',
+      period: source?.period || units[0]?.period || '-',
+      entity: selectedReconciliation?.entity || units[0]?.entity || '-',
+      account: selectedReconciliation?.account || units[0]?.account || '-',
       profile: project?.name || '-',
-      system: source?.source_system || '-',
+      system: source?.source_system || units[0]?.system || '-',
     }
-  }, [activeTransactions, selectedReconciliation, project?.name])
+  }, [activeTransactions, selectedReconciliation, project?.name, units])
 
   const canAssign = role === 'admin'
   const canSubmit = role === 'preparer' || role === 'admin'
@@ -556,7 +564,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
   }, [activeExec?.started_at])
 
   return (
-    <div className="px-4 lg:px-6 py-3 flex flex-col grow shrink-0 min-h-min w-full gap-3">
+    <div className="px-4 lg:px-6 py-3 flex flex-col grow shrink w-full gap-3 min-h-0 overflow-y-auto">
 
       {/* ── Promote success banner ── */}
       {promoteResult && (
@@ -580,10 +588,52 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
         />
       )}
 
-      <div className="card px-3 py-3 shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
-          <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Entity</p><p className="text-slate-100 font-medium">{pov.entity}</p></div>
-          <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Account</p><p className="text-slate-100 font-medium">{pov.account}</p></div>
+            <div className="flex flex-col shrink-0 min-h-0 gap-2">
+          <div className="sticky top-0 z-20 bg-surface-900/95 backdrop-blur pt-3 mb-3 border-b border-surface-700/50">
+          <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+            <div className="flex items-end gap-6">
+              <div className="text-lg font-semibold text-slate-100 pb-1">Results</div>
+              <div className="flex items-end gap-1">
+                <button className={`excel-tab ${resultView === 'overview' ? 'active' : ''}`} onClick={() => setResultView('overview')}>Overview</button>
+                <button className={`excel-tab ${resultView === 'transactions' ? 'active' : ''}`} onClick={() => setResultView('transactions')}>Transactions</button>
+                <button className={`excel-tab ${resultView === 'exceptions' ? 'active' : ''}`} onClick={() => setResultView('exceptions')}>Exceptions</button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pb-1">
+              {activeExec?.status === 'completed' && (
+                <button
+                  className="btn-primary py-1 h-8 text-xs"
+                  onClick={() => setShowPromoteModal(true)}
+                  title="Promote this run to a full enterprise reconciliation profile"
+                >
+                  <Rocket className="w-3.5 h-3.5" />
+                  Promote to Enterprise
+                </button>
+              )}
+              <select className="input py-1 h-8 w-28 text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+                <option value="all">All</option><option value="matched">Matched</option><option value="unmatched">Unmatched</option><option value="exceptions">Exceptions</option>
+              </select>
+              <button className="btn-secondary py-1 h-8 text-xs" onClick={handleExport} disabled={exporting}>{exporting ? 'Exporting...' : <><Download className="w-3.5 h-3.5" />Export</>}</button>
+            </div>
+          </div>
+          </div>
+
+          <div className="text-xs text-slate-500 shrink-0">Run {activeExec ? `#${activeExec.id}` : '-'} {selectedReconciliation ? `> ${selectedReconciliation.entity}/${selectedReconciliation.account}` : ''} {selectedTransaction ? `> Tx #${selectedTransaction.id}` : ''}</div>
+          {executionRuns.length === 0 && (
+            <div className="card p-4 mb-3">
+              <p className="text-sm text-slate-300">No reconciliation runs yet.</p>
+              <p className="text-xs text-slate-500 mt-1">Start with your first run to populate groups, transactions, and workflow actions.</p>
+              <button className="btn-primary mt-3 h-8 py-1 text-xs" onClick={handleRun} disabled={running}>
+                {running ? 'Running...' : 'Run First Reconciliation'}
+              </button>
+            </div>
+          )}
+
+          <div className="space-y-3 min-w-0 pb-4">
+            {resultView === 'overview' && (
+              <div className="mb-4 flex flex-col gap-3">
+<div className="card px-3 py-3 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 text-xs">
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Matched</p><p className="text-emerald-300 font-semibold">{kpi.matched}</p></div>
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2"><p className="text-slate-500">Unmatched</p><p className="text-red-300 font-semibold">{kpi.unmatched}</p></div>
           <div className="rounded-lg border border-surface-700 bg-surface-800/40 p-2">
@@ -644,11 +694,11 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
               </select>
               <input className="input h-8 text-xs" placeholder="Comments" value={comments} onChange={(e) => setComments(e.target.value)} />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canAssign || actionBusy || !activeExec} onClick={() => doWorkflowAction('assign')}>Assign</button>
-              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canSubmit || actionBusy || !activeExec} onClick={() => doWorkflowAction('submit')}>Submit</button>
-              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canReview || actionBusy || !activeExec} onClick={() => doWorkflowAction('approve')}>Approve</button>
-              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canReview || actionBusy || !activeExec} onClick={() => doWorkflowAction('reject')}>Reject</button>
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canAssign || actionBusy || !activeExec || workflowStatus === 'approved'} onClick={() => doWorkflowAction('assign')}>Assign</button>
+              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canSubmit || actionBusy || !activeExec || workflowStatus === 'approved'} onClick={() => doWorkflowAction('submit')}>Submit</button>
+              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canReview || actionBusy || !activeExec || workflowStatus === 'approved'} onClick={() => doWorkflowAction('approve')}>Approve</button>
+              <button className="btn-secondary py-1 h-8 text-xs" disabled={!canReview || actionBusy || !activeExec || workflowStatus === 'approved'} onClick={() => doWorkflowAction('reject')}>Reject</button>
             </div>
             {!canAssign && role !== 'admin' && <p className="text-[11px] text-slate-500">Assign is Admin-only.</p>}
             {!canReview && <p className="text-[11px] text-slate-500">Approve/Reject is Reviewer-only.</p>}
@@ -656,48 +706,9 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
         </div>
       </div>
 
-      <div className="card p-4 shrink-0">
-          <div className="sticky top-0 z-20 bg-surface-900/95 backdrop-blur pb-3 mb-3 border-b border-surface-700/50">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="text-lg font-semibold text-slate-100">Results</div>
-            <div className="flex items-center gap-1 rounded-lg border border-surface-700 p-1 bg-surface-800/40">
-              <button className={`px-2 py-1 text-xs rounded ${resultView === 'overview' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setResultView('overview')}>Overview</button>
-              <button className={`px-2 py-1 text-xs rounded ${resultView === 'transactions' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setResultView('transactions')}>Transactions</button>
-              <button className={`px-2 py-1 text-xs rounded ${resultView === 'exceptions' ? 'bg-brand-900/30 text-slate-100' : 'text-slate-400'}`} onClick={() => setResultView('exceptions')}>Exceptions</button>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              {activeExec?.status === 'completed' && (
-                <button
-                  className="btn-primary py-1 h-8 text-xs"
-                  onClick={() => setShowPromoteModal(true)}
-                  title="Promote this run to a full enterprise reconciliation profile"
-                >
-                  <Rocket className="w-3.5 h-3.5" />
-                  Promote to Enterprise
-                </button>
-              )}
-              <button className="btn-secondary py-1 h-8 text-xs" onClick={() => setShowAdvancedFilters((v) => !v)}>{showAdvancedFilters ? 'Hide Filters' : 'More Filters'}</button>
-              <select className="input py-1 h-8 w-28 text-xs" value={exportStatus} onChange={(e) => setExportStatus(e.target.value)}>
-                <option value="all">All</option><option value="matched">Matched</option><option value="unmatched">Unmatched</option><option value="exceptions">Exceptions</option>
-              </select>
-              <button className="btn-secondary py-1 h-8 text-xs" onClick={handleExport} disabled={exporting}>{exporting ? 'Exporting...' : <><Download className="w-3.5 h-3.5" />Export</>}</button>
-            </div>
-          </div>
-          </div>
-
-          <div className="text-xs text-slate-500 shrink-0">Run {activeExec ? `#${activeExec.id}` : '-'} {selectedReconciliation ? `> ${selectedReconciliation.entity}/${selectedReconciliation.account}` : ''} {selectedTransaction ? `> Tx #${selectedTransaction.id}` : ''}</div>
-          {executionRuns.length === 0 && (
-            <div className="card p-4 mb-3">
-              <p className="text-sm text-slate-300">No reconciliation runs yet.</p>
-              <p className="text-xs text-slate-500 mt-1">Start with your first run to populate groups, transactions, and workflow actions.</p>
-              <button className="btn-primary mt-3 h-8 py-1 text-xs" onClick={handleRun} disabled={running}>
-                {running ? 'Running...' : 'Run First Reconciliation'}
-              </button>
-            </div>
-          )}
-
-          <div className="space-y-3 min-w-0 pb-4">
-            {(resultView === 'overview' || resultView === 'transactions') && (
+              </div>
+            )}
+            {resultView === 'transactions' && (
               <div className="surface-panel p-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-500 mb-2">Reconciliation Groups</p>
                 {loading && <div className="animate-pulse h-16 rounded bg-surface-700/30" />}
@@ -710,11 +721,11 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
                       <button className={`w-full p-3 flex items-center gap-2 text-left ${isSelected ? 'bg-brand-900/10' : ''}`} onClick={() => { setSelectedReconciliation(unit); setSelectedReconciliationKey(key); setExpandedGroupKey(isOpen ? '' : key); setSelectedTransaction(null); setGroupDrilled(!isOpen) }}>
                         {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                         <div className="flex-1">
-                          <p className="text-sm text-slate-100">{unit.entity} / {unit.account}</p>
+                          <p className="text-sm" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{unit.entity} / {unit.account}</p>
                           <div className="mt-1 flex gap-2 text-[11px]">
-                            <span className="px-2 py-0.5 rounded bg-surface-700/40 text-slate-300">Total {unit.total_transactions}</span>
-                            <span className="px-2 py-0.5 rounded bg-emerald-900/20 text-emerald-300">Matched {unit.matched_count}</span>
-                            <span className="px-2 py-0.5 rounded bg-amber-900/20 text-amber-300">Exceptions {unit.unmatched_count}</span>
+                            <span className="px-2 py-[2px] rounded border" style={{ background: 'var(--surface-2)', borderColor: 'var(--border-1)', color: 'var(--text-secondary)' }}>Total {unit.total_transactions}</span>
+                            <span className="px-2 py-[2px] rounded border" style={{ background: 'var(--ok-bg)', borderColor: 'var(--ok-bdr)', color: 'var(--ok)' }}>Matched {unit.matched_count}</span>
+                            <span className="px-2 py-[2px] rounded border" style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bdr)', color: 'var(--warn)' }}>Exceptions {unit.unmatched_count}</span>
                           </div>
                         </div>
                       </button>
@@ -724,6 +735,7 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
                             transactions={unit.transactions || []}
                             mappedColumns={mappedColumns}
                             onSelectTransaction={setSelectedTransaction}
+                            canCreateAdjustment={role === 'preparer'}
                           />
                         </div>
                       )}
@@ -751,15 +763,15 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
             )}
           </div>
       </div>
-
-      <div className="flex items-center justify-between text-xs text-slate-400 shrink-0 mt-2">
-        <span>Page {page} of {totalPages}</span>
-        <div className="flex gap-2">
-          <button className="btn-ghost py-1 px-2 text-xs" disabled={page <= 1 || !activeExec} onClick={() => loadResults(activeExec.id, page - 1)}>Prev</button>
-          <button className="btn-ghost py-1 px-2 text-xs" disabled={page >= totalPages || !activeExec} onClick={() => loadResults(activeExec.id, page + 1)}>Next</button>
+      {resultView === 'transactions' && (
+        <div className="flex items-center justify-between text-xs text-slate-400 shrink-0 mt-2">
+          <span>Page {page} of {totalPages}</span>
+          <div className="flex gap-2">
+            <button className="btn-ghost py-1 px-2 text-xs" disabled={page <= 1 || !activeExec} onClick={() => loadResults(activeExec.id, page - 1)}>Prev</button>
+            <button className="btn-ghost py-1 px-2 text-xs" disabled={page >= totalPages || !activeExec} onClick={() => loadResults(activeExec.id, page + 1)}>Next</button>
+          </div>
         </div>
-      </div>
-
+      )}
       <DetailDrawer
         transaction={selectedTransaction}
         open={!!selectedTransaction}
@@ -768,3 +780,5 @@ export default function ExecuteStep({ project, onTopbarStateChange }) {
     </div>
   )
 }
+
+

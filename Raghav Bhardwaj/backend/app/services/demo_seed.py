@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import random
 from datetime import datetime, date, timedelta
-from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -260,7 +259,7 @@ def seed_enterprise_demo_matrix(db: Session) -> None:
             if approver_id in (preparer_id, reviewer_id) and n_a > 1:
                 approver_id = approver_ids[(prof_idx + 1) % n_a]
 
-            risk     = prof_def["risk"]
+            risk     = prof_def.get("risk", "LOW")
             lc_state = LIFECYCLE_PROGRESSION[
                 min(prof_idx + (proj_idx % 3), len(LIFECYCLE_PROGRESSION) - 1)
             ]
@@ -513,7 +512,9 @@ def seed_close_periods_demo(db: Session) -> None:
         ReconciliationProfile.is_demo_data == True  # noqa: E712
     ).all()
     if not profiles:
-        log.warning("[demo seed] No demo profiles found — skipping close period seed.")
+        profiles = db.query(ReconciliationProfile).all()
+    if not profiles:
+        log.warning("[demo seed] No profiles found — skipping close period seed.")
         return
 
     # offset_months=2 → oldest (closed), 0 → current (open)
@@ -613,5 +614,384 @@ def seed_sla_demo(db: Session) -> None:
         db.add(SLAPolicy(profile_id=None, **d))
     db.commit()
 
-    run_sla_scan(db)  # populate real violations against demo balances
-    log.info("[demo seed] ✅ SLA default policies seeded and initial scan run.")
+    try:
+        run_sla_scan(db)  # populate real violations against demo balances
+        log.info("[demo seed] ✅ SLA default policies seeded and initial scan run.")
+    except Exception as e:
+        db.rollback()
+        log.warning(f"[demo seed] SLA scan failed: {e}")
+
+
+def seed_evidence_retention_demo(db: Session) -> None:
+    """
+    Seeds one retention policy and one archival job for a demo project.
+    This lets the evidence retention dashboard show live records during demo startup.
+    """
+    from ..models.models import RetentionPolicy, ArchivalJob, Project, User
+
+    project = db.query(Project).order_by(Project.id).first()
+    if not project:
+        log.warning("[demo seed] No project found for evidence retention demo data.")
+        return
+
+    admin = db.query(User).filter(User.role == "admin").first()
+    created_by = admin.id if admin else None
+
+    has_policy = db.query(RetentionPolicy).first() is not None
+    has_job = db.query(ArchivalJob).first() is not None
+
+    if not has_policy:
+        db.add(RetentionPolicy(
+            project_id=project.id,
+            doc_type="Invoice",
+            retention_period_days=365,
+            cold_storage_days=180,
+            is_active=True,
+            created_by=created_by,
+        ))
+
+    if not has_job:
+        now = datetime.utcnow()
+        db.add(ArchivalJob(
+            project_id=project.id,
+            status="COMPLETED",
+            docs_archived=128,
+            started_at=now - timedelta(days=7),
+            completed_at=now - timedelta(days=5),
+            created_by=created_by,
+        ))
+
+    if not has_policy or not has_job:
+        db.commit()
+        log.info("[demo seed] ✅ Evidence retention demo records created.")
+    else:
+        log.info("[demo seed] Evidence retention demo records already exist. Skipping.")
+
+
+def seed_preparer_close_tasks_demo(db: Session) -> None:
+    """
+    Seeds FinancialCloseCalendar and CloseTask tables for the preparer
+    so the Kanban task board and close management screens show actual live data.
+    """
+    from ..models.models import FinancialCloseCalendar, CloseTask, ReconciliationProfile
+    from datetime import timedelta
+
+    profiles = db.query(ReconciliationProfile).all()
+    if not profiles:
+        log.warning("[demo seed] No profiles found for preparer close tasks seed.")
+        return
+        
+    current_period = date.today().strftime("%Y-%m")
+    
+    TASK_DEFAULTS = [
+        ("Upload Source Data", "DATA_UPLOAD", 0, "COMPLETE", 100.0),
+        ("Upload Target Data", "DATA_UPLOAD", 1, "COMPLETE", 100.0),
+        ("Run Matching Engine", "MATCHING", 2, "IN_PROGRESS", 50.0),
+        ("Investigate Exceptions", "EXCEPTION_REVIEW", 3, "IN_PROGRESS", 20.0),
+        ("Prepare Reconciliation", "BANK_RECON", 4, "NOT_STARTED", 0.0),
+        ("Submit for Review", "SUBMIT", 5, "NOT_STARTED", 0.0),
+        ("Reviewer Sign-off", "REVIEW", 6, "NOT_STARTED", 0.0),
+        ("Approver Sign-off", "APPROVAL", 7, "NOT_STARTED", 0.0),
+        ("Certify Period", "CERTIFICATION", 8, "NOT_STARTED", 0.0),
+        ("Lock Period", "PERIOD_LOCK", 9, "NOT_STARTED", 0.0)
+    ]
+    
+    for idx, prof in enumerate(profiles):
+        cal = db.query(FinancialCloseCalendar).filter(
+            FinancialCloseCalendar.profile_id == prof.id,
+            FinancialCloseCalendar.period_key == current_period
+        ).first()
+        
+        if not cal:
+            cal = FinancialCloseCalendar(
+                profile_id=prof.id,
+                cycle_type="MONTHLY",
+                period_key=current_period,
+                start_date=date.today().replace(day=1).isoformat(),
+                end_date=(date.today().replace(day=1) + timedelta(days=28)).isoformat(),
+                due_date=(date.today().replace(day=1) + timedelta(days=10)).isoformat(),
+                status="OPEN",
+                is_locked=False,
+            )
+            db.add(cal)
+            db.flush()
+            
+        existing_tasks = db.query(CloseTask).filter(CloseTask.calendar_id == cal.id).count()
+        if existing_tasks == 0:
+            for task_name, task_type, order, status, completion in TASK_DEFAULTS:
+                db.add(CloseTask(
+                    calendar_id=cal.id,
+                    profile_id=prof.id,
+                    task_name=task_name,
+                    task_type=task_type,
+                    assigned_to=prof.assigned_preparer,
+                    due_date=cal.due_date,
+                    status=status,
+                    completion_pct=completion,
+                    sort_order=order,
+                ))
+    db.commit()
+    log.info("[demo seed] ✅ Seeded preparer close tasks checklist.")
+
+    from ..models.models import UINotification
+    # Delete old workflow/alert notifications for close tasks to prevent duplication
+    db.query(UINotification).filter(
+        UINotification.notification_type.in_(["workflow", "alert"]),
+        UINotification.title.like("%Task%") | UINotification.title.like("%Reminder%")
+    ).delete(synchronize_session=False)
+    db.commit()
+
+    # Generate new role-based notifications for preparer tasks and reminders
+    for prof in profiles:
+        preparer_id = prof.assigned_preparer
+        if not preparer_id:
+            continue
+            
+        # 1. Assigned Task Notification
+        notif_task = UINotification(
+            user_id=preparer_id,
+            notification_type="workflow",
+            title=f"Task Assigned: Prepare Reconciliation",
+            message=f"Reconciliation task for profile '{prof.name}' has been assigned to you. Due: {current_period}-10.",
+            icon_type="pending",
+            is_read=False,
+            action_url="/preparer-close-management",
+            action_label="Open Kanban",
+            created_at=datetime.utcnow(),
+        )
+        _set_if_exists(notif_task, "is_demo_data", True)
+        db.add(notif_task)
+
+        # 2. Upcoming Task Reminder Notification
+        notif_reminder = UINotification(
+            user_id=preparer_id,
+            notification_type="alert",
+            title=f"Task Reminder: Investigate Exceptions",
+            message=f"Exceptions are pending investigation for profile '{prof.name}'. Please complete this task.",
+            icon_type="warn",
+            is_read=False,
+            action_url="/preparer-close-management",
+            action_label="Open Kanban",
+            created_at=datetime.utcnow(),
+        )
+        _set_if_exists(notif_reminder, "is_demo_data", True)
+        db.add(notif_reminder)
+
+    db.commit()
+    log.info("[demo seed] ✅ Seeded role-based close task and reminder notifications for preparers.")
+
+
+def seed_transaction_records_for_active_profiles(db: Session) -> None:
+    """
+    Ensures that any ReconciliationProfile that has a ReconciliationBalance
+    but lacks transaction ReconciliationRecord rows gets populated with matching/exception records.
+    """
+    from ..models.models import (
+        ReconciliationProfile,
+        ReconciliationBalance,
+        ReconciliationRecord,
+        MatchGroup,
+        MatchGroupItem,
+        ExceptionQueueRecord,
+    )
+    import uuid
+    import json
+    
+    profiles = db.query(ReconciliationProfile).all()
+    log.info(f"[demo seed] Checking transaction records for {len(profiles)} profiles…")
+    
+    total_records = 0
+    total_mgs = 0
+    
+    for prof in profiles:
+        # Check if records exist
+        existing_recs_count = db.query(ReconciliationRecord).filter(
+            ReconciliationRecord.profile_id == prof.id
+        ).count()
+        if existing_recs_count > 0:
+            continue
+            
+        # Get the balance row
+        bal = db.query(ReconciliationBalance).filter(
+            ReconciliationBalance.profile_id == prof.id
+        ).first()
+        
+        if not bal:
+            # Create a dummy balance so it matches
+            bal = ReconciliationBalance(
+                profile_id=prof.id,
+                period_key=_period(0),
+                source_balance=10000.0,
+                target_balance=10000.0,
+                variance_amount=0.0,
+                variance_percentage=0.0,
+                threshold_amount=prof.tolerance_threshold or 200.0,
+                materiality_limit=(prof.tolerance_threshold or 200.0) * 10,
+                status="DRAFT",
+                preparer_id=prof.assigned_preparer or 25,
+                reviewer_id=prof.assigned_reviewer or 24,
+                approver_id=prof.assigned_approver or 23,
+                certifier_id=prof.assigned_certifier or 23,
+                created_by=prof.assigned_preparer or 25,
+                created_at=datetime.utcnow() - timedelta(days=30),
+            )
+            _set_if_exists(bal, "variance_severity_classification", "BALANCED")
+            _set_if_exists(bal, "is_demo_data", True)
+            db.add(bal)
+            db.flush()
+            
+        src_bal = float(bal.source_balance or 0.0)
+        tgt_bal = float(bal.target_balance or 0.0)
+        var_amt = float(bal.variance_amount or 0.0)
+        period_key = bal.period_key or _period(0)
+        
+        # 1. Seed Matched Records (approx 80% of min balance, divided into 3 matches)
+        matched_sum = min(src_bal, tgt_bal) * 0.8
+        if matched_sum <= 0:
+            matched_sum = 10000.0
+            
+        splits = [matched_sum * 0.3, matched_sum * 0.5, matched_sum * 0.2]
+        
+        batch_id = f"batch-{uuid.uuid4().hex[:8]}"
+        
+        for idx, split_val in enumerate(splits):
+            split_val = round(split_val, 2)
+            # Create NetSuite ERP source record
+            src_rec = ReconciliationRecord(
+                batch_id=batch_id,
+                profile_id=prof.id,
+                source_system="ERP_NETSUITE",
+                entity="ENTITY-1",
+                account=prof.name.split(" ")[0] or "10000",
+                period=period_key,
+                currency="USD",
+                amount=split_val,
+                reference=f"ERP-PAY-{idx:03d}",
+                tx_date=str(date.today() - timedelta(days=12 - idx)),
+                normalized_sign="+",
+                status="MATCHED",
+                payload_json=json.dumps({"description": f"ERP posting index {idx}"}),
+                created_at=datetime.utcnow() - timedelta(days=12 - idx),
+            )
+            db.add(src_rec)
+            db.flush()
+            total_records += 1
+            
+            # Create Bank Statement target record
+            tgt_rec = ReconciliationRecord(
+                batch_id=batch_id,
+                profile_id=prof.id,
+                source_system="BANK_STATEMENT",
+                entity="ENTITY-1",
+                account=prof.name.split(" ")[0] or "10000",
+                period=period_key,
+                currency="USD",
+                amount=split_val,
+                reference=f"BANK-TX-{idx:03d}",
+                tx_date=str(date.today() - timedelta(days=12 - idx)),
+                normalized_sign="+",
+                status="MATCHED",
+                payload_json=json.dumps({"description": f"Bank statement entry {idx}"}),
+                created_at=datetime.utcnow() - timedelta(days=12 - idx),
+            )
+            db.add(tgt_rec)
+            db.flush()
+            total_records += 1
+            
+            # Create Match Group (classification = FULL_MATCH)
+            mg = MatchGroup(
+                profile_id=prof.id,
+                strategy="manual",
+                classification="FULL_MATCH",
+                confidence=1.0,
+                variance_amount=0.0,
+                reconciled=True,
+                finalized=True,
+                created_at=datetime.utcnow() - timedelta(days=12 - idx),
+            )
+            db.add(mg)
+            db.flush()
+            total_mgs += 1
+            
+            # Create Match Group Items
+            mgi_src = MatchGroupItem(
+                match_group_id=mg.id,
+                reconciliation_record_id=src_rec.id,
+                side="source",
+            )
+            mgi_tgt = MatchGroupItem(
+                match_group_id=mg.id,
+                reconciliation_record_id=tgt_rec.id,
+                side="target",
+            )
+            db.add(mgi_src)
+            db.add(mgi_tgt)
+            
+        # 2. Seed Unmatched / Exception Records (based on variance amount)
+        if var_amt > 0:
+            # We split the variance: 1 source record with var_amt, or if large, split
+            src_exc_amount = var_amt
+            
+            # ERP source record for exception
+            src_exc_rec = ReconciliationRecord(
+                batch_id=batch_id,
+                profile_id=prof.id,
+                source_system="ERP_NETSUITE",
+                entity="ENTITY-1",
+                account=prof.name.split(" ")[0] or "10000",
+                period=period_key,
+                currency="USD",
+                amount=src_exc_amount,
+                reference="ERP-EXP-999",
+                tx_date=str(date.today() - timedelta(days=5)),
+                normalized_sign="+",
+                status="UNMATCHED",
+                payload_json=json.dumps({"description": "Unexplained variance posting"}),
+                created_at=datetime.utcnow() - timedelta(days=5),
+            )
+            db.add(src_exc_rec)
+            db.flush()
+            total_records += 1
+            
+            # Match Group for exception
+            mg_exc = MatchGroup(
+                profile_id=prof.id,
+                strategy="manual",
+                classification="UNMATCHED",
+                confidence=0.0,
+                variance_amount=src_exc_amount,
+                reconciled=False,
+                finalized=False,
+                created_at=datetime.utcnow() - timedelta(days=5),
+            )
+            db.add(mg_exc)
+            db.flush()
+            total_mgs += 1
+            
+            mgi_src_exc = MatchGroupItem(
+                match_group_id=mg_exc.id,
+                reconciliation_record_id=src_exc_rec.id,
+                side="source",
+            )
+            db.add(mgi_src_exc)
+            
+            # Create Exception Queue Record
+            exc_type, exc_comment = random.choice(EXCEPTION_TYPES)
+            exc = ExceptionQueueRecord(
+                match_group_id=mg_exc.id,
+                queue_type="exception",
+                assigned_to=prof.assigned_preparer or 25,
+                status="OPEN",
+                comments=exc_comment,
+                classification=exc_type,
+                severity="MEDIUM",
+                created_at=datetime.utcnow() - timedelta(days=5),
+            )
+            _set_if_exists(exc, "is_demo_data", True)
+            db.add(exc)
+            
+    db.commit()
+    log.info(f"[demo seed] ✅ Seeded {total_records} ReconciliationRecords and {total_mgs} MatchGroups for template profiles.")
+
+
+

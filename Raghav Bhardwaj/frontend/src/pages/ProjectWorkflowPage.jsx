@@ -88,7 +88,7 @@ export default function ProjectWorkflowPage() {
   }
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'var(--surface-0)' }}>
+    <div className="absolute inset-0 flex flex-col" style={{ background: 'var(--surface-0)' }}>
 
       {/* ── Excel-style tab bar + action bar ─────────────────── */}
       <div style={{
@@ -97,28 +97,7 @@ export default function ProjectWorkflowPage() {
         flexShrink: 0,
       }}>
         {/* Project breadcrumb */}
-        <div style={{
-          padding: '8px 16px 0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}>
-          <button
-            onClick={() => navigate('/command-center')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 11, color: 'var(--text-tertiary)', background: 'none',
-              border: 'none', cursor: 'pointer', padding: 0,
-            }}
-          >
-            <ChevronLeft style={{ width: 12, height: 12 }} />
-            Projects
-          </button>
-          <span style={{ fontSize: 11, color: 'var(--border-2)' }}>/</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {project?.name || `Project #${projectId}`}
-          </span>
-        </div>
+
 
         {/* Tabs row */}
         <div style={{
@@ -201,8 +180,8 @@ export default function ProjectWorkflowPage() {
           <LoadingState label="Loading workflow..." />
         </div>
       ) : (
-        <div className="flex-1 overflow-auto p-5 flex flex-col" style={{ background: 'var(--surface-0)' }}>
-          <div className="card overflow-hidden flex flex-col grow shrink-0 basis-auto min-h-min">
+        <div className="flex-1 overflow-hidden p-0 flex flex-col" style={{ background: 'var(--surface-0)' }}>
+          <div className="flex flex-col grow min-h-0">
             {renderStep()}
           </div>
         </div>

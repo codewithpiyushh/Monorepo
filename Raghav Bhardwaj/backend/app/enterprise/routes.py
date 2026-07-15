@@ -567,7 +567,7 @@ def list_journals(
 
 
 @router.post("/journals")
-def create_journal(payload: JournalAdjustmentCreate, db: Session = Depends(get_db), current_user=Depends(role_required([ADMIN, PREPARER]))):
+def create_journal(payload: JournalAdjustmentCreate, db: Session = Depends(get_db), current_user=Depends(role_required([PREPARER]))):
     raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
     return service.create_journal_adjustment(db, raw, current_user.id)
 
@@ -693,7 +693,7 @@ def analytics_drilldown(level: str = 'entity', key: str | None = None, limit: in
     """Drilldown data for a specific level (entity/account/recon/exception)"""
     return service.analytics_drilldown(db, level=level, key=key, limit=limit, user_id=current_user.id)
 
-from ..services.risk_scoring_engine import score_all_profiles, get_risk_dashboard
+from ..services.risk_scoring_engine import score_all_profiles
 
 @router.post("/risk/calculate")
 def calculate_risk(
@@ -742,7 +742,7 @@ def enforce_approval_policy(action: dict, db: Session = Depends(get_db), current
 #  PHASE 3 — Enhanced analytics
 # ═══════════════════════════════════════════════════════════════
 
-from ..models.models import CloseTask as CloseTaskModel, User as UserModel, FinancialCloseCalendar
+from ..models.models import CloseTask as CloseTaskModel, User as UserModel
 
 # ── Profile Clone ─────────────────────────────────────────────
 @router.post("/profiles/{profile_id}/clone")
@@ -753,7 +753,6 @@ def clone_profile(
     current_user=Depends(role_required([ADMIN, PREPARER])),
 ):
     """Duplicate an existing profile with a new name and optionally a new period."""
-    import json as _json
     from ..models.models import ReconciliationProfile, ReconciliationOwnership
     src = db.query(ReconciliationProfile).filter(ReconciliationProfile.id == profile_id).first()
     if not src:
@@ -808,7 +807,7 @@ def rollover_profile(
     current_user=Depends(role_required([ADMIN, PREPARER])),
 ):
     """Clone a profile for the next period and create its close calendar + close tasks."""
-    import json as _json, calendar as cal_mod
+    import calendar as cal_mod
     from datetime import datetime as _dt, date as _date
     from ..models.models import ReconciliationProfile, ReconciliationOwnership, FinancialCloseCalendar
 
@@ -977,7 +976,6 @@ def create_close_task(
     db: Session = Depends(get_db),
     current_user=Depends(role_required([ADMIN, PREPARER])),
 ):
-    from datetime import datetime as _dt
     task = CloseTaskModel(
         calendar_id=payload["calendar_id"],
         profile_id=payload.get("profile_id"),
@@ -1040,10 +1038,9 @@ def enhanced_analytics(
     from datetime import datetime as _dt, date as _date
     from ..models.models import (
         ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
-        CertificationWorkflow, CertificationWorkflowHistory,
-        FinancialCloseCalendar, ReconciliationRecord,
+        CertificationWorkflowHistory, FinancialCloseCalendar,
+        ReconciliationRecord,
     )
-    from sqlalchemy import func as sqlfunc
 
     today = _date.today()
 
@@ -1277,7 +1274,7 @@ def list_profile_transactions(
     current_user=Depends(role_required([ADMIN, PREPARER, APPROVER, CERTIFIER])),
 ):
     """Return match groups with items for a profile — used by Preparer/Reviewer Workbench."""
-    from ..models.models import MatchGroup as MG, MatchGroupItem as MGI, ReconciliationRecord as RR
+    from ..models.models import MatchGroup as MG, MatchGroupItem as MGI
     mgs = db.query(MG).filter(MG.profile_id == profile_id).order_by(MG.id.desc()).limit(500).all()
     result = []
     for mg in mgs:

@@ -43,8 +43,10 @@ BASE = "http://localhost:8000"
 USERS = {
     "admin":     {"username": "admin",     "password": "admin123"},
     "preparer":  {"username": "preparer",  "password": "preparer123"},
+    "reviewer":  {"username": "approver",  "password": "approver123"},
     "approver":  {"username": "approver",  "password": "approver123"},
     "certifier": {"username": "certifier", "password": "certifier123"},
+    "auditor":   {"username": "admin",     "password": "admin123"},
 }
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
@@ -525,10 +527,10 @@ def seed_project(admin_headers, proj_def, idx, user_ids):
     if exec_id:
         info("Promoting execution to Enterprise Profile…")
         promote_payload = {
-            "assigned_preparer":  user_ids.get("preparer"),
-            "assigned_reviewer":  user_ids.get("reviewer"),
-            "assigned_approver":  user_ids.get("approver"),
-            "assigned_certifier": user_ids.get("certifier"),
+            "preparer_id":  user_ids.get("preparer"),
+            "reviewer_id":  user_ids.get("reviewer"),
+            "approver_id":  user_ids.get("approver"),
+            "certifier_id": user_ids.get("certifier"),
         }
         r = post_json(f"/api/projects/{pid}/executions/{exec_id}/promote",
                       admin_headers, promote_payload)

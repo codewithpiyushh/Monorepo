@@ -71,75 +71,34 @@ function RiskBadge({ risk }) {
 function AgingKpiCard({ bucket, data, isSelected, onClick }) {
   const meta = BUCKET_META[bucket]
   const Icon = meta.icon
-  const count = data?.exception_count ?? 0
-  const amount = data?.total_exception_amount ?? 0
-  const avgAge = data?.average_age_days ?? 0
+  const count = data?.exception_count || 0
+  const amount = data?.total_exception_amount || 0
 
   return (
-    <div
+    <div 
       onClick={() => onClick(isSelected ? null : bucket)}
+      className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-r border-[var(--border-1)] last:border-0 transition-colors`}
       style={{
-        flex: 1, minWidth: 140, cursor: 'pointer',
-        padding: '12px 14px', borderRadius: 10,
-        background: isSelected ? meta.bg : 'var(--surface-1)',
-        border: `1px solid ${isSelected ? meta.color : 'var(--border-0)'}`,
-        transition: 'all 0.18s ease',
-        boxShadow: isSelected ? `0 0 0 2px ${meta.color}22` : 'none',
+        flex: 1, minWidth: 180,
+        background: isSelected ? meta.bg : 'transparent',
       }}
     >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 6,
-            background: meta.bg, border: `1px solid ${meta.border}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Icon size={13} color={meta.color} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: meta.color, letterSpacing: 0.2 }}>
-              {meta.severity.toUpperCase()}
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>{meta.label}</div>
-          </div>
-        </div>
-        {isSelected && (
-          <div style={{
-            fontSize: 8, fontWeight: 700, padding: '2px 4px', borderRadius: 4,
-            background: meta.color, color: '#fff',
-          }}>ACTIVE</div>
-        )}
+      <div style={{
+        width: 28, height: 28, borderRadius: 8,
+        background: isSelected ? meta.color : meta.bg, 
+        border: `1px solid ${isSelected ? meta.color : meta.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <Icon size={14} color={isSelected ? '#fff' : meta.color} />
       </div>
-
-      {/* Count */}
-      <div style={{ fontSize: 24, fontWeight: 800, color: count > 0 ? meta.color : 'var(--text-tertiary)', lineHeight: 1, marginBottom: 8 }}>
-        {count}
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-          <span style={{ color: 'var(--text-tertiary)' }}>Total Amount</span>
-          <span style={{ fontWeight: 600, color: amount > 0 ? meta.color : 'var(--text-secondary)' }}>
-            ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
+      <div className="flex flex-col">
+        <div style={{ fontSize: 9, fontWeight: 700, color: meta.color, letterSpacing: 0.2 }}>
+          {meta.severity.toUpperCase()} <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>{meta.label}</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-          <span style={{ color: 'var(--text-tertiary)' }}>Avg Age</span>
-          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-            {avgAge} days
-          </span>
+        <div className="flex items-baseline gap-2 mt-0.5">
+           <span style={{ fontSize: 16, fontWeight: 800, color: count > 0 ? 'var(--text-primary)' : 'var(--text-tertiary)', lineHeight: 1 }}>{count}</span>
+           <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
         </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{ marginTop: 8, height: 2, background: 'var(--border-0)', borderRadius: 1 }}>
-        <div style={{
-          height: '100%', borderRadius: 1,
-          background: count > 0 ? meta.color : 'var(--border-0)',
-          width: '100%', opacity: count > 0 ? 1 : 0.2,
-        }} />
       </div>
     </div>
   )
@@ -153,11 +112,8 @@ function TrendWidget({ trend = [] }) {
   const maxVal = Math.max(...trend.flatMap(r => BUCKET_ORDER.map(b => r[b] || 0)), 1)
 
   return (
-    <div style={{
-      background: 'var(--surface-1)', border: '1px solid var(--border-0)',
-      borderRadius: 12, padding: '20px 24px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+    <div style={{ padding: '10px 32px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <Activity size={15} color="var(--text-tertiary)" />
         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
           Aging Trend — Month over Month
@@ -172,11 +128,11 @@ function TrendWidget({ trend = [] }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 70 }}>
         {trend.map((row, i) => (
           <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
             {/* Stacked bars */}
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column-reverse', gap: 1, height: 100 }}>
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column-reverse', gap: 1, height: 50 }}>
               {BUCKET_ORDER.map(b => {
                 const val = row[b] || 0
                 const heightPct = val > 0 ? Math.max((val / maxVal) * 100, 4) : 0
@@ -215,16 +171,14 @@ function ExceptionRow({ exc }) {
 
   return (
     <div style={{
-      background: 'var(--surface-1)',
-      border: `1px solid ${exc.bucket === 'CRITICAL' || exc.bucket === 'BREACH'
-        ? meta.border : 'var(--border-0)'}`,
-      borderRadius: 10, overflow: 'hidden', marginBottom: 8,
+      background: 'var(--surface-0)',
+      borderBottom: '1px solid var(--border-0)',
     }}>
       <div
         onClick={() => setExpanded(e => !e)}
         style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '12px 16px', cursor: 'pointer',
+          padding: '8px 16px', cursor: 'pointer',
         }}
       >
         {/* Age badge */}
@@ -368,7 +322,7 @@ export default function AgingDashboard() {
       ...filterParams,
       ...(selectedBucket ? { bucket: selectedBucket } : {}),
       page,
-      page_size: 20,
+      page_size: 6,
       sort_by: 'age_days',
       sort_desc: true,
     }),
@@ -415,7 +369,7 @@ export default function AgingDashboard() {
   const details       = detailsQ.data
   const items         = details?.items || []
   const totalItems    = details?.total || 0
-  const totalPages    = Math.ceil(totalItems / 20)
+  const totalPages    = Math.ceil(totalItems / 6)
   const trend         = trendQ.data || []
 
   const resetFilters = () => {
@@ -498,45 +452,41 @@ export default function AgingDashboard() {
   }, [setHeaderOverride, isAdmin, summary, snapshotMut.isPending, escalateMut.isPending, snapshotMut.mutate, escalateMut.mutate])
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
-
-      {/* Summary totals merged into top bar */}
-
-      {/* Four Aging KPI Cards */}
-      {summaryQ.isLoading ? (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-          {BUCKET_ORDER.map(b => (
-            <div key={b} style={{ flex: 1, height: 120, background: 'var(--surface-1)', borderRadius: 10, border: '1px solid var(--border-0)' }} />
-          ))}
+    <div className="h-full flex flex-col">
+      {/* Four Aging KPI Cards (Flush to top) */}
+      <div style={{ background: 'var(--surface-0)', borderBottom: '1px solid var(--border-1)' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', overflowX: 'auto' }} className="slim-scroll">
+          {summaryQ.isLoading ? (
+            BUCKET_ORDER.map(b => <div key={b} style={{ flex: 1, minWidth: 180, height: 60 }} />)
+          ) : (
+            BUCKET_ORDER.map(bucket => (
+              <AgingKpiCard
+                key={bucket}
+                bucket={bucket}
+                data={bucketMap[bucket]}
+                isSelected={selectedBucket === bucket}
+                onClick={(b) => { setSelectedBucket(b); setPage(1) }}
+              />
+            ))
+          )}
         </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-          {BUCKET_ORDER.map(bucket => (
-            <AgingKpiCard
-              key={bucket}
-              bucket={bucket}
-              data={bucketMap[bucket]}
-              isSelected={selectedBucket === bucket}
-              onClick={(b) => { setSelectedBucket(b); setPage(1) }}
-            />
-          ))}
-        </div>
-      )}
 
-      {/* Trend widget */}
-      {trend.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <TrendWidget trend={trend} />
-        </div>
-      )}
+        {/* Trend widget */}
+        {trend.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border-1)' }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+              <TrendWidget trend={trend} />
+            </div>
+          </div>
+        )}
 
-      {/* Filters row */}
-      <div style={{
-        display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16,
-        padding: '12px 16px', background: 'var(--surface-1)',
-        border: '1px solid var(--border-0)', borderRadius: 10, flexWrap: 'wrap',
-      }}>
-        <Filter size={13} color="var(--text-tertiary)" />
+        {/* Filters row */}
+        <div style={{ borderTop: '1px solid var(--border-1)' }}>
+          <div style={{
+            maxWidth: 1200, margin: '0 auto', padding: '12px 32px',
+            display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap'
+          }}>
+            <Filter size={13} color="var(--text-tertiary)" />
 
         {selectedBucket && (
           <div style={{
@@ -606,10 +556,39 @@ export default function AgingDashboard() {
           <RefreshCw size={12} /> Reset
         </button>
 
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>
-          {totalItems} exception{totalItems !== 1 ? 's' : ''}
-          {selectedBucket ? ` in ${BUCKET_META[selectedBucket].severity}` : ''}
-        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+            {totalItems} exception{totalItems !== 1 ? 's' : ''}
+            {selectedBucket ? ` in ${BUCKET_META[selectedBucket].severity}` : ''}
+          </span>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-1)',
+                  background: 'transparent',
+                  color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                  cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 11,
+                }}
+              >← Prev</button>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-1)',
+                  background: 'transparent',
+                  color: page === totalPages ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                  cursor: page === totalPages ? 'not-allowed' : 'pointer', fontSize: 11,
+                }}
+              >Next →</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Exception list */}
@@ -629,36 +608,10 @@ export default function AgingDashboard() {
             <ExceptionRow key={exc.id} exc={exc} />
           ))}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 20 }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                style={{
-                  padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-1)',
-                  background: 'transparent',
-                  color: page === 1 ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: page === 1 ? 'not-allowed' : 'pointer', fontSize: 12,
-                }}
-              >← Prev</button>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                style={{
-                  padding: '6px 14px', borderRadius: 7, border: '1px solid var(--border-1)',
-                  background: 'transparent',
-                  color: page === totalPages ? 'var(--text-tertiary)' : 'var(--text-primary)',
-                  cursor: page === totalPages ? 'not-allowed' : 'pointer', fontSize: 12,
-                }}
-              >Next →</button>
-            </div>
-          )}
         </>
       )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -25,8 +25,6 @@ from ..models.models import (
     ReconciliationBalance,
     ReconciliationBalanceHistory,
     ReconciliationProfile,
-    CertificationWorkflow,
-    CertificationWorkflowHistory,
     UINotification,
 )
 from ..services import audit_service

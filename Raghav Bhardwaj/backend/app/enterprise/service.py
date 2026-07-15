@@ -3,7 +3,6 @@ import logging
 import uuid
 import io
 import asyncio
-import csv
 import hashlib
 import zipfile
 import xml.etree.ElementTree as ET
@@ -27,7 +26,6 @@ from ..models.models import (
     ValidationErrorRecord,
     ReconciliationProfile,
     FinancialCloseCalendar,
-    CertificationWorkflow,
     CertificationWorkflowHistory,
     ValidationRuleResult,
     ExceptionComment,
@@ -50,8 +48,8 @@ from ..models.models import (
     BackupRecord,
     JobMetric,
     AuditLog,
-    NotificationEvent,
-    ReminderLog,
+    CompliancePolicy,
+    ApprovalRule,
 )
 from ..core.config import settings
 from ..services import audit_service, notification_service, dataset_service
@@ -1332,18 +1330,70 @@ def get_governance_policies(db: Session):
         "approver_ids": sorted({wf.approver_id for wf in workflows if wf.approver_id}),
         "certifier_ids": sorted({wf.certifier_id for wf in workflows if wf.certifier_id}),
     }
+
+    # Query actual compliance policies from DB for approval_policies
+    db_policies = db.query(CompliancePolicy).filter(CompliancePolicy.is_active == True).all()
+    if db_policies:
+        approval_policies = [
+            {
+                "risk_level": p.category.upper() if p.category else "LOW",
+                "required_approvals": p.violation_threshold if p.violation_threshold else 1,
+            }
+            for p in db_policies
+        ]
+    else:
+        # Fallback to static defaults when no policies exist in DB
+        approval_policies = [
+            {"risk_level": "LOW", "required_approvals": 1},
+            {"risk_level": "MEDIUM", "required_approvals": 1},
+            {"risk_level": "HIGH", "required_approvals": 2},
+            {"risk_level": "CRITICAL", "required_approvals": 3},
+        ]
+
+    # Active compliance controls from DB
+    compliance_controls = [
+        {
+            "id": p.id,
+            "project_id": p.project_id,
+            "control_name": p.control_name,
+            "category": p.category,
+            "violation_threshold": p.violation_threshold,
+            "current_violations": p.current_violations,
+            "is_active": p.is_active,
+            "created_by": p.created_by,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        }
+        for p in db_policies
+    ]
+
+    # Active approval rules from DB
+    db_rules = db.query(ApprovalRule).filter(ApprovalRule.is_active == True).all()
+    approval_rules = [
+        {
+            "id": r.id,
+            "project_id": r.project_id,
+            "condition_field": r.condition_field,
+            "condition_operator": r.condition_operator,
+            "condition_value": r.condition_value,
+            "action": r.action,
+            "target_role": r.target_role,
+            "is_active": r.is_active,
+            "created_by": r.created_by,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in db_rules
+    ]
+
     return {
         "segregation_of_duties": [
             {"rule": "Preparer != Reviewer", "field_a": "preparer_id", "field_b": "reviewer_id", "enabled": True},
             {"rule": "Reviewer != Approver", "field_a": "reviewer_id", "field_b": "approver_id", "enabled": True},
             {"rule": "Approver != Certifier", "field_a": "approver_id", "field_b": "certifier_id", "enabled": True},
         ],
-        "approval_policies": [
-            {"risk_level": "LOW", "required_approvals": 1},
-            {"risk_level": "MEDIUM", "required_approvals": 1},
-            {"risk_level": "HIGH", "required_approvals": 2},
-            {"risk_level": "CRITICAL", "required_approvals": 3},
-        ],
+        "approval_policies": approval_policies,
+        "compliance_controls": compliance_controls,
+        "approval_rules": approval_rules,
         "workflow_population": seen_users,
     }
 
@@ -1354,11 +1404,32 @@ def upsert_governance_policy(db: Session, payload: dict, actor_id: int | None = 
 
 def enforce_approval_policy(db: Session, action: dict, actor_id: int | None = None):
     risk = (action.get("risk_level") or "LOW").upper()
-    required = 1
-    if risk == "HIGH":
-        required = 2
-    elif risk == "CRITICAL":
-        required = 3
+
+    # Try to find a matching active ApprovalRule from the DB
+    rule = (
+        db.query(ApprovalRule)
+        .filter(
+            ApprovalRule.condition_field == "risk_level",
+            ApprovalRule.condition_value == risk,
+            ApprovalRule.is_active == True,
+        )
+        .first()
+    )
+
+    if rule:
+        # Parse required approvals from the rule's action field
+        try:
+            required = int(rule.action)
+        except (ValueError, TypeError):
+            required = 1
+    else:
+        # Fallback to original hardcoded logic
+        required = 1
+        if risk == "HIGH":
+            required = 2
+        elif risk == "CRITICAL":
+            required = 3
+
     current = int(action.get("current_approvals") or 0)
     return {
         "risk_level": risk,
@@ -2009,12 +2080,23 @@ def auto_generate_journal_adjustments(db: Session, payload: dict, actor_id: int 
 
 
 def variance_analysis(db: Session, profile_id: int):
+    from ..models.models import ReconciliationBalance
+    balance = db.query(ReconciliationBalance).filter(ReconciliationBalance.profile_id == profile_id).first()
+    
+    if balance:
+        source_balance = float(balance.source_balance or 0.0)
+        target_balance = float(balance.target_balance or 0.0)
+        balance_delta = float(balance.variance_amount or 0.0)
+    else:
+        records = repository.get_records_by_profile(db, profile_id)
+        source_balance = sum(max(float(r.amount or 0.0), 0.0) for r in records)
+        target_balance = sum(abs(min(float(r.amount or 0.0), 0.0)) for r in records)
+        balance_delta = source_balance - target_balance
+        
     records = repository.get_records_by_profile(db, profile_id)
-    source_balance = sum(max(float(r.amount or 0.0), 0.0) for r in records)
-    target_balance = sum(abs(min(float(r.amount or 0.0), 0.0)) for r in records)
-    balance_delta = source_balance - target_balance
     unmatched = [r for r in records if (r.status or "").upper() in {"UNMATCHED", "PARTIAL_MATCH"}]
     unmatched_total = sum(abs(float(r.amount or 0.0)) for r in unmatched)
+    
     return {
         "profile_id": profile_id,
         "source_balance_difference": balance_delta,
@@ -2186,16 +2268,69 @@ def reconciliation_analytics_explorer(db: Session, role: str | None = None, user
         for p in profiles
     }
 
+    # Load mappings
+    from ..models.models import Mapping
+    import json
+    mappings_by_project = {}
+    for p in profiles:
+        if p.project_id not in mappings_by_project:
+            mappings_by_project[p.project_id] = db.query(Mapping).filter(Mapping.project_id == p.project_id).all()
+
     transactions = []
     for record in records:
         match_group = group_by_record.get(record.id)
         exception = exception_by_group.get(match_group.id) if match_group else None
+        
+        entity = record.entity
+        account = record.account
+        
+        p_obj = next((p for p in profiles if p.id == record.profile_id), None)
+        if p_obj and p_obj.project_id in mappings_by_project:
+            project_mappings = mappings_by_project[p_obj.project_id]
+            if project_mappings:
+                try:
+                    payload = json.loads(record.payload_json) if record.payload_json else {}
+                    entity_candidates = []
+                    account_candidates = []
+                    for m in project_mappings:
+                        src_name = (m.source_column or "").lower()
+                        tgt_name = (m.target_column or "").lower()
+                        if any(token in src_name for token in ("entity", "company", "business_unit", "bu", "emp_id")):
+                            entity_candidates.append(m.source_column)
+                        if any(token in tgt_name for token in ("entity", "company", "business_unit", "bu", "emp_id")):
+                            entity_candidates.append(m.target_column)
+                        if any(token in src_name for token in ("account", "gl", "ledger", "acct")):
+                            account_candidates.append(m.source_column)
+                        if any(token in tgt_name for token in ("account", "gl", "ledger", "acct")):
+                            account_candidates.append(m.target_column)
+
+                    key_mappings = [m for m in project_mappings if m.is_key_field]
+                    if key_mappings and not entity_candidates:
+                        entity_candidates.append(key_mappings[0].source_column)
+                        entity_candidates.append(key_mappings[0].target_column)
+
+                    derived_entity = None
+                    for col in entity_candidates:
+                        if col and col in payload:
+                            derived_entity = str(payload[col])
+                            break
+                    derived_account = None
+                    for col in account_candidates:
+                        if col and col in payload:
+                            derived_account = str(payload[col])
+                            break
+
+                    entity = derived_entity or entity
+                    account = derived_account or account
+                except Exception:
+                    pass
+
         transactions.append(
             {
                 "record_id": record.id,
                 "profile_id": record.profile_id,
-                "entity": record.entity,
-                "account": record.account,
+                "entity": entity,
+                "account": account,
                 "period": record.period,
                 "reference": record.reference,
                 "amount": record.amount,
@@ -2552,7 +2687,7 @@ def get_match_suggestions_advanced(
     Surface AI-style suggestions for unmatched records without committing matches.
     """
     from ..services.matching_engine import (
-        AdvancedMatchingEngine, RecordView, CandidateIndex
+        AdvancedMatchingEngine, RecordView
     )
     from ..models.models import ReconciliationRecord as RR
 
@@ -2669,9 +2804,7 @@ def get_executive_dashboard_real(db: Session) -> dict:
     """
     from ..models.models import (
         ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
-        CertificationWorkflow, CertificationWorkflowHistory,
-        FinancialCloseCalendar, ReconciliationRecord, User,
-        CloseTask,
+        CertificationWorkflow, FinancialCloseCalendar,
     )
     from sqlalchemy import func as sqlfunc
 
@@ -2691,6 +2824,7 @@ def get_executive_dashboard_real(db: Session) -> dict:
     total_mg  = db.query(MatchGroup).count()
     full_mg   = db.query(MatchGroup).filter(MatchGroup.classification == "FULL_MATCH").count()
     auto_match_rate = round(full_mg / total_mg * 100, 1) if total_mg else 0.0
+    unexplained_variance = db.query(sqlfunc.sum(sqlfunc.abs(MatchGroup.variance_amount))).scalar() or 0.0
 
     # Exception stats
     total_exc = db.query(ExceptionQueueRecord).count()
@@ -2793,6 +2927,7 @@ def get_executive_dashboard_real(db: Session) -> dict:
         "certification_trend":  cert_trend,
         "high_risk_profiles":   high_risk_profiles,
         "auto_match_rate":      auto_match_rate,
+        "unexplained_variance": unexplained_variance,
     }
 
 
@@ -2802,7 +2937,7 @@ def get_risk_dashboard_real(db: Session) -> dict:
     """
     from ..models.models import (
         ReconciliationProfile, MatchGroup, ExceptionQueueRecord,
-        CertificationWorkflow, FinancialCloseCalendar, ReconciliationRecord,
+        CertificationWorkflow,
     )
     today = date.today()
 

@@ -106,6 +106,7 @@ from typing import Optional as _Optional
 class PromotePayload(_BaseModel):
     recon_type: _Optional[str] = "BANK_RECONCILIATION"
     risk_classification: _Optional[str] = "MEDIUM"
+    preparer_id: _Optional[int] = None
     reviewer_id: _Optional[int] = None
     approver_id: _Optional[int] = None
     certifier_id: _Optional[int] = None
@@ -132,6 +133,7 @@ def promote_execution(
         actor_id=current_user.id,
         recon_type=payload.recon_type or "BANK_RECONCILIATION",
         risk_classification=payload.risk_classification or "MEDIUM",
+        preparer_id=payload.preparer_id,
         reviewer_id=payload.reviewer_id,
         approver_id=payload.approver_id,
         certifier_id=payload.certifier_id,

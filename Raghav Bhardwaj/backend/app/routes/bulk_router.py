@@ -12,7 +12,6 @@ Endpoints:
   GET  /api/v1/bulk/summary             — Counts by lifecycle state (for filter badges)
 """
 import io
-import json
 import logging
 from datetime import datetime
 from typing import List, Optional
@@ -25,7 +24,7 @@ from sqlalchemy import text
 
 from ..database import get_db
 from ..rbac.roles import ADMIN, PREPARER, APPROVER, CERTIFIER
-from ..rbac.dependencies import role_required, get_current_user
+from ..rbac.dependencies import role_required
 
 log = logging.getLogger(__name__)
 
@@ -175,7 +174,7 @@ def bulk_summary(
     db: Session = Depends(get_db),
     current_user=Depends(role_required(_ALL)),
 ):
-    from ..models.models import ReconciliationProfile as RP, ExceptionQueueRecord as EQR
+    from ..models.models import ReconciliationProfile as RP
 
     rows = db.execute(text(
         "SELECT lifecycle_state, COUNT(*) as cnt "

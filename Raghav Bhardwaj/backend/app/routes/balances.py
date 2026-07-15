@@ -19,7 +19,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..core.dependencies import get_current_user
 from ..rbac.dependencies import role_required
 from ..rbac.roles import ADMIN, PREPARER, APPROVER, CERTIFIER
 from ..services import balance_service

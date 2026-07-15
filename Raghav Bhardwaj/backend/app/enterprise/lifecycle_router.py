@@ -16,7 +16,6 @@ from ..rbac.dependencies import role_required
 from ..rbac.roles import ADMIN, APPROVER, CERTIFIER, PREPARER
 from .lifecycle_service import (
     approve_balance,
-    assert_editable,
     assert_chain_unlocked,
     certify_balance,
     close_balance,

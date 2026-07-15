@@ -6,7 +6,7 @@ import {
   RefreshCw, DollarSign, Globe, TrendingUp, Calendar,
   ChevronUp, ChevronDown, Search, Zap, BarChart2, ArrowUpDown,
 } from 'lucide-react'
-import { fxAPI } from '../api/fxAPI'
+import { fxAPI } from '../api'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KPI Card
@@ -59,7 +59,7 @@ export default function FXManagementPage() {
 
   const { data: ratesData, isLoading: ratesLoading, refetch: refetchRates } = useQuery({
     queryKey: ['fx-rates'],
-    queryFn:  () => fxAPI.listRates({ limit: 500 }),
+    queryFn:  () => fxAPI.list({ limit: 500 }),
     staleTime: 60_000,
   })
 
@@ -67,12 +67,12 @@ export default function FXManagementPage() {
   const refreshMutation = useMutation({
     mutationFn: () => fxAPI.refreshRates(refreshBase),
     onSuccess: (data) => {
-      toast.success(`✅ ${data.upserted} pairs refreshed for ${data.base} (${data.date})`)
+      toast.success(`✅ Rates refreshed for base ${refreshBase}`)
       refetchDash()
       refetchRates()
     },
     onError: (err) => {
-      toast.error(`❌ Refresh failed: ${err.message}`)
+      toast.error(`❌ Action failed: ${err.message}`)
     },
   })
 

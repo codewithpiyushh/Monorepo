@@ -1,7 +1,5 @@
-from typing import List
 from datetime import datetime
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
 from ..models.models import AutoCertRule, ReconciliationProfile, ExceptionQueueRecord
 from ..services import audit_service
 

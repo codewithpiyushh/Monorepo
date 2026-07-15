@@ -341,6 +341,7 @@ class ReconciliationProfile(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     name = Column(String(120), unique=True, nullable=False)
     reconciliation_type = Column(String(50), nullable=False)
+    account_number = Column(String(100), unique=True, nullable=True)
     frequency = Column(String(30), nullable=False)
     tolerance_threshold = Column(Float, default=0.0)
     date_window_days = Column(Integer, default=0)
@@ -356,12 +357,15 @@ class ReconciliationProfile(Base):
     risk_scored_at      = Column(DateTime, nullable=True)
     auto_approve_threshold = Column(Float, default=1.0)
     materiality_limit = Column(Float, default=0.0)
+    auto_certify = Column(Boolean, default=False)
     lifecycle_state = Column(String(30), default="OPEN")
+    status = Column(String(30), default="ACTIVE")
     active = Column(Boolean, default=True)
     is_demo_data = Column(Boolean, default=False, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    project = relationship("Project", backref="profiles")
 
 class ReconciliationBalance(Base):
     """
@@ -422,6 +426,16 @@ class ReconciliationBalance(Base):
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_demo_data        = Column(Boolean, default=False, nullable=False, index=True)
     close_period_id     = Column(Integer, ForeignKey("close_periods.id"), nullable=True, index=True)
+
+    profile = relationship("ReconciliationProfile", backref="balances")
+
+    @property
+    def profile_name(self):
+        return self.profile.name if self.profile else None
+
+    @property
+    def project_name(self):
+        return self.profile.project.name if self.profile and self.profile.project else None
 
     __table_args__ = (
         Index("ix_recon_balances_profile_period",  "profile_id", "period_key"),
@@ -515,6 +529,21 @@ class MatchGroup(Base):
     reconciled = Column(Boolean, default=False)
     finalized = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Matching Workflow Columns
+    review_status = Column(String(30), default="PENDING")
+    notes = Column(Text, nullable=True)
+    confirmed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    rejected_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    rejected_at = Column(DateTime, nullable=True)
+    rejected_reason = Column(String(255), nullable=True)
+    is_manual = Column(Boolean, default=False)
+    manual_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    source_side = Column(String(10), nullable=True)
+    target_side = Column(String(10), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
     __table_args__ = (
         Index("ix_match_groups_profile_classification", "profile_id", "classification"),
     )
@@ -526,6 +555,7 @@ class MatchGroupItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     match_group_id = Column(Integer, ForeignKey("match_groups.id"), nullable=False)
     reconciliation_record_id = Column(Integer, ForeignKey("reconciliation_records.id"), nullable=False)
+    side = Column(String(10), nullable=True)
     __table_args__ = (
         Index("ix_mgi_group_record", "match_group_id", "reconciliation_record_id"),
     )

@@ -108,8 +108,11 @@ export default function NotificationCenter({ floating = false }) {
   })
 
   const markAllReadMutation = useMutation({
-    mutationFn: () => enterpriseAPI.markAllNotificationsRead(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    mutationFn: () => notificationsAPI.markAllRead(),
+    onSuccess: () => {
+      storeMarkAllRead()
+      qc.invalidateQueries({ queryKey: ['notifications-seed'] })
+    },
   })
 
   // ── Position panel ────────────────────────────────────────
@@ -324,9 +327,28 @@ export default function NotificationCenter({ floating = false }) {
                         <span style={{ fontSize: 10, color: 'var(--text-disabled)' }}>
                           {relativeTime(item.created_at)}
                         </span>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: meta.color }}>
-                          View →
-                        </span>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {isUnread && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markReadMutation.mutate(item.id);
+                              }}
+                              style={{
+                                fontSize: 10, fontWeight: 600, color: 'var(--text-tertiary)',
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                padding: '2px 4px', borderRadius: 3,
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--ok)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-tertiary)'}
+                            >
+                              Mark read
+                            </button>
+                          )}
+                          <span style={{ fontSize: 10, fontWeight: 600, color: meta.color }}>
+                            View →
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>

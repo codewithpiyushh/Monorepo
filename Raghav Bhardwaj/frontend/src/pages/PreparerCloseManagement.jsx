@@ -124,7 +124,7 @@ export default function PreparerCloseManagement() {
 
   const fetchTasks = async () => {
     try {
-      const res = await client.get('/api/v1/close-tasks');
+      const res = await client.get('/v1/close-tasks');
       const newTasks = { todo: [], inProgress: [], completed: [] };
       res.data.forEach(t => {
         const mappedTask = {
@@ -154,7 +154,7 @@ export default function PreparerCloseManagement() {
 
   const handleDrop = async (taskId, newStatus) => {
     try {
-      await client.patch(`/api/v1/close-tasks/${taskId}`, { status: newStatus });
+      await client.patch(`/v1/close-tasks/${taskId}`, { status: newStatus });
       fetchTasks();
     } catch (error) {
       console.error('Failed to update task status', error);

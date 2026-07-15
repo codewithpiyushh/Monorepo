@@ -31,7 +31,7 @@ class CloseTaskOut(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/", response_model=List[CloseTaskOut])
+@router.get("", response_model=List[CloseTaskOut])
 def get_close_tasks(
     db: Session = Depends(get_db),
     current_user: User = Depends(role_required(["preparer", "admin"]))

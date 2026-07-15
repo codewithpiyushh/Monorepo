@@ -20,7 +20,6 @@ Phase 3 hooks preserved:
   - assert_no_blocking_items() imported at call-site in lifecycle_router.py
 """
 from __future__ import annotations
-from .comment_service import create_system_event
 import json
 import logging
 from datetime import datetime, timedelta

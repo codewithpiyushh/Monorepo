@@ -27,8 +27,7 @@ Phase 4 – AI-Style Ranking
 from __future__ import annotations
 
 import json
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Tuple, Set
 
@@ -38,10 +37,6 @@ from sqlalchemy.orm import Session
 from ..models.models import (
     ReconciliationProfile,
     ReconciliationRecord,
-    MatchGroup,
-    MatchGroupItem,
-    ExceptionQueueRecord,
-    FinancialCloseCalendar,
 )
 from ..enterprise import repository
 from ..services import audit_service

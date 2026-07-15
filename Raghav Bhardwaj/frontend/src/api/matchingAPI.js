@@ -36,6 +36,10 @@ export const matchingAPI = {
   unmatchedRecords: (profileId) =>
     api.get(`/v1/matching/profile/${profileId}/unmatched-records`).then(r => r.data),
 
+  /** Promote the project to a Balance Reconciliation record */
+  promoteToBalance: (profileId) =>
+    api.post(`/v1/matching/profile/${profileId}/promote-to-balance`).then(r => r.data),
+
   // ── Matching actions ───────────────────────────────────────────────────────
   /** Create a manual match from selected source + target IDs */
   createManualMatch: (data) =>

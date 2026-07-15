@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import client from '../api/client';
+import { compliancePolicyAPI } from '../api';
 import PageHeader from '../components/ui/PageHeader';
 import { 
   ShieldCheck, ShieldAlert, Activity, AlertCircle, 
@@ -16,8 +16,28 @@ export default function CompliancePolicyPage() {
   useEffect(() => {
     const fetchPolicies = async () => {
       try {
-        const response = await client.get('/api/v1/compliance-policy');
-        setPolicies(response.data);
+        const data = await compliancePolicyAPI.list();
+        const mapped = data.map(p => {
+          let status = 'active';
+          if (p.current_violations >= p.violation_threshold && p.violation_threshold > 0) {
+            status = 'violated';
+          } else if (p.current_violations > 0) {
+            status = 'warning';
+          }
+          if (!p.is_active) status = 'inactive';
+
+          return {
+            id: `POL-${p.id.toString().padStart(3, '0')}`,
+            name: p.control_name || 'Unnamed Policy',
+            category: p.category || 'General',
+            threshold: p.violation_threshold || 0,
+            violations: p.current_violations || 0,
+            status,
+            owner: p.created_by ? `User ${p.created_by}` : 'System',
+            lastAudited: p.updated_at ? new Date(p.updated_at).toLocaleDateString() : 'N/A'
+          };
+        });
+        setPolicies(mapped);
       } catch (err) {
         console.error('Error fetching policies:', err);
         setError('Failed to load compliance policies. Please try again.');

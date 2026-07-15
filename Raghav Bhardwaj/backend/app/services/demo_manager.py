@@ -30,8 +30,6 @@ FK-safe delete order (children before parents):
 from __future__ import annotations
 
 import logging
-from datetime import datetime, date, timedelta
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -70,6 +68,8 @@ PURGE_ORDER = [
     "reconciliation_snapshots",
     "reconciliation_archives",
     "reconciliation_ownership",
+    "sla_violations",
+    "sla_policies",
     "reconciliation_profiles", # Parent of balances/workflows/etc
     "ingestion_batches",
     "projects",              # Root Parent
@@ -157,9 +157,13 @@ def run_demo_startup(db: Session) -> None:
         total_purged = sum(purge_counts.values())
         log.info(f"[demo purge] Total rows purged: {total_purged}")
 
-        log.info("[demo seed] Seeding 10-project Enterprise Demo Matrix…")
         try:
-            from ..services.demo_seed import seed_enterprise_demo_matrix, seed_close_periods_demo
+            from ..services.demo_seed import (
+                seed_enterprise_demo_matrix,
+                seed_close_periods_demo,
+                seed_preparer_close_tasks_demo,
+                seed_transaction_records_for_active_profiles,
+            )
             seed_enterprise_demo_matrix(db)
             log.info("[demo seed] ✅ Demo matrix seeded successfully.")
 
@@ -167,12 +171,26 @@ def run_demo_startup(db: Session) -> None:
             seed_close_periods_demo(db)
             log.info("[demo seed] ✅ Close periods seeded successfully.")
 
+            log.info("[demo seed] Seeding preparer close tasks checklist & notifications…")
+            seed_preparer_close_tasks_demo(db)
+            log.info("[demo seed] ✅ Preparer close tasks checklist & notifications seeded successfully.")
+
+            log.info("[demo seed] Seeding transaction records for template profiles…")
+            seed_transaction_records_for_active_profiles(db)
+            log.info("[demo seed] ✅ Seeding transaction records completed.")
+
             log.info("[demo seed] Seeding SLA policies and running initial scan…")
             try:
-                from ..services.demo_seed import seed_sla_demo
+                from ..services.demo_seed import seed_sla_demo, seed_evidence_retention_demo
                 seed_sla_demo(db)
             except Exception as e:
                 log.warning(f"[demo seed] SLA seed skipped (non-fatal): {e}")
+
+            log.info("[demo seed] Seeding evidence retention defaults…")
+            try:
+                seed_evidence_retention_demo(db)
+            except Exception as e:
+                log.warning(f"[demo seed] Evidence retention seed skipped (non-fatal): {e}")
         except Exception as e:
             log.error(f"[demo seed] ❌ Seed failed: {e}", exc_info=True)
 
